@@ -7,6 +7,7 @@ import NavTree from '../../../src/components/settings/control-bar/navtree';
 import { Smartphone, RotateCw, Signal, Search, Sun } from 'lucide-react';
 import AndroidWifiPanel from '../../components/settings/AndroidWifiPanel';
 import SoftwareUpdatePanel from '../../components/settings/SoftwareUpdatePanel';
+import DiagnosticsPanel from '../../components/settings/DiagnosticsPanel';
 import AndroidBluetoothPanel from '../../components/settings/AndroidBluetoothPanel';
 import TeslaSlider from '../../components/settings/TeslaSlider';
 import { useT } from '../../i18n';
@@ -791,6 +792,11 @@ const SettingsApp: React.FC = () => {
 
                  {/* Software-update via GitHub Releases */}
                  <SoftwareUpdatePanel />
+
+                 <hr className="tsl-divider" />
+
+                 {/* Diagnose: logboek en Probleem melden */}
+                 <DiagnosticsPanel />
 
                  <hr className="tsl-divider" />
 

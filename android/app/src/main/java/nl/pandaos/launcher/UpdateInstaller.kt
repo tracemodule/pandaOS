@@ -36,6 +36,7 @@ class UpdateInstaller(private val activity: Activity, private val send: (String)
     fun install(url: String) {
         if (busy) return
         busy = true
+        DiagLog.add("info", "Update downloaden: $url")
         Thread {
             try {
                 val file = File(activity.cacheDir, "pandaos-update.apk")
@@ -44,6 +45,7 @@ class UpdateInstaller(private val activity: Activity, private val send: (String)
                 status("installing", 100)
                 commit(file)
             } catch (e: Exception) {
+                DiagLog.add("error", "Update mislukt: ${e.message}")
                 status("error", 0, e.message ?: "Onbekende fout")
                 busy = false
             }
@@ -122,6 +124,7 @@ class UpdateInstaller(private val activity: Activity, private val send: (String)
                 else -> {
                     // Mislukt (bijv. andere ondertekening): de webapp ziet dat er niets gebeurd is
                     val message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: "Installatie mislukt"
+                    DiagLog.add("error", "Update-installatie geweigerd: $message")
                     context.getSharedPreferences("pandaos_update", Context.MODE_PRIVATE).edit().putString("error", message).apply()
                 }
             }

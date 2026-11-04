@@ -30,6 +30,20 @@ class PandaBridge(
     private val updates: UpdateInstaller,
 ) {
 
+    // --- Diagnose (Settings > Software > Diagnose, "Probleem melden"): zie DiagLog ---
+
+    // {"device":{..radio en toestemmingen..},"entries":[..gebeurtenissen en fouten van de launcher..]}
+    @JavascriptInterface
+    fun getNativeDiagnostics(): String =
+        JSONObject().put("device", JSONObject(DiagLog.deviceJson(activity))).put("entries", JSONArray(DiagLog.entriesJson())).toString()
+
+    // Rapport opslaan en delen via Android (WhatsApp, Gmail ...); geeft het pad terug
+    @JavascriptInterface
+    fun shareDiagnosticReport(text: String): String = DiagLog.share(activity, text)
+
+    @JavascriptInterface
+    fun clearNativeDiagnostics() = DiagLog.clear()
+
     // --- Software-updates (Settings > Software): zie UpdateInstaller ---
 
     // {"version":"1.1.0","code":10100}

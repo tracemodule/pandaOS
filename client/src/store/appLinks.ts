@@ -5,6 +5,7 @@
 // of 'pkg:<pakketnaam>' voor een zelf gekozen app ("Andere app" / automatisch herkend).
 import { useEffect, useState } from 'react';
 import type { AppLink } from './uiStore';
+import { diag } from '../services/diagnostics';
 
 export interface AndroidAppOption {
   id: string;
@@ -264,8 +265,11 @@ export const isAppEnabled = (links: Record<string, AppLink>, appId: string, inst
 // false = de aanroeper opent de PandaOS-versie.
 export const runLaunchAction = (action: LaunchAction): boolean => {
   switch (action.kind) {
-    case 'android':
-      return bridge()?.launchApp?.(action.package) === true;
+    case 'android': {
+      const ok = bridge()?.launchApp?.(action.package) === true;
+      if (!ok) diag('warn', 'apps', `App openen mislukt: ${action.package}`);
+      return ok;
+    }
     case 'store':
       bridge()?.openPlayStore?.(action.package);
       return true;

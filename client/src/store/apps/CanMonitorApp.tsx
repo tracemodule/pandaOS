@@ -5,7 +5,8 @@
 //  - Apps: CAN-apps van de fabrikant op de radio en de gekozen CAN-bus-instelling (Settings > Voertuig)
 // Sneltoetsen: starten/stoppen, alleen auto of alles, opslaan (tekstbestand, ophalen met adb pull), wissen.
 import React, { useEffect, useRef, useState } from 'react';
-import { Activity, Play, Square, Trash2, Save, X, Filter } from 'lucide-react';
+import { Activity, Play, Square, Trash2, Save, X, Filter, Share2 } from 'lucide-react';
+import { reportProblem } from '../../services/diagnostics';
 import { useUIStore } from '../uiStore';
 import { getEffectiveTheme } from '../../settings';
 import { useT } from '../../i18n';
@@ -99,6 +100,9 @@ const CanMonitorApp: React.FC = () => {
             </button>
             <button className="tsl-btn" onClick={() => setSavedPath(bridge().canMonitorSave())}><Save size={18} /> {t('Save')}</button>
             <button className="tsl-btn" onClick={() => { bridge().canMonitorClear(); setSavedPath(null); read(); }}><Trash2 size={18} /> {t('Clear')}</button>
+            <button className="tsl-btn" onClick={async () => setSavedPath(await reportProblem('Gemeld vanuit de CAN-monitor', {
+              title: 'CAN-monitor (laatste 200)', lines: (state?.lines ?? []).slice(-200).map((l) => `${l.source}: ${l.text}`),
+            }))}><Share2 size={18} /> {t('Report a problem')}</button>
           </div>
 
           {savedPath && <small className="tsl-hint">{t('Saved as')} <code>{savedPath}</code></small>}

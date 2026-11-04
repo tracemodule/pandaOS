@@ -40,6 +40,7 @@ class MainActivity : Activity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        DiagLog.init(this) // diagnose: crashes en gebeurtenissen van de launcher
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG) // chrome://inspect op de laptop
 
@@ -63,6 +64,13 @@ class MainActivity : Activity() {
             addJavascriptInterface(PandaBridge(this@MainActivity, media, radio, can, updates), "PandaAndroid")
 
             webViewClient = object : WebViewClient() {
+                // Webapp vastgelopen of afgesloten door Android: vastleggen en opnieuw laden
+                override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean {
+                    DiagLog.add("error", "Webapp gestopt (" + (if (detail.didCrash()) "crash" else "geheugen") + "), opnieuw geladen")
+                    recreate()
+                    return true
+                }
+
                 override fun onPageFinished(view: WebView, url: String) {
                     media.resend() // de webapp is (opnieuw) geladen: laten zien wat er speelt
                 }

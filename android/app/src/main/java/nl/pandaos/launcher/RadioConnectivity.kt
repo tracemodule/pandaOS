@@ -39,8 +39,14 @@ class RadioConnectivity(private val activity: Activity, private val send: (Strin
             when (intent.action) {
                 BluetoothDevice.ACTION_FOUND -> nearby[device.address] = device.name ?: device.address
                 // Telefoon verbonden of weg: de webapp beslist wat er gebeurt (bijv. CarPlay automatisch openen)
-                BluetoothDevice.ACTION_ACL_CONNECTED -> send("bluetoothConnected(${deviceJson(device)})")
-                BluetoothDevice.ACTION_ACL_DISCONNECTED -> send("bluetoothDisconnected(${deviceJson(device)})")
+                BluetoothDevice.ACTION_ACL_CONNECTED -> {
+                    DiagLog.add("info", "Bluetooth verbonden: ${device.name ?: device.address}")
+                    send("bluetoothConnected(${deviceJson(device)})")
+                }
+                BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
+                    DiagLog.add("info", "Bluetooth verbroken: ${device.name ?: device.address}")
+                    send("bluetoothDisconnected(${deviceJson(device)})")
+                }
             }
         }
     }
@@ -130,7 +136,7 @@ class RadioConnectivity(private val activity: Activity, private val send: (Strin
             }
             manager.addNetwork(config)
         }
-        if (networkId == -1) return false
+        if (networkId == -1) { DiagLog.add("warn", "Wifi: netwerk $ssid kon niet worden toegevoegd"); return false }
         manager.disconnect()
         val ok = manager.enableNetwork(networkId, true)
         manager.reconnect()

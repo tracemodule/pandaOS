@@ -4,6 +4,7 @@
 // bijvoorbeeld bij de VOL-knoppen van de radio, het achteruit-signaal of als er iets anders gaat spelen.
 import { useUIStore } from '../store/uiStore';
 import { getLinkedAndroidPackage, launchAndroidPackage } from '../store/appLinks';
+import { diag } from './diagnostics';
 
 // Wat er speelt in een Android-app (MediaWatcher.kt); positie en duur in seconden
 export interface AndroidNowPlaying {
@@ -79,6 +80,7 @@ export const initAndroidBridge = () => {
     setNowPlayingCover: (url) => useUIStore.setState({ albumArt: url }),
     setCarState: (partial) => useUIStore.getState().setCarState(partial),
     bluetoothConnected: (device) => {
+      diag('info', 'bluetooth', `Verbonden: ${device.name}${device.phone ? ' (telefoon)' : ''}`);
       if (device.phone) useUIStore.getState().showNotification(device.name, 'info', 'BLUETOOTH CONNECTED');
       autoOpenCarPlay(device);
     },
@@ -86,7 +88,11 @@ export const initAndroidBridge = () => {
     // Veeg van bovenaf: de launcher heeft de Android-balk weggehaald, open het PandaOS-paneel
     openPanel: () => window.dispatchEvent(new Event('pandaos-open-panel')),
     // Voortgang van een software-update (UpdateInstaller.kt) -> Settings > Software
-    updateStatus: (status) => window.dispatchEvent(new CustomEvent('pandaos-update-status', { detail: status })),
+    updateStatus: (status) => {
+      if (status.state === 'error') diag('error', 'update', status.message);
+      if (status.state === 'installing') diag('info', 'update', 'Installeren');
+      window.dispatchEvent(new CustomEvent('pandaos-update-status', { detail: status }));
+    },
     bluetoothDisconnected: (device) => {
       if (device.phone) useUIStore.getState().showNotification(device.name, 'info', 'BLUETOOTH DISCONNECTED');
     },

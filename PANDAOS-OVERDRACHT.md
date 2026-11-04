@@ -102,6 +102,14 @@ Op de radio neemt die app de rol van de Node-server over.
   GitHub CLI: `C:\Program Files\GitHub CLI\gh.exe`, ingelogd als tracemodule.
   Getest van begin tot eind: emulator 1.1.2 → Instellingen → Software → Controleren → "Nieuwe versie 1.2.0" →
   Downloaden en installeren → 1.2.0 geïnstalleerd, PandaOS weer startscherm.
+- **Diagnose en Probleem melden** (v1.3.0): Settings → Software → Diagnose toont het logboek van webapp
+  (`client/src/services/diagnostics.ts`: JS-fouten, console.error, versnelling/R, lichten, deuren, knipperlicht,
+  telefoon, mediabron, Bluetooth, updates, app openen mislukt; laatste 400 regels in localStorage) en launcher
+  (`DiagLog.kt`: crashes in filesDir/diagnostics/crash.txt, renderer weg, Bluetooth, wifi, updates). "Probleem melden"
+  maakt één rapport (versie, radio/chipset/Android, toestemmingen, apparaateigenaar, voertuiginstellingen, autostatus,
+  laatste regels) en opent het deelmenu van Android (WhatsApp/Gmail/Quick Share); kopie in
+  `Android/data/nl.pandaos.launcher/files/reports/`. Er wordt niets vanzelf verstuurd (geen server/token in de openbare repo).
+  Ook als knop in de CAN-monitor (met de laatste 200 CAN-regels). Getest op de emulator.
 - **Software-updates**:
   - Versie op één plek: `version.json` (webapp via vite `__PANDAOS_VERSION__`, launcher via Gradle). Nu 1.2.0.
   - Vaste ondertekening voor debug én release (`signingConfigs.pandaos`): standaard de debug-sleutel van deze laptop
@@ -221,10 +229,6 @@ Op de radio neemt die app de rol van de Node-server over.
    **CarPlay** testen kan alleen op de radio (of met een CarPlay-dongle), niet op de emulator: de emulator heeft
    nagebootste Bluetooth en geen USB/MFi-chip, dus een iPhone kan er geen CarPlay mee maken. Op de emulator kan
    alleen de PandaOS-kant (CarPlay-app herkennen en volledig scherm openen).
-4. **Diagnose en logboek**: PandaOS houdt een logboek bij (signalen van de auto/radio zoals R, lichten, deuren,
-   fouten van de brug, crashes) in Settings → Software → Diagnose, met een knop "Probleem melden" die de laatste
-   minuten + status bewaart/exporteert. **CAN-bus/radio uitlezen**: op de radio via ADB (logcat, dumpsys,
-   broadcasts van de CAN-app van de fabrikant) en een CAN-monitor in Diagnose voor bekende broadcasts.
 5. **CAN-bus op de radio uitzoeken** (gereedschap is klaar, zie "CAN-bus" bij Klaar): in de fabrieksinstellingen
    (code 1234) kijken welk kastje/protocol er staat en dat in Settings → Voertuig → CAN-bus kiezen; daarna met de
    CAN-monitor-app en/of `tools/radio-diagnose.ps1` de signalen vastleggen (R, deuren, lichten, stuurknoppen …) en
@@ -232,7 +236,7 @@ Op de radio neemt die app de rol van de Node-server over.
 6. Spraakinvoer op de microfoon-toets (webtoetsenbord en Android-toetsenbord) via Android-spraakherkenning.
 
 **Afgesproken volgorde (4 november 2026)**: 1) CAN-bus (gereedschap klaar; vertalen op de radio),
-2) software-updates via GitHub + diagnose/logboek, 3) overige taken, 4) als laatste spraakinvoer.
+2) software-updates via GitHub + diagnose/logboek (klaar), 3) overige taken, 4) als laatste spraakinvoer.
 7. Echte autogegevens: op de radio via ADB uitzoeken wat het CAN-kastje doorgeeft (deuren, lichten,
    knipperlichten, achteruit, buitentemperatuur, kilometerstand, misschien actieradius) en doorgeven met
    `PandaOS.setCarState()`. Onderhoud: turbodruk en foutcodes (DTC) kunnen vrijwel zeker alleen via OBD2
