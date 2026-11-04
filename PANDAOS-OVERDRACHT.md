@@ -217,7 +217,68 @@ Op de radio neemt die app de rol van de Node-server over.
   OK = opslaan, Annuleren = terug. Werkt via `--text-scale`: alle `font-size` in SCSS en inline zijn
   `calc(Npx * var(--text-scale, 1))` (behalve ≥ 40px). Nieuwe tekstgroottes ook zo schrijven.
 
+## De echte radio (eerste test in de auto, 4 november 2026)
+
+- Systeem UJC201_64 (platform CYA), Android 15, AArch64, ±6 GB RAM, 128 GB. Build UJC201-V1.1.45R7-251115,
+  MCU JCST_Q8_8T7-2024.08.09. Paneelinformatie zegt MIPI 720x1280: echte resolutie nog controleren
+  (`adb shell wm size` / `wm density`, of de regel "screen" in een probleemrapport).
+- PandaOS 1.3.0 draait als gewone app (nog niet als startscherm). Geïnstalleerd via de noodroute (APK op de radio
+  gedownload); adb-koppeling is nog niet gedaan.
+- **WebView**: standaard stond Android System WebView **66** (2018) erop → zwart scherm. Na installatie van WebView
+  138 werkt PandaOS. Vanaf 1.3.1 toont de launcher bij een WebView onder 111 (bouwdoel Vite 8) een uitleg met knoppen
+  in plaats van een zwart scherm. Nog testen: blijft 138 actief na herstart van de radio?
+- **CAN**: de radio meldt "Protocol niet verbonden", CanBox-versie leeg. CanBox-optie stond op
+  *Simple-Volkswagen-Magotan-2016~2019-All* (MQB/Passat B8), niet PQ35. Volgende stap: Fabrieksinstelling (1234) →
+  Kan instellingen → huidige keuze noteren → een Golf 6/PQ35-protocol kiezen (bij Simple Soft/Raise/Hiworld meestal
+  iets als "Volkswagen (oud/General) Golf 6 / Sagitar / Magotan 2007-2015"), herstarten, kijken of "niet verbonden"
+  verdwijnt. Blijft het zo: fysiek kijken of er een CAN-kastje achter de radio zit en aangesloten is.
+  Alternatief: Bluetooth-OBD2 (ELM327) voor snelheid/toeren/temperaturen (geen deuren/lichten/achteruit).
+- CAN-monitor zag alleen GPS-regels met "speed" (`WatermarkService`, `AtcLocationService`, `AudioService.updateAslSpeed`):
+  vanaf 1.3.1 apart als "GPS (geen CAN)" en niet meer als snelheid. `Protocol false id 6` (AudioService) kwam steeds terug.
+- Geen stuurknoppen, handmatige airco. CAN-app van de fabrikant: `com.can.activity` ("Voertuig informatie").
+- Niet aanraken op de radio: alle gegevens wissen, OTA/lokale/MCU/CANBUS-updates, schermparameters,
+  helderheidsbereik, uitvoervermogen, mic winst.
+
+**Opgelost in 1.3.1**: verzonnen waarden weg (brandstof 72% en 18 °C: nu `carState.fuelPercent/rangeKm/outsideTemp`,
+verborgen zolang de auto niets doorgeeft); de app viel om zonder internet omdat het 3D-licht (HDR) van internet
+kwam, nu meegeleverd in `client/public/hdr`; WebView-uitleg; GPS uit de CAN-detectie. Nog open: de "72"-knoppen
+onderin (klimaat) zijn plaatshouders; de auto heeft handmatige airco.
+
 ## Nog open
+
+**Klaar voor 1.3.1 (nog niet uitgebracht: David wil er eerst nog dingen bij, 4 november 2026)**: app Ontwikkelaarsopties
+(app-menu/dock, alleen op de radio); Settings → Software → WebView (versie, bijwerken via Play Store, implementatie
+kiezen); dockhoogte instelbaar (Settings → Scherm, 48–96 px, pictogrammen schalen mee, `--dock-height`/`--dock-scale`);
+klimaatknoppen ("72") alleen als `carState.climateLeft/Right` bekend is; Settings → Voertuig → Grafische kwaliteit
+(Snel = geen schaduwen, dpr 1, geen anti-aliasing; Hoog = dpr max 1,5; ContactShadows rekent alleen de eerste 60 beeldjes);
+PandaOS-paneel: Optimalisatie (vrij geheugen, achtergrond-apps sluiten via killBackgroundProcesses, nooit PandaOS,
+toetsenbord of auto-/Bluetooth-/CarPlay-apps); paneel van de fabrikant vervangen: focusverlies zonder onPause →
+paneel dicht (ACTION_CLOSE_SYSTEM_DIALOGS/collapsePanels, mag door targetSdk 28) en PandaOS-paneel open. Getest op de
+emulator ook op 1280×720 en 800×480. Nog testen op de radio: het paneel van de fabrikant.
+
+**Gevonden in de auto, nog uitzoeken:**
+- **Achteruit**: in R verandert PandaOS niets en de camera-app van de radio neemt het scherm over. Volgende keer: CAN-monitor
+  aan (Alles, niet Alleen auto), in R zetten, Probleem melden → daarin staat welk signaal/welke app de radio gebruikt.
+  Daarna: PandaOS luistert naar dat signaal (`setReverseSignal`), en in Fabrieksinstelling → Camera Type Settings /
+  Function Settings kijken of de eigen achteruitcamera-app van de radio uit kan (of PandaOS hem na openen meteen vervangt).
+- **Toetsenbord**: het Android-toetsenbord verscheen in plaats van het PandaOS-toetsenbord. Zonder apparaateigenaar moet het
+  één keer aangezet worden: Settings → Apps → Toetsenbord → PandaOS-toetsenbord gebruiken (Android vraagt aanzetten en
+  kiezen), of via adb: `adb shell ime enable nl.pandaos.launcher/.PandaKeyboardService` en
+  `adb shell ime set nl.pandaos.launcher/.PandaKeyboardService`.
+- Foto's bekeken (4 november 2026): "Simple" in *Simple-Volkswagen-Magotan-2016~2019-All* is het merk van het
+  CAN-kastje (**Simple Soft**); alleen het automodel is fout (Magotan 2016+ = MQB). In Kan instellingen binnen de
+  Simple-lijst een Volkswagen-optie voor Golf 6 / PQ35 / "General" / 2008–2015 kiezen. In PandaOS: CAN-kastje
+  Simple Soft, protocol VW PQ35. Nog nodig: foto van de keuzelijst in Kan instellingen (exacte namen).
+- Paneel 720x1280 (MIPI, staand ingebouwd) draait liggend als 1280×720; PandaOS getest op die maat. Geheugen: 2,4 van
+  6,4 GB in gebruik, dus traagheid komt eerder van de grafische chip/WebView dan van te weinig geheugen.
+- Klimaat is handmatig (draaiknoppen Climatic), dus de "72"-knoppen horen weg (gedaan in 1.3.1).
+
+**Later (plan)**:
+- **App-groepen** in het app-menu: zelf groepen maken, hernoemen en verwijderen (bijv. "Google" met Gmail, Drive, Play
+  Store, Foto's, Voice Search) en apps erin slepen.
+- **Voertuigmodellen downloaden**: bij meer modellen het gekozen model op Android opslaan (launcher downloadt het naar de
+  app-opslag), met terugval: eerst het opgeslagen model, anders internet, en het meegeleverde Golf 6-model altijd als
+  laatste terugval. Nu zit het enige model (Golf 6) al in de APK en werkt het zonder internet.
 
 **Radiotest**: draaiboek voor de laptop (alleen adb, geen Android Studio) in [RADIOTEST.md](RADIOTEST.md).
 

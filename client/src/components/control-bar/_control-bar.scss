@@ -1,7 +1,7 @@
 @use '../../assets/scss/variables' as *;
 
 .tsl-control-bar {
-  height: 64px; // compacter (was 88px); het toetsenbord rekent hierop (_keyboard.scss)
+  height: var(--dock-height, 64px); // instelbaar in Settings > Display (applyDockHeight); het toetsenbord rekent hierop
   background-color: #000000;
   color: $color-white;
   display: flex;
@@ -132,21 +132,22 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      width: 40px; /* Iets groter klikgebied */
-      height: 40px;
+      /* Schaalt mee met de dockhoogte (--dock-scale = hoogte / 64, Settings > Display) */
+      width: calc(40px * var(--dock-scale, 1)); /* Iets groter klikgebied */
+      height: calc(40px * var(--dock-scale, 1));
       cursor: pointer;
       transition: transform 0.2s;
       
       /* Forceer SVG (Lucide) en IMG (je eigen .png's) naar hetzelfde formaat */
       svg {
-        width: 24px;
-        height: 24px;
+        width: calc(24px * var(--dock-scale, 1));
+        height: calc(24px * var(--dock-scale, 1));
         display: block;
       }
 
       img {
-        width: 30px; /* Misschien een fractie groter omdat plaatjes vaak een witrandje hebben */
-        height: 30px;
+        width: calc(30px * var(--dock-scale, 1)); /* Misschien een fractie groter omdat plaatjes vaak een witrandje hebben */
+        height: calc(30px * var(--dock-scale, 1));
         object-fit: contain; /* Voorkomt dat je plaatje wordt uitgerekt */
         display: block;
       }

@@ -63,6 +63,14 @@ export const textScaleFor = (size: DisplaySettings['textSize'] | undefined, cust
   size === 'Large' ? 1.15 : size === 'Custom' ? (custom ?? 1.1) : 1;
 export const applyTextScale = (scale: number) =>
   document.documentElement.style.setProperty('--text-scale', String(scale));
+// Hoogte van de dock (Settings > Display): CSS-variabele --dock-height, gebruikt door de dock en het toetsenbord
+export const DOCK_HEIGHT_DEFAULT = 64;
+export const applyDockHeight = (px: number | undefined) => {
+  const height = px ?? DOCK_HEIGHT_DEFAULT;
+  document.documentElement.style.setProperty('--dock-height', `${height}px`);
+  // Pictogrammen schalen mee, maar niet onder 85% (blijven goed aan te tikken)
+  document.documentElement.style.setProperty('--dock-scale', String(Math.max(0.85, height / DOCK_HEIGHT_DEFAULT)));
+};
 
 export interface DisplaySettings {
   textSize: 'Standard' | 'Large' | 'Custom'; // Custom = handmatig met de schuifbalk (textScale)
@@ -79,6 +87,7 @@ export interface DisplaySettings {
   nightBrightness?: number; // 10-100 %
   nightFilter: boolean; // warmere kleuren als het donker is (minder blauw licht)
   language: 'en' | 'nl'; // taal van de interface (zie src/i18n.ts)
+  dockHeight?: number; // hoogte van de zwarte balk onderin (dock), 48-96 px; standaard 64
 }
 
 // Snelheidswaarschuwing (Settings > Safety). Snelheid via GPS; de maximumsnelheid van de weg uit kaartgegevens.
@@ -164,6 +173,8 @@ export interface VehicleSettings {
   // canProtocol = auto <-> kastje (voertuigprotocol). Bepaalt hoe PandaOS de gegevens van de radio leest.
   canbox?: CanBox;
   canProtocol?: CanProtocol;
+  // 3D-weergave van de auto: 'High' = schaduwen en scherp beeld, 'Low' = zonder schaduwen en minder pixels (sneller)
+  graphics?: 'High' | 'Low';
 }
 
 export type CanBox = 'radio' | 'raise' | 'hiworld' | 'simplesoft' | 'oudi' | 'binarytek' | 'luzheng' | 'other';
@@ -187,6 +198,14 @@ export interface CarState {
   blinker: 'off' | 'left' | 'right' | 'hazard';
   doors: Record<DoorId, boolean>; // true = open
   detectedTransmission: 'Automatic' | 'Manual' | null; // door de auto doorgegeven; null = (nog) onbekend
+  // Meetwaarden van de auto (CAN-kastje/OBD2); null = onbekend, dan toont PandaOS niets (geen verzonnen waarde)
+  fuelPercent: number | null; // tankniveau 0-100
+  rangeKm: number | null; // actieradius
+  outsideTemp: number | null; // buitentemperatuur in °C
+  // Klimaatregeling die PandaOS via de CAN-bus kan instellen (links/rechts, °C). null = niet mogelijk (bijv. handmatige
+  // airco): dan verbergt PandaOS de temperatuurknoppen in de dock.
+  climateLeft: number | null;
+  climateRight: number | null;
 }
 // Teksten voor meldingen en de deur-open-aanduiding (vertaald via t() in de componenten)
 export const DOOR_LABELS: Record<DoorId, string> = {
@@ -195,6 +214,7 @@ export const DOOR_LABELS: Record<DoorId, string> = {
 export const DEFAULT_CAR_STATE: CarState = {
   lights: 'off', highBeam: false, fogFront: false, fogRear: false, blinker: 'off',
   doors: { fl: false, fr: false, rl: false, rr: false, trunk: false }, detectedTransmission: null,
+  fuelPercent: null, rangeKm: null, outsideTemp: null, climateLeft: null, climateRight: null,
 };
 
 const loadVehicleSettings = (): VehicleSettings => {

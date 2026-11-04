@@ -76,6 +76,7 @@ object DiagLog {
             .put("android", Build.VERSION.RELEASE).put("sdk", Build.VERSION.SDK_INT).put("build", Build.DISPLAY)
             .put("screen", "${metrics.widthPixels}x${metrics.heightPixels} @ ${metrics.densityDpi} dpi")
             .put("pandaos", info.versionName)
+            .put("webview", android.webkit.WebView.getCurrentWebViewPackage()?.versionName ?: "onbekend")
             .put("deviceOwner", policy?.isDeviceOwnerApp(activity.packageName) == true)
             .put("permissions", JSONObject()
                 .put("location", granted(Manifest.permission.ACCESS_FINE_LOCATION))

@@ -196,6 +196,7 @@ class PandaBridge(
             if (!enabled) {
                 activity.startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             } else {
+                (activity as? MainActivity)?.ignoreFocusLoss() // keuzelijst is geen meldingenpaneel
                 activity.getSystemService(InputMethodManager::class.java)?.showInputMethodPicker()
             }
         }
@@ -358,5 +359,75 @@ class PandaBridge(
         activity.runOnUiThread {
             activity.startActivity(Intent(Settings.ACTION_WIFI_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }
+    }
+    // ---------------- Ontwikkelaarsopties en WebView (Settings > Software, app Ontwikkelaarsopties) ----------------
+
+    @JavascriptInterface
+    fun openDeveloperSettings() {
+        activity.runOnUiThread {
+            try {
+                activity.startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            } catch (_: Exception) {
+                activity.startActivity(Intent(Settings.ACTION_DEVICE_INFO_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }
+        }
+    }
+
+    // {"package":"com.google.android.webview","version":"138.0.7204.181","major":138,"minimum":111}
+    @JavascriptInterface
+    fun getWebViewInfo(): String {
+        val info = android.webkit.WebView.getCurrentWebViewPackage()
+        return JSONObject()
+            .put("package", info?.packageName ?: "")
+            .put("version", info?.versionName ?: "")
+            .put("major", info?.versionName?.substringBefore('.')?.toIntOrNull() ?: 0)
+            .put("minimum", MainActivity.MIN_WEBVIEW)
+            .toString()
+    }
+
+    // WebView bijwerken: de Play Store-pagina van de gebruikte WebView (Google of Chrome), anders de webpagina
+    @JavascriptInterface
+    fun openWebViewUpdate() {
+        val pkg = android.webkit.WebView.getCurrentWebViewPackage()?.packageName?.takeIf { it.isNotEmpty() } ?: "com.google.android.webview"
+        activity.runOnUiThread {
+            try {
+                activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$pkg")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            } catch (_: ActivityNotFoundException) {
+                activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=$pkg")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }
+        }
+    }
+
+    // ---------------- Optimalisatie (PandaOS-paneel) ----------------
+
+    // Geheugen: {"totalMb":6400,"availableMb":3100}
+    @JavascriptInterface
+    fun getMemoryInfo(): String {
+        val am = activity.getSystemService(android.app.ActivityManager::class.java)
+        val mem = android.app.ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }
+        return JSONObject().put("totalMb", mem.totalMem / 1_048_576).put("availableMb", mem.availMem / 1_048_576).toString()
+    }
+
+    // Apps op de achtergrond sluiten (zoals 'Alles sluiten' bij recente apps). Nooit PandaOS zelf, het toetsenbord,
+    // of apps van de radio die de auto/Bluetooth/CarPlay regelen. Spelende muziek (voorgronddienst) blijft door Android
+    // zelf beschermd. Geeft {"closed":12,"freedMb":420} terug.
+    @JavascriptInterface
+    fun closeBackgroundApps(): String {
+        val am = activity.getSystemService(android.app.ActivityManager::class.java)
+        val before = android.app.ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }.availMem
+        val keep = Regex("can|mcu|carinfo|canbus|syu|microntek|bluetooth|\\.bt|carplay|zlink|autokit|carlink|inputmethod|launcher|systemui|android\\.webview|chrome", RegexOption.IGNORE_CASE)
+        val currentIme = Settings.Secure.getString(activity.contentResolver, Settings.Secure.DEFAULT_INPUT_METHOD).orEmpty().substringBefore('/')
+        val launchable = activity.packageManager.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0)
+            .map { it.activityInfo.packageName }.toSet()
+        var closed = 0
+        for (pkg in launchable) {
+            if (pkg == activity.packageName || pkg == currentIme || keep.containsMatchIn(pkg)) continue
+            try { am.killBackgroundProcesses(pkg); closed++ } catch (_: Exception) {}
+        }
+        Thread.sleep(300)
+        val after = android.app.ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }.availMem
+        val freed = ((after - before) / 1_048_576).coerceAtLeast(0)
+        DiagLog.add("info", "Optimalisatie: $closed apps gesloten, $freed MB vrij")
+        return JSONObject().put("closed", closed).put("freedMb", freed).toString()
     }
 }

@@ -44,6 +44,28 @@
     gap: 10px;
   }
 
+  // Optimalisatie: rij onder de schuifbalken (vrij geheugen + Apps sluiten)
+  .panel-optimize {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    border-radius: 10px;
+    background-color: var(--tsl-btn-secondary);
+    color: var(--tsl-btn-secondary-text);
+
+    .panel-optimize-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+    .tile-title { font-size: calc(14px * var(--text-scale, 1)); font-weight: 600; }
+    .tile-sub { font-size: calc(12px * var(--text-scale, 1)); color: var(--tsl-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .panel-memory-bar {
+      height: 4px;
+      border-radius: 2px;
+      background: rgba(128, 128, 128, 0.3);
+      overflow: hidden;
+      div { height: 100%; background: var(--tsl-blue, #3e6ae1); }
+    }
+  }
+
   .panel-tile {
     display: flex;
     flex-direction: column;

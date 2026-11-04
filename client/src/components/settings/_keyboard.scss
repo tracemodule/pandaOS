@@ -13,7 +13,7 @@ $kb-numpad-width: 300px;   // Breedte van het numpad
   top: 0;
   left: 0;
   right: 0;
-  bottom: 64px; // Precies boven de Control Bar (hoogte in _control-bar.scss)
+  bottom: var(--dock-height, 64px); // Precies boven de dock (hoogte instelbaar, zie _control-bar.scss)
   z-index: 1000;
   display: flex;
   align-items: flex-end; // Plakt aan de onderkant

@@ -44,6 +44,13 @@ class CanMonitor(private val activity: Activity) {
         "^[VDIWEF]/(artd|dex2oat\\w*|PackageManager\\w*|BackgroundDexOpt\\w*|chatty|EGL_emulation|ActivityManager|Finsky|PhenotypeFlag\\w*)\\b",
     )
 
+    // GPS-regels van de radio (WatermarkService, AtcLocationService, AudioService.updateAslSpeed ...): bevatten
+    // 'speed', maar zijn GPS-ruis en geen CAN. Bij 'Alleen auto' overslaan (op de Golf-radio, 4 november 2026).
+    private val gpsPattern = Regex(
+        "WatermarkService|AtcLocation|updateAslSpeed|LocationManager|GnssLocation|\\bgps\\b|\\bnmea\\b",
+        RegexOption.IGNORE_CASE,
+    )
+
     // Bekende broadcasts van Chinese radio-platforms (MTC/Microntek, FYT/SYU, TopWay ...). Niet volledig.
     private val knownActions = listOf(
         "com.microntek.canbusdisplay", "com.microntek.irkeyDown", "com.microntek.irkeyUp", "com.microntek.light",
@@ -82,7 +89,7 @@ class CanMonitor(private val activity: Activity) {
                         val line = reader.readLine() ?: break
                         if (line.contains("chromium") || line.contains("nl.pandaos")) continue // eigen regels overslaan
                         if (noisePattern.containsMatchIn(line)) continue // Android-ruis (app-compiler, pakketbeheer ...)
-                        if (!onlyCan || canPattern.containsMatchIn(line)) add("logcat", line)
+                        if (!onlyCan || (canPattern.containsMatchIn(line) && !gpsPattern.containsMatchIn(line))) add("logcat", line)
                     }
                 }
             } catch (_: Exception) { add("pandaos", "Logboek lezen lukte niet") }

@@ -15,7 +15,7 @@ export const useBootStatus = create<BootStatus>(() => ({ iconsReady: false, carR
 
 // Alle pictogrammen in public/app-icons die PandaOS gebruikt (app-menu, dock, Settings > Apps)
 const PANDAOS_ICONS = [
-  'audio', 'android-settings', 'bluetooth', 'calendar', 'camera', 'caraoke', 'carplay', 'dashcam', 'energy',
+  'audio', 'android-settings', 'bluetooth', 'calendar', 'camera', 'canmonitor', 'caraoke', 'carplay', 'dashcam', 'developer', 'energy',
   'maps', 'messages', 'music', 'netflix', 'phone', 'settings', 'spotify', 'toybox', 'tunein', 'youtube', 'zoom',
 ].map((name) => `/app-icons/${name}.svg`);
 

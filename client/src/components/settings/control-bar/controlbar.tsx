@@ -27,6 +27,8 @@ const ControlBar: React.FC = () => {
   // Uitgeschakelde en (op de radio) ontbrekende apps verdwijnen uit de dock (Settings > Apps);
   // niet-geïnstalleerde apps met een Play Store-pagina worden lichter
   const installedApps = useInstalledApps();
+  const climateLeft = useUIStore((s) => s.carState.climateLeft);
+  const climateRight = useUIStore((s) => s.carState.climateRight);
   const t = useT();
   const actionOf = (id: string) => getLaunchAction(appLinks, id, installedApps);
   // Android-apps: alleen als ze nog geïnstalleerd en niet uitgezet zijn (Settings > Apps)
@@ -65,7 +67,8 @@ const ControlBar: React.FC = () => {
     else if (id === 'settings') openSettingsTab('Display');
     else if (id === 'bluetooth') openSettingsTab('Bluetooth');
     else if (id === 'carplay') toggleCarPlay();
-    else if (id === 'canmonitor') openCanMonitor(); // <--- Hier toegevoegd!
+    else if (id === 'canmonitor') openCanMonitor();
+    else if (id === 'developer') (window as any).PandaAndroid?.openDeveloperSettings?.(); // ontwikkelaarsopties van Android
     else if (id === 'phone') isPhoneOpen ? closePhone() : openPhone(); // Telefoon via Bluetooth (CarPlay staat los in het app-menu)
     else console.log(`Opening from dock: ${id}...`);
   };
@@ -96,11 +99,14 @@ const ControlBar: React.FC = () => {
         <button className="icon-btn" onClick={() => { if(!isAppEditMode) toggleMenu(); }}>
           <VolkswagenIcon size={28} />
         </button>
-        <div className="stepper">
-          <ChevronLeft className="arrow" size={24} />
-          <span>72</span>
-          <ChevronRight className="arrow" size={24} />
-        </div>
+        {/* Klimaat links: alleen als de auto de temperatuur via de CAN-bus laat instellen (carState.climateLeft) */}
+        {climateLeft != null && (
+          <div className="stepper">
+            <ChevronLeft className="arrow" size={24} />
+            <span>{Math.round(climateLeft)}</span>
+            <ChevronRight className="arrow" size={24} />
+          </div>
+        )}
       </div>
 
       {/* Center: App Dock */}
@@ -201,11 +207,14 @@ const ControlBar: React.FC = () => {
 
       {/* Right Controls */}
       <div className="control-group">
-        <div className="stepper">
-          <ChevronLeft className="arrow" size={24} />
-          <span>72</span>
-          <ChevronRight className="arrow" size={24} />
-        </div>
+        {/* Klimaat rechts (carState.climateRight); handmatige airco = geen knoppen */}
+        {climateRight != null && (
+          <div className="stepper">
+            <ChevronLeft className="arrow" size={24} />
+            <span>{Math.round(climateRight)}</span>
+            <ChevronRight className="arrow" size={24} />
+          </div>
+        )}
 
         {/* Volume: < en > stappen van 1 en tonen de popup 3 seconden; speaker opent/sluit de popup */}
         <div className="stepper volume-stepper" ref={volumeAnchorRef} style={{ marginLeft: '16px' }}>

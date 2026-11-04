@@ -41,6 +41,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         DiagLog.init(this) // diagnose: crashes en gebeurtenissen van de launcher
+        if (webViewTooOld()) return // uitleg op het scherm in plaats van een zwart scherm
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG) // chrome://inspect op de laptop
 
@@ -153,10 +154,13 @@ class MainActivity : Activity() {
     // Ook na terugkomen uit het toegangsscherm: dan begint het volgen van media meteen
     override fun onResume() {
         super.onResume()
+        resumed = true
+        if (!::media.isInitialized) { if (!webViewTooOld()) recreate(); return } // WebView inmiddels bijgewerkt
         media.start()
     }
 
     override fun onDestroy() {
+        if (!::media.isInitialized) { super.onDestroy(); return }
         media.stop()
         radio.stop()
         can.stop()
@@ -164,13 +168,45 @@ class MainActivity : Activity() {
         super.onDestroy()
     }
 
+    override fun onPause() {
+        super.onPause()
+        resumed = false
+    }
+
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        if (hasFocus) hideSystemBars() // na terugkeer uit een Android-app weer volledig scherm
+        if (hasFocus) { hideSystemBars(); return } // na terugkeer uit een Android-app weer volledig scherm
+        // Focus kwijt terwijl PandaOS vooraan blijft (geen onPause): er schuift iets over PandaOS heen. Op de
+        // Golf-radio is dat het meldingenpaneel van de fabrikant, dat niet als Android-statusbalk binnenkomt
+        // (watchSystemBars ziet het dan niet). Met het PandaOS-paneel gekozen: dat paneel dichtdoen en het onze openen.
+        if (!pandaPanel || SystemClock.uptimeMillis() < ignoreFocusLossUntil) return
+        window.decorView.postDelayed({
+            if (resumed && !hasWindowFocus() && pandaPanel && SystemClock.uptimeMillis() >= ignoreFocusLossUntil) {
+                collapseSystemPanel()
+                callWeb("openPanel()")
+                DiagLog.add("info", "Paneel van het systeem vervangen door het PandaOS-paneel")
+            }
+        }, 400)
+    }
+
+    // Eigen schermen van Android die PandaOS zelf opent zonder pauze (keuzelijst van toetsenborden): niet vervangen
+    fun ignoreFocusLoss(millis: Long = 15_000) { ignoreFocusLossUntil = SystemClock.uptimeMillis() + millis }
+    private var ignoreFocusLossUntil = 0L
+    private var resumed = false
+
+    // Meldingenpaneel dichtdoen. Mag omdat de launcher op targetSdk 28 staat (vanaf targetSdk 31 niet meer).
+    @Suppress("DEPRECATION")
+    private fun collapseSystemPanel() {
+        try { sendBroadcast(android.content.Intent(android.content.Intent.ACTION_CLOSE_SYSTEM_DIALOGS)) } catch (_: Exception) {}
+        try {
+            val service = getSystemService("statusbar")
+            service?.javaClass?.getMethod("collapsePanels")?.invoke(service)
+        } catch (_: Exception) { /* niet toegestaan op dit apparaat */ }
     }
 
     // Roept window.PandaOS aan in de webapp (client/src/services/androidBridge.ts)
     private fun callWeb(call: String) {
+        if (!::webView.isInitialized) return // te oude WebView: geen webapp geladen
         webView.evaluateJavascript("window.PandaOS && window.PandaOS.$call", null)
     }
 
@@ -243,6 +279,59 @@ class MainActivity : Activity() {
         } catch (_: Exception) { /* niet toegestaan: de gewone startscherm-keuze blijft gelden */ }
     }
 
+    // --- Te oude WebView ---
+    // De webapp is gebouwd voor Chrome/WebView $MIN_WEBVIEW of nieuwer (standaarddoel van Vite). Op de Golf-radio stond
+    // eerst WebView 66 (2018): dan bleef het scherm zwart. Nu tonen we wat er aan de hand is en hoe je het oplost.
+    private fun webViewTooOld(): Boolean {
+        val version = WebView.getCurrentWebViewPackage()?.versionName
+        val major = version?.substringBefore('.')?.toIntOrNull()
+        if (major == null || major >= MIN_WEBVIEW) return false
+        DiagLog.add("error", "WebView $version is te oud (minimaal $MIN_WEBVIEW)")
+        val density = resources.displayMetrics.density
+        fun button(text: String, onClick: () -> Unit) = android.widget.Button(this).apply {
+            this.text = text
+            isAllCaps = false
+            textSize = 18f
+            setOnClickListener { onClick() }
+        }
+        val layout = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            gravity = android.view.Gravity.CENTER
+            setBackgroundColor(0xFF000000.toInt())
+            val pad = (32 * density).toInt()
+            setPadding(pad, pad, pad, pad)
+            addView(android.widget.TextView(this@MainActivity).apply {
+                text = "PandaOS heeft een nieuwere WebView nodig"
+                textSize = 26f
+                setTextColor(0xFFFFFFFF.toInt())
+                gravity = android.view.Gravity.CENTER
+            })
+            addView(android.widget.TextView(this@MainActivity).apply {
+                text = "Op deze radio staat Android System WebView $version. PandaOS werkt vanaf versie $MIN_WEBVIEW.\n" +
+                    "Installeer een nieuwe Android System WebView (Play Store of APK) en kies hem eventueel bij " +
+                    "Ontwikkelaarsopties → WebView-implementatie. Daarna start PandaOS vanzelf."
+                textSize = 18f
+                setTextColor(0xFFBBBBBB.toInt())
+                gravity = android.view.Gravity.CENTER
+                setPadding(0, (16 * density).toInt(), 0, (24 * density).toInt())
+            })
+            addView(button("WebView bijwerken (Play Store)") {
+                val market = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("market://details?id=com.google.android.webview"))
+                try { startActivity(market) } catch (_: Exception) {
+                    startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW,
+                        android.net.Uri.parse("https://play.google.com/store/apps/details?id=com.google.android.webview")))
+                }
+            })
+            addView(button("Ontwikkelaarsopties openen") {
+                try { startActivity(android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)) }
+                catch (_: Exception) { startActivity(android.content.Intent(android.provider.Settings.ACTION_SETTINGS)) }
+            })
+            addView(button("Opnieuw proberen") { recreate() })
+        }
+        setContentView(layout)
+        return true
+    }
+
     // Een startscherm sluit je niet met de terugknop
     private fun disableBack() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -273,6 +362,7 @@ class MainActivity : Activity() {
     companion object {
         private const val REQUEST_LOCATION = 1
         private const val REQUEST_CAMERA = 2
+        const val MIN_WEBVIEW = 111 // Chrome-versie van het standaard bouwdoel van Vite 8 (chrome111)
 
         // Module-scripts weigert de WebView zonder het juiste type
         private fun mimeType(file: String) = when (file.substringAfterLast('.').lowercase()) {

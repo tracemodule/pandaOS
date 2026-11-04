@@ -8,6 +8,7 @@ import { Smartphone, RotateCw, Signal, Search, Sun } from 'lucide-react';
 import AndroidWifiPanel from '../../components/settings/AndroidWifiPanel';
 import SoftwareUpdatePanel from '../../components/settings/SoftwareUpdatePanel';
 import DiagnosticsPanel from '../../components/settings/DiagnosticsPanel';
+import WebViewPanel from '../../components/settings/WebViewPanel';
 import AndroidBluetoothPanel from '../../components/settings/AndroidBluetoothPanel';
 import TeslaSlider from '../../components/settings/TeslaSlider';
 import { useT } from '../../i18n';
@@ -310,6 +311,17 @@ const SettingsApp: React.FC = () => {
                      </div>
                    </div>
                  ))}
+                 {/* Grafische kwaliteit van het 3D-model: Laag = geen schaduwen en minder pixels, sneller op de radio */}
+                 <div className="tsl-section">
+                   <span className="tsl-title">{t('Graphics')}</span>
+                   <div className="tsl-segmented">
+                     {(['High', 'Low'] as const).map((q) => (
+                       <button key={q} className={(vehicleSettings.graphics ?? 'High') === q ? 'is-active' : ''}
+                         onClick={() => updateVehicleSetting('graphics', q)}>{t(q === 'High' ? 'High quality' : 'Fast (no shadows)')}</button>
+                     ))}
+                   </div>
+                   <small className="tsl-hint">{t('Fast: no shadows and fewer pixels for the 3D car. Use this when PandaOS feels slow.')}</small>
+                 </div>
                  {/* Uitlaat op het 3D-model, zoals bij je eigen auto */}
                  <div className="tsl-section">
                    <span className="tsl-title">{t('Exhaust')}</span>
@@ -487,6 +499,20 @@ const SettingsApp: React.FC = () => {
                        <button className="tsl-btn is-small is-primary" onClick={confirmTextSize}>OK</button>
                      </div>
                    )}
+                 </div>
+                 {/* Hoogte van de zwarte balk onderin (dock); de pictogrammen schalen mee */}
+                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                   <label className="tsl-title">{t('Dock height')}</label>
+                   <div className="tsl-slider-row">
+                     <TeslaSlider
+                       value={displaySettings?.dockHeight ?? 64} min={48} max={96} step={4}
+                       format={(v) => `${v} px`}
+                       iconLeft={<span style={{ width: 18, height: 6, background: 'currentColor', borderRadius: 2 }} />}
+                       iconRight={<span style={{ width: 18, height: 12, background: 'currentColor', borderRadius: 2 }} />}
+                       onChange={(v) => updateDisplaySetting('dockHeight', v)}
+                     />
+                     <button className="tsl-btn" onClick={() => updateDisplaySetting('dockHeight', 64)}>{t('Default')}</button>
+                   </div>
                  </div>
                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                    <label className="tsl-title">{t('Time')}</label>
@@ -794,6 +820,9 @@ const SettingsApp: React.FC = () => {
                  <SoftwareUpdatePanel />
 
                  <hr className="tsl-divider" />
+
+                 {/* WebView van de radio: versie en bijwerken (alleen op de radio) */}
+                 {isAndroidLauncher() && <><WebViewPanel /><hr className="tsl-divider" /></>}
 
                  {/* Diagnose: logboek en Probleem melden */}
                  <DiagnosticsPanel />

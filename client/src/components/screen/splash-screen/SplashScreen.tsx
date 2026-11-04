@@ -17,7 +17,7 @@ import CarPlayApp from '../../../store/apps/CarPlayApp';
 import PhoneApp, { CallOverlay } from '../../../store/apps/PhoneApp';
 import CanMonitorApp from '../../../store/apps/CanMonitorApp';
 
-import { useUIStore, applyTextScale, textScaleFor } from '../../../store/uiStore';
+import { useUIStore, applyTextScale, textScaleFor, applyDockHeight } from '../../../store/uiStore';
 import { CustomCommands } from '../../../scripts/customcmdcommands';
 import { startTripComputer } from '../../../services/tripComputer';
 import BootScreen from '../boot-screen/BootScreen';
@@ -84,7 +84,10 @@ const SplashScreen: React.FC = () => {
     hour12: displaySettings?.timeFormat === '12h'
   });
 
-  const currentTemp = displaySettings?.temperature === 'C' ? '18 °C' : '65 °F';
+  // Buitentemperatuur van de auto (CAN-kastje/OBD2); onbekend = niet tonen
+  const outsideTemp = useUIStore((s) => s.carState.outsideTemp);
+  const currentTemp = outsideTemp == null ? null
+    : displaySettings?.temperature === 'C' ? `${Math.round(outsideTemp)} °C` : `${Math.round(outsideTemp * 9 / 5 + 32)} °F`;
 
   // Bij het opstarten de gekozen app openen (App Settings in het app-menu). Eén keer, na het laden van de opgeslagen instellingen.
   useEffect(() => {
@@ -147,7 +150,8 @@ const SplashScreen: React.FC = () => {
   // --- TEKSTGROOTTE (Settings > Display): alle tekst schaalt mee via --text-scale ---
   useEffect(() => {
     applyTextScale(textScaleFor(displaySettings?.textSize, displaySettings?.textScale));
-  }, [displaySettings?.textSize, displaySettings?.textScale]);
+    applyDockHeight(displaySettings?.dockHeight);
+  }, [displaySettings?.textSize, displaySettings?.textScale, displaySettings?.dockHeight]);
 
   // --- UI SPLIT LOGICA ---
   const isParked = brakeApplied || gear === 'P';
@@ -260,7 +264,7 @@ const SplashScreen: React.FC = () => {
               </div>
               <span style={{ color: '#ff4d4d', fontSize: 'calc(18px * var(--text-scale, 1))' }}>⏺</span> 
               <span>{formattedTime}</span>
-              <span>{currentTemp}</span>
+              {currentTemp && <span>{currentTemp}</span>}
           </div>
       </header>
 

@@ -3,7 +3,7 @@
 // (via de meldingen-luisteraar van de launcher). Sluiten: omhoog vegen of naast het paneel tikken.
 // Of dit paneel of dat van Android verschijnt: Settings > Apps > Paneel (appSettings.panel).
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Wifi, WifiOff, Bluetooth, BluetoothOff, SunMoon, Settings, Sun, Volume2, X, Smartphone } from 'lucide-react';
+import { Wifi, WifiOff, Bluetooth, BluetoothOff, SunMoon, Settings, Sun, Volume2, X, Smartphone, Gauge } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { getEffectiveTheme } from '../../settings';
 import { getAndroidAppIcon, isAndroidLauncher, launchAndroidPackage } from '../../store/appLinks';
@@ -29,6 +29,10 @@ const PandaPanel: React.FC = () => {
   const [wifi, setWifi] = useState<{ enabled: boolean; ssid?: string | null } | null>(null);
   const [bt, setBt] = useState<{ enabled?: boolean; devices?: { name: string; connected: boolean }[] } | null>(null);
   const dragStart = useRef<number | null>(null);
+  // Optimalisatie: vrij werkgeheugen en de uitkomst van 'Apps sluiten'
+  const [memory, setMemory] = useState<{ totalMb: number; availableMb: number } | null>(null);
+  const [optimized, setOptimized] = useState<{ closed: number; freedMb: number } | null>(null);
+  const [optimizing, setOptimizing] = useState(false);
   const isDarkMode = getEffectiveTheme(screenMode, vehicleLightsOn) === 'dark';
   const enabled = isAndroidLauncher() && (appSettings.panel ?? 'pandaos') === 'pandaos';
 
@@ -38,6 +42,7 @@ const PandaPanel: React.FC = () => {
     try { setNotifications(JSON.parse(b.getNotifications?.() ?? '[]')); } catch { setNotifications([]); }
     try { setWifi(JSON.parse(b.getWifiState?.() ?? 'null')); } catch { /* geen wifi-status */ }
     try { setBt(JSON.parse(b.getBluetoothState?.() ?? 'null')); } catch { /* geen Bluetooth-status */ }
+    try { setMemory(JSON.parse(b.getMemoryInfo?.() ?? 'null')); } catch { /* geen geheugeninfo */ }
   }, []);
 
   // Bijwerken bij openen, elke 2 s zolang open, en meteen bij een nieuwe melding (launcher -> notificationsChanged)
@@ -135,6 +140,36 @@ const PandaPanel: React.FC = () => {
                 iconLeft={<Volume2 size={18} />} iconRight={<Volume2 size={24} />}
                 onChange={(v) => setVolume(v)} />
             </div>
+
+            {/* Optimalisatie: apps op de achtergrond sluiten (nooit PandaOS, het toetsenbord of de apps van de radio
+                voor auto, Bluetooth en CarPlay). Spelende muziek blijft spelen. */}
+            {bridge()?.closeBackgroundApps && (
+              <div className="panel-optimize">
+                <Gauge size={22} />
+                <div className="panel-optimize-text">
+                  <span className="tile-title">{t('Optimization')}</span>
+                  <span className="tile-sub">
+                    {optimized
+                      ? `${t('Background apps closed')} · ${optimized.freedMb} MB ${t('freed')}`
+                      : memory ? `${(memory.availableMb / 1024).toFixed(1)} ${t('of')} ${(memory.totalMb / 1024).toFixed(1)} GB ${t('memory free')}` : t('Close apps running in the background')}
+                  </span>
+                  {memory && (
+                    <div className="panel-memory-bar">
+                      <div style={{ width: `${Math.round((1 - memory.availableMb / memory.totalMb) * 100)}%` }} />
+                    </div>
+                  )}
+                </div>
+                <button className="tsl-btn is-small" disabled={optimizing} onClick={() => {
+                  setOptimizing(true);
+                  // even wachten zodat de knop eerst 'bezig' toont; het sluiten zelf duurt kort
+                  setTimeout(() => {
+                    try { setOptimized(JSON.parse(bridge().closeBackgroundApps())); } catch { /* niet gelukt */ }
+                    setOptimizing(false);
+                    read();
+                  }, 50);
+                }}>{optimizing ? t('Closing…') : t('Close apps')}</button>
+              </div>
+            )}
 
             {/* Meldingen van Android-apps */}
             <div className="panel-notifications">

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useUIStore, type AppSettings } from '../../store/uiStore';
 import { getEffectiveTheme } from '../../settings';
 import { useT } from '../../i18n';
-import { getLaunchAction, runLaunchAction, useInstalledApps, getAndroidAppIcon, getAndroidAppName, isAndroidAppVisible, launchAndroidPackage, androidAppKey, getPackagesBehindPandaOSIcons, type LaunchAction } from '../appLinks';
+import { getLaunchAction, runLaunchAction, useInstalledApps, getAndroidAppIcon, getAndroidAppName, isAndroidAppVisible, launchAndroidPackage, androidAppKey, getPackagesBehindPandaOSIcons, isAndroidLauncher, type LaunchAction } from '../appLinks';
 import { pressApp } from '../appDrag';
 import { Wind, Settings2, ChevronLeft } from 'lucide-react';
 
@@ -33,7 +33,9 @@ const ALL_APPS = [
   { id: 'bluetooth', icon: '/app-icons/bluetooth.svg', name: 'Bluetooth', type: 'image' },
   { id: 'settings', icon: '/app-icons/settings.svg', name: 'Settings', type: 'image' },
   { id: 'maps', icon: '/app-icons/maps.svg', name: 'Nav', type: 'image' },
-  { id: 'canmonitor', icon: '/app-icons/canmonitor.svg', name: 'CAN monitor', type: 'image' }
+  { id: 'canmonitor', icon: '/app-icons/canmonitor.svg', name: 'CAN monitor', type: 'image' },
+  // Rechtstreeks naar de ontwikkelaarsopties van Android (alleen op de radio)
+  { id: 'developer', icon: '/app-icons/developer.svg', name: 'Developer options', type: 'image' },
 ];
 
 const QuickActionsApp: React.FC = () => {
@@ -73,7 +75,7 @@ const QuickActionsApp: React.FC = () => {
   // Geïnstalleerde Android-apps (op de radio) en wat elk PandaOS-pictogram doet (Settings > Apps)
   const installedApps = useInstalledApps();
   const actions = new Map<string, LaunchAction>(ALL_APPS.map((app) => [app.id, getLaunchAction(appLinks, app.id, installedApps)]));
-  const visibleApps = ALL_APPS.filter((app) => actions.get(app.id)!.kind !== 'hidden');
+  const visibleApps = ALL_APPS.filter((app) => actions.get(app.id)!.kind !== 'hidden' && (app.id !== 'developer' || isAndroidLauncher()));
   // Overige Android-apps: alles wat niet al achter een PandaOS-pictogram zit
   // (en ook geen alternatieven daarvan, bijv. Google Phone als Telefoon op PandaOS staat)
   const coveredPackages = getPackagesBehindPandaOSIcons(appLinks, installedApps);
@@ -131,6 +133,10 @@ const QuickActionsApp: React.FC = () => {
         break;
       case 'canmonitor':
         openCanMonitor();
+        break;
+      case 'developer':
+        addRecentApp('developer');
+        (window as any).PandaAndroid?.openDeveloperSettings?.();
         break;
       default:
         console.log(`Geen actie gekoppeld aan: ${id}`);

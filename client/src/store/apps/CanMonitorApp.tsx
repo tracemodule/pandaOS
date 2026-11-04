@@ -31,6 +31,9 @@ const SIGNALS: { label: string; pattern: RegExp }[] = [
   { label: 'Parking sensors', pattern: /radar|pdc|park ?sensor|ultrason/i },
 ];
 
+// GPS-regels van de radio: bevatten 'speed' maar komen niet van de CAN-bus (zie CanMonitor.kt gpsPattern)
+const GPS_PATTERN = /WatermarkService|AtcLocation|updateAslSpeed|LocationManager|GnssLocation|\bgps\b|\bnmea\b/i;
+
 const bridge = () => (window as any).PandaAndroid;
 const time = (t: number) => new Date(t).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
@@ -67,9 +70,12 @@ const CanMonitorApp: React.FC = () => {
 
   const lines = state?.lines ?? [];
   const detections = SIGNALS.map((signal) => {
-    const hits = lines.filter((l) => signal.pattern.test(l.text));
+    const hits = lines.filter((l) => !GPS_PATTERN.test(l.text) && signal.pattern.test(l.text));
     return { ...signal, count: hits.length, last: hits[hits.length - 1] };
   });
+  // GPS apart tonen, zodat duidelijk is dat die regels herkend zijn maar niet als autodata tellen
+  const gpsHits = lines.filter((l) => GPS_PATTERN.test(l.text));
+  detections.push({ label: 'GPS (not CAN)', pattern: GPS_PATTERN, count: gpsHits.length, last: gpsHits[gpsHits.length - 1] });
 
   return (
     <div className={`settings-overlay-container tsl-ui ${isDarkMode ? 'dark-mode' : ''}`} onClick={(e) => e.stopPropagation()}

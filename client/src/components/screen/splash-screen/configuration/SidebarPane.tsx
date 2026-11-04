@@ -4,6 +4,7 @@ import { Fuel, DoorOpen } from 'lucide-react';
 import { useT } from '../../../../i18n';
 import { markCarReady } from '../../../../services/preload';
 import { useGLTF, PerspectiveCamera, Environment, ContactShadows, Center } from '@react-three/drei';
+import { HDR_CITY, HDR_NIGHT } from './environmentFiles';
 import * as THREE from 'three';
 import MusicBar from '../../../music/MusicBar';
 import { useUIStore, type WindowTint, type CarState, type DoorId, DOOR_LABELS } from '../../../../store/uiStore';
@@ -499,8 +500,13 @@ const SidebarPane: React.FC<{ widthFraction?: number }> = ({ widthFraction = 1 }
   const canvasTransform = `translateX(${-(1 - widthFraction) * 50}vw) scale(${carScale})`;
 
   const speedUnit = displaySettings?.distance === 'Kilometers' ? 'KM/H' : 'MPH';
-  // Brandstof: percentage of actieradius (Settings > Display > Energy Display). Komt straks uit OBD2 (tankniveau).
-  const energyDisplay = displaySettings?.energyDisplay === 'Percentage' ? '72%' : (displaySettings?.distance === 'Kilometers' ? '540 km' : '335 mi');
+  const lowGraphics = vehicleSettings.graphics === 'Low';
+  // Brandstof: percentage of actieradius (Settings > Display > Energy Display), alleen als de auto het doorgeeft
+  // (carState.fuelPercent/rangeKm via CAN-kastje of OBD2). Onbekend = niets tonen, geen verzonnen waarde.
+  const range = carState.rangeKm;
+  const energyDisplay = displaySettings?.energyDisplay === 'Percentage'
+    ? (carState.fuelPercent != null ? `${Math.round(carState.fuelPercent)}%` : null)
+    : (range != null ? (displaySettings?.distance === 'Kilometers' ? `${Math.round(range)} km` : `${Math.round(range * 0.621)} mi`) : null);
 
   // Versnellingsweergave: automaat P R N D; handgeschakeld P R D, want zonder OBD2 is de versnelling (1-6)
   // niet uit te lezen. P = stilstand, D = rijden (GPS), R = achteruit-signaal van de radio.
@@ -536,11 +542,11 @@ const SidebarPane: React.FC<{ widthFraction?: number }> = ({ widthFraction = 1 }
               <span key={g} style={{ color: g === activeGearLabel ? (isDarkMode ? '#fff' : '#000') : '' }}>{g}</span>
            ))}
          </div>
-         {/* Brandstof (tankniveau via OBD2; tot die er is een vaste waarde) */}
-         <div style={{ fontWeight: '600', fontSize: 'calc(18px * var(--text-scale, 1))', display: 'flex', alignItems: 'center', gap: '8px', color: isDarkMode ? '#fff' : '#555' }}>
+         {/* Brandstof (tankniveau/actieradius van de auto); verborgen zolang onbekend */}
+         {energyDisplay && <div style={{ fontWeight: '600', fontSize: 'calc(18px * var(--text-scale, 1))', display: 'flex', alignItems: 'center', gap: '8px', color: isDarkMode ? '#fff' : '#555' }}>
            <Fuel size={20} strokeWidth={2.2} />
            {energyDisplay}
-         </div>
+         </div>}
       </div>
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative' }}>
@@ -592,11 +598,15 @@ const SidebarPane: React.FC<{ widthFraction?: number }> = ({ widthFraction = 1 }
           }}>
           {/* offsetSize: meet de echte (ongeschaalde) grootte. getBoundingClientRect telt de CSS-transform hierboven mee,
               waardoor het canvas zich soms op de verkleinde maat instelde en de auto versprong. */}
-          <Canvas shadows dpr={[1, 2]} resize={{ offsetSize: true }}>
+          {/* Grafische kwaliteit (Settings > Vehicle): Laag = geen schaduwen, 1 pixel per pixel, geen anti-aliasing.
+              Hoog: maximaal 1,5x pixels (scherp genoeg op een radioscherm, veel lichter dan 2x). */}
+          <Canvas key={lowGraphics ? 'low' : 'high'} shadows={!lowGraphics} dpr={lowGraphics ? 1 : [1, 1.5]}
+            gl={{ antialias: !lowGraphics, powerPreference: 'high-performance' }} resize={{ offsetSize: true }}>
             <Suspense fallback={null}>
               <ambientLight intensity={isDarkMode ? 0.3 : 0.7} />
-              <spotLight position={[10, 10, 10]} angle={0.15} penumbra={1} intensity={1} castShadow />
-              <Environment preset={isDarkMode ? "night" : "city"} />
+              <spotLight position={[10, 10, 10]} angle={0.15} penumbra={1} intensity={1} castShadow={!lowGraphics} />
+              {/* Lichtomgeving uit de app zelf (public/hdr), niet van internet: zonder internet viel de app anders om */}
+              <Environment files={isDarkMode ? HDR_NIGHT : HDR_CITY} />
 
               <FitCamera position={cameraPosition} halfLength={vehicleModel.halfLength} />
               
@@ -610,14 +620,16 @@ const SidebarPane: React.FC<{ widthFraction?: number }> = ({ widthFraction = 1 }
                 vehicle={vehicleSettings}
               />
 
-              {/* Vaste schaduw op de "vloer" (Y=0) */}
-              <ContactShadows 
+              {/* Vaste schaduw op de "vloer" (Y=0); niet bij snelle weergave. frames={60}: de auto staat stil, dus na het
+                  laden niet elk beeldje opnieuw berekenen (scheelt veel rekenwerk) */}
+              {!lowGraphics && <ContactShadows 
                 position={[0, -0.01, 0]} 
                 opacity={isDarkMode ? 0.8 : 0.3} 
                 scale={15} 
                 blur={2} 
                 far={4.5} 
-              />
+                frames={60}
+              />}
             </Suspense>
           </Canvas>
           </div>
