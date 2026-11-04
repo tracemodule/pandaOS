@@ -96,7 +96,13 @@ Op de radio neemt die app de rol van de Node-server over.
 - **Geen dubbele apps**: Android-apps die bij een PandaOS-pictogram horen (alle keuzes in Settings → Apps:
   Google Phone, YouTube Music, Google Maps/Waze, CarPlay-apps, …) staan nooit los in het app-menu
   (`getPackagesBehindPandaOSIcons` in appLinks.ts).
-- **Software-updates** (Git-repo in de projectmap, nog niet online):
+- **GitHub**: openbare repository https://github.com/tracemodule/pandaOS (branch `main`), licentie GPL-3.0
+  (`LICENSE`), README met vermeldingen. Eerste release **v1.2.0** met `PandaOS-1.2.0.apk`. Commits gebruiken
+  `tracemodule@users.noreply.github.com` (geen privé-e-mailadres); het kenteken staat niet in de repo.
+  GitHub CLI: `C:\Program Files\GitHub CLI\gh.exe`, ingelogd als tracemodule.
+  Getest van begin tot eind: emulator 1.1.2 → Instellingen → Software → Controleren → "Nieuwe versie 1.2.0" →
+  Downloaden en installeren → 1.2.0 geïnstalleerd, PandaOS weer startscherm.
+- **Software-updates**:
   - Versie op één plek: `version.json` (webapp via vite `__PANDAOS_VERSION__`, launcher via Gradle). Nu 1.2.0.
   - Vaste ondertekening voor debug én release (`signingConfigs.pandaos`): standaard de debug-sleutel van deze laptop
     (`%USERPROFILE%\.android\debug.keystore`), anders pad/wachtwoorden in `android/local.properties`
@@ -215,10 +221,7 @@ Op de radio neemt die app de rol van de Node-server over.
    **CarPlay** testen kan alleen op de radio (of met een CarPlay-dongle), niet op de emulator: de emulator heeft
    nagebootste Bluetooth en geen USB/MFi-chip, dus een iPhone kan er geen CarPlay mee maken. Op de emulator kan
    alleen de PandaOS-kant (CarPlay-app herkennen en volledig scherm openen).
-4. **GitHub-repository online zetten** (openbaar, afgesproken): GitHub CLI installeren, inloggen (`gh auth login`),
-   repo aanmaken, pushen en de eerste release 1.2.0 maken met `tools/release.ps1`. Daarna op de emulator de update
-   via GitHub testen (emulator heeft testversie 1.1.2).
-   **Diagnose en logboek**: PandaOS houdt een logboek bij (signalen van de auto/radio zoals R, lichten, deuren,
+4. **Diagnose en logboek**: PandaOS houdt een logboek bij (signalen van de auto/radio zoals R, lichten, deuren,
    fouten van de brug, crashes) in Settings → Software → Diagnose, met een knop "Probleem melden" die de laatste
    minuten + status bewaart/exporteert. **CAN-bus/radio uitlezen**: op de radio via ADB (logcat, dumpsys,
    broadcasts van de CAN-app van de fabrikant) en een CAN-monitor in Diagnose voor bekende broadcasts.
