@@ -1,0 +1,76 @@
+@use 'variables' as *;
+
+/* --- Segmented Controls (Bijv. Off | Parking | On | Auto) --- */
+.segmented-control {
+  display: inline-flex;
+  background-color: $color-gray-200; // De lichtgrijze achtergrondbak
+  border-radius: 6px;
+  padding: 4px;
+  
+  &.full-width {
+    width: 100%;
+  }
+
+  .segment-btn {
+    flex: 1;
+    border: none;
+    background: transparent;
+    padding: 10px 16px;
+    border-radius: 4px;
+    color: $color-gray-600;
+    font-weight: 500;
+    font-size: calc(14px * var(--text-scale, 1));
+    cursor: pointer;
+    transition: all 0.2s ease;
+
+    &:hover {
+      color: $color-black;
+    }
+
+    // De actieve status (Witte knop of Blauwe knop)
+    &.active {
+      background-color: $color-white;
+      color: $color-black;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    &.active-blue {
+      background-color: $color-blue-active;
+      color: $color-white;
+    }
+  }
+}
+
+/* --- Toggles (Schakelaars) --- */
+.tsl-toggle {
+  appearance: none;
+  width: 44px;
+  height: 24px;
+  background-color: $color-gray-300;
+  border-radius: 12px;
+  position: relative;
+  cursor: pointer;
+  outline: none;
+  transition: background-color 0.3s;
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 20px;
+    height: 20px;
+    background-color: $color-white;
+    border-radius: 50%;
+    transition: transform 0.3s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  }
+
+  &:checked {
+    background-color: $color-blue-active;
+    
+    &::after {
+      transform: translateX(20px);
+    }
+  }
+}

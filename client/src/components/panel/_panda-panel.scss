@@ -1,0 +1,124 @@
+// PandaOS-paneel (veeg omlaag), zie PandaPanel.tsx. Kleuren uit de Tesla UI Kit-variabelen (_tesla-ui.scss).
+
+// Onzichtbare strook bovenaan om het paneel open te vegen
+.panda-panel-strip {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 22px;
+  z-index: 4000;
+  touch-action: none;
+}
+
+.panda-panel-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  background: rgba(0, 0, 0, 0.35);
+  animation: panda-panel-fade 0.2s ease-out;
+}
+
+.panda-panel {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(760px, 94vw);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px 20px 10px;
+  box-sizing: border-box;
+  border-radius: 0 0 16px 16px;
+  background-color: var(--tsl-bg);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+  animation: panda-panel-in 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  touch-action: none;
+
+  .panel-tiles {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+  }
+
+  .panel-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    min-width: 0;
+    padding: 12px;
+    border: none;
+    border-radius: 10px;
+    background-color: var(--tsl-btn-secondary);
+    color: var(--tsl-btn-secondary-text);
+    text-align: left;
+    cursor: pointer;
+
+    &.is-on { background-color: var(--tsl-blue); color: var(--tsl-white); .tile-sub { color: rgba(255, 255, 255, 0.8); } }
+
+    .tile-title { font-size: calc(14px * var(--text-scale, 1)); font-weight: 600; margin-top: 4px; }
+    .tile-sub {
+      max-width: 100%;
+      font-size: calc(12px * var(--text-scale, 1));
+      color: var(--tsl-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  }
+
+  .panel-sliders {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    .tsl-slider { width: 100%; max-width: none; } // volle breedte van het paneel
+  }
+
+  .panel-notifications {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    overflow-y: auto;
+    touch-action: pan-y;
+  }
+
+  .panel-notification {
+    cursor: pointer;
+    img { width: 32px; height: 32px; border-radius: 8px; flex-shrink: 0; }
+  }
+
+  .panel-dismiss {
+    display: flex;
+    padding: 4px;
+    border: none;
+    background: none;
+    color: var(--tsl-muted);
+    cursor: pointer;
+  }
+
+  // Greep onderaan: omhoog vegen sluit
+  .panel-handle {
+    align-self: center;
+    width: 48px;
+    height: 5px;
+    border-radius: 3px;
+    background-color: var(--tsl-muted);
+    opacity: 0.5;
+  }
+}
+
+@keyframes panda-panel-in {
+  from { transform: translate(-50%, -100%); }
+  to { transform: translate(-50%, 0); }
+}
+
+@keyframes panda-panel-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

@@ -1,0 +1,37 @@
+// Systeemmelding (airbag, gordel, banden, ...) als pop-up bovenaan in het midden. Kleuren uit _tesla-ui.scss.
+.tsl-notification {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2500; // onder een inkomende oproep (3000), boven alle apps
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 300px;
+  max-width: 480px;
+  padding: 12px 20px 12px 16px;
+  box-sizing: border-box;
+  border-radius: 4px;
+  border-left: 4px solid #ff9f05; // waarschuwingsgeel
+  background-color: var(--tsl-bg);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+  animation: tsl-notification-in 0.25s ease-out;
+
+  &.is-alert { border-left-color: var(--tsl-red); }
+
+  svg { flex-shrink: 0; }
+
+  .tsl-notification-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+}
+
+@keyframes tsl-notification-in {
+  from { opacity: 0; transform: translate(-50%, -12px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}

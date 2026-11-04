@@ -1,0 +1,320 @@
+@use '../../assets/scss/variables' as *;
+
+// Indeling uit de Figma Tesla Model 3 UI Kit, geschaald naar de rest van PandaOS (Settings, onderste balk).
+// Figma: navigatieveld 410 × 80, afslag 464 × 139, kompas 80 × 80. Hier ca. 0,75×: 320 × 56, 360 × 100, 56 × 56.
+$card-light: #f6f6f6;
+$card-dark: #3d3d3d;
+$text-light: #393c41;
+$text-dark: #ffffff;
+$muted: #8e8e8e;
+$card-shadow: 0 2px 6px rgba(0, 0, 0, 0.22);
+$top-offset: 64px; // onder de statusbalk
+
+.tsl-map-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  font-family: system-ui, -apple-system, sans-serif;
+
+  /* De daadwerkelijke kaart achtergrond */
+  .map-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+  }
+
+  // --- Linkerkolom: navigatieveld, zoekresultaten, afslagen ---
+  .nav-left-column {
+    position: absolute;
+    top: $top-offset;
+    left: 16px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 360px;
+  }
+
+  /* --- Navigatieveld (Figma "Navigation Field") --- */
+  .tsl-nav-search {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 320px;
+    height: 56px;
+    padding: 0 12px 0 16px;
+    box-sizing: border-box;
+    background-color: $card-light;
+    border-radius: 4px;
+    box-shadow: $card-shadow;
+    color: $muted;
+
+    input {
+      flex: 1;
+      min-width: 0;
+      border: none;
+      outline: none;
+      background: transparent;
+      font-size: calc(18px * var(--text-scale, 1));
+      font-weight: 500;
+      color: $text-light;
+      &::placeholder { color: $muted; }
+    }
+
+    .clear-btn {
+      display: flex;
+      background: none;
+      border: none;
+      padding: 4px;
+      color: $muted;
+      cursor: pointer;
+    }
+  }
+
+  /* --- Zoekresultaten onder het veld --- */
+  .tsl-nav-results {
+    width: 320px;
+    background-color: $card-light;
+    border-radius: 4px;
+    box-shadow: $card-shadow;
+    overflow: hidden;
+
+    .result-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      width: 100%;
+      min-height: 56px;
+      padding: 8px 16px;
+      box-sizing: border-box;
+      background: none;
+      border: none;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+      text-align: left;
+      color: $muted;
+      cursor: pointer;
+
+      &:last-child { border-bottom: none; }
+      &:active { background-color: rgba(0, 0, 0, 0.05); }
+    }
+
+    .result-text {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .result-title {
+      font-size: calc(15px * var(--text-scale, 1));
+      font-weight: 600;
+      color: $text-light;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .result-sub {
+      font-size: calc(12px * var(--text-scale, 1));
+      color: $muted;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  }
+
+  /* --- Afslag primair (Figma "Street Directions - Primary") --- */
+  .tsl-direction-primary {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    width: 360px;
+    height: 100px;
+    padding: 0 24px;
+    box-sizing: border-box;
+    background-color: $card-light;
+    box-shadow: $card-shadow;
+    color: $text-light;
+
+    .direction-info {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .distance {
+      font-size: calc(32px * var(--text-scale, 1));
+      font-weight: 500;
+      line-height: 1.1;
+    }
+    .street-name {
+      font-size: calc(16px * var(--text-scale, 1));
+      font-weight: 600;
+      color: $muted;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  }
+
+  /* --- Afslagen daarna (Figma "Street Directions - Secondary") --- */
+  .tsl-direction-secondary {
+    width: 360px;
+    background-color: $card-light;
+    box-shadow: $card-shadow;
+
+    .secondary-row {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      height: 48px;
+      padding: 0 24px;
+      color: $text-light;
+      border-top: 1px solid rgba(0, 0, 0, 0.08);
+      &:first-child { border-top: none; }
+    }
+    .street-name {
+      flex: 1;
+      min-width: 0;
+      font-size: calc(18px * var(--text-scale, 1));
+      font-weight: 600;
+      color: $muted;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .distance {
+      font-size: calc(18px * var(--text-scale, 1));
+      font-weight: 600;
+      color: $muted;
+    }
+  }
+
+  /* --- Bestemmingskaart (Figma "Destination Summary", 464 × 170) --- */
+  .tsl-destination-summary {
+    position: absolute;
+    left: 16px;
+    bottom: 16px;
+    z-index: 1000;
+    width: 360px;
+    background-color: $card-light;
+    border-radius: 4px;
+    box-shadow: $card-shadow;
+    color: $text-light;
+
+    .summary-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 14px 18px;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    }
+    .summary-main,
+    .summary-stats {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 0;
+    }
+    .summary-stats { align-items: flex-end; flex-shrink: 0; }
+    .arrival { font-size: calc(17px * var(--text-scale, 1)); font-weight: 600; }
+    .destination,
+    .summary-stats span {
+      font-size: calc(16px * var(--text-scale, 1));
+      color: $muted;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .battery { display: flex; align-items: center; gap: 6px; }
+
+    .summary-actions {
+      display: flex;
+      align-items: center;
+      height: 52px;
+
+      button {
+        flex: 1;
+        height: 100%;
+        background: none;
+        border: none;
+        font-size: calc(15px * var(--text-scale, 1));
+        font-weight: 600;
+        color: $text-light;
+        cursor: pointer;
+        &.primary { color: #3e6ae1; }
+        &.more { flex: 0 0 72px; display: flex; align-items: center; justify-content: center; }
+      }
+      .divider {
+        width: 1px;
+        height: 28px;
+        background-color: rgba(0, 0, 0, 0.12);
+      }
+    }
+  }
+
+  /* --- Rechterknoppen (Figma "RightNavIcons") --- */
+  .map-controls-right {
+    position: absolute;
+    top: $top-offset;
+    right: 16px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+
+    .map-btn-group {
+      display: flex;
+      flex-direction: column;
+      background-color: $card-light;
+      border-radius: 4px;
+      box-shadow: $card-shadow;
+      overflow: hidden;
+    }
+
+    .map-btn {
+      width: 56px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      border: none;
+      color: #5c5e62;
+      cursor: pointer;
+
+      &:active { background-color: rgba(0, 0, 0, 0.06); }
+
+      // Kompas staat los in een eigen kaart van 80 × 80
+      &.compass {
+        height: 56px;
+        background-color: $card-light;
+        border-radius: 4px;
+        box-shadow: $card-shadow;
+      }
+    }
+  }
+
+  // Bronvermelding PDOK onder de knoppen houden
+  .leaflet-control-attribution { font-size: calc(11px * var(--text-scale, 1)); }
+
+  /* --- Donkere modus: donkere kaarten en een gedimde, omgekeerde kaart --- */
+  &.dark-mode {
+    .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.85) contrast(0.9); }
+
+    .tsl-nav-search,
+    .tsl-nav-results,
+    .tsl-direction-primary,
+    .tsl-direction-secondary,
+    .tsl-destination-summary,
+    .map-controls-right .map-btn-group,
+    .map-controls-right .map-btn.compass {
+      background-color: $card-dark;
+      color: $text-dark;
+    }
+    .tsl-nav-search input { color: $text-dark; }
+    .tsl-nav-results .result-title,
+    .tsl-destination-summary .summary-actions button { color: $text-dark; }
+    .map-controls-right .map-btn { color: #e0e0e0; }
+    .tsl-nav-results .result-row,
+    .tsl-direction-secondary .secondary-row,
+    .tsl-destination-summary .summary-top { border-color: rgba(255, 255, 255, 0.1); }
+    .tsl-destination-summary .summary-actions .divider { background-color: rgba(255, 255, 255, 0.15); }
+  }
+}

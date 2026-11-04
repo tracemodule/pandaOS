@@ -1,0 +1,38 @@
+// src/App.scss
+
+// 1. Base Variables & Typography
+@use './assets/scss/variables' as *;
+@use './assets/scss/typography';
+
+// 2. Global UI Elements
+@use './assets/scss/buttons';
+@use './assets/scss/tabs';
+@use './assets/scss/tesla-ui';
+@use './assets/scss/sidebar';
+
+// 3. Component Specific Styling
+// Make sure these paths match your folder structure exactly
+@use './components/settings/control-bar/navtree'; 
+@use './components/settings/keyboard';
+@use './components/screen/splash-screen/splash-screen';
+
+// (Add the other component imports here later when you are ready, 
+// like the music bar or map, if you have their SCSS files ready)
+
+// 4. Any global resets
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  // Geen blauwe tikmarkering van de Android-WebView op de radio (elke tik gaf een blauwe flits)
+  -webkit-tap-highlight-color: transparent;
+}
+
+// Geen blauwe focusrand na een tik op knoppen, pictogrammen en invoervelden (touchscreen; geen toetsenbordbediening)
+button, a, input, [role="button"], [tabindex] {
+  &:focus, &:focus-visible { outline: none; }
+}
+
+body {
+  overflow: hidden; // Prevents scrolling on the main car display
+}

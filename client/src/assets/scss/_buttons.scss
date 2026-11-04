@@ -1,0 +1,50 @@
+@use 'variables' as *;
+
+.tsl-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 24px;
+  border-radius: 6px;
+  border: none;
+  font-size: calc(16px * var(--text-scale, 1));
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  
+  // Iconen in knoppen ruimte geven
+  svg {
+    margin-right: 8px;
+    margin-left: -4px;
+  }
+
+  /* 1. Primaire Blauwe Knop */
+  &.primary {
+    background-color: $color-blue-active;
+    color: $color-white;
+
+    &:hover { background-color: $color-blue-mid; }
+    &:active { background-color: darken($color-blue-active, 10%); }
+  }
+
+  /* 2. Donkergrijze Knop */
+  &.secondary {
+    background-color: $color-gray-800;
+    color: $color-white;
+
+    &:hover { background-color: lighten($color-gray-800, 10%); }
+  }
+
+  /* 3. Lichtgrijze Knop (Inactive/Menu) */
+  &.tertiary {
+    background-color: $color-gray-200;
+    color: $color-black;
+
+    &:hover { background-color: $color-gray-300; }
+  }
+
+  /* 4. Brede knoppen (Wide Buttons) */
+  &.wide {
+    width: 100%;
+  }
+}

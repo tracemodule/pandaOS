@@ -1,0 +1,25 @@
+# Afhankelijkheden en builds
+node_modules/
+client/dist/
+server/build/
+
+# Android (Gradle, builds, lokale paden en sleutels)
+android/.gradle/
+android/.kotlin/
+android/build/
+android/app/build/
+android/local.properties
+*.keystore
+*.jks
+
+# Gereedschap: uitvoer van scripts
+tools/release/
+tools/radio-diagnose-*/
+
+# Editors en systeem
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+*.log

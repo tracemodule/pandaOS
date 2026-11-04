@@ -1,0 +1,163 @@
+@use '../../assets/scss/variables' as *;
+
+.tsl-control-bar {
+  height: 64px; // compacter (was 88px); het toetsenbord rekent hierop (_keyboard.scss)
+  background-color: #000000;
+  color: $color-white;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 32px;
+  width: 100%;
+
+  .control-group {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+
+    .icon-btn {
+      background: transparent;
+      border: none;
+      color: $color-gray-300;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+
+      &:hover { color: $color-white; }
+      svg { width: 24px; height: 24px; }
+    }
+
+    /* Temperatuur & Volume bediening */
+    .stepper {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+
+      span { font-size: calc(24px * var(--text-scale, 1)); font-weight: 500; }
+      .arrow { color: $color-gray-500; cursor: pointer; }
+      .arrow:hover { color: $color-white; }
+    }
+
+    /* Volume: relatieve wrapper rond de speaker, zodat de popup er exact boven gecentreerd staat */
+    .volume-stepper .volume-anchor {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .volume-btn {
+      background: transparent;
+      border: none;
+      padding: 0;
+      color: #A2A3A5;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+
+      &:hover,
+      &.active { color: $color-white; }
+    }
+  }
+
+  /* Verticale volume-popup (Tesla-stijl), net boven de bar en gecentreerd op het speaker-icoon */
+  .tsl-volume-popup {
+    position: absolute;
+    /* 32px = afstand van speaker tot bovenrand bar ((88 - 24) / 2), plus 12px ruimte */
+    bottom: calc(100% + 44px);
+    left: 50%;
+    transform: translateX(-50%);
+    width: 64px;
+    height: 220px;
+    padding: 14px 0 16px;
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    z-index: 1000;
+    touch-action: none;
+    animation: tsl-volume-popup-in 0.15s ease-out;
+
+    &.is-light {
+      background: #f0f0f0;
+      color: #171a20;
+      .volume-popup-track { background: #d0d1d2; }
+    }
+
+    &.is-dark {
+      background: #414141;
+      color: #ffffff;
+      .volume-popup-track { background: #757575; }
+    }
+
+    .volume-popup-value {
+      font-size: calc(18px * var(--text-scale, 1));
+      font-weight: 500;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .volume-popup-track {
+      position: relative;
+      flex: 1;
+      width: 24px;
+      border-radius: 6px;
+      overflow: hidden;
+      cursor: pointer;
+      touch-action: none;
+    }
+
+    .volume-popup-fill {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: #005aff;
+      pointer-events: none;
+    }
+  }
+
+  /* Het middengedeelte (App dock) */
+  .app-dock {
+    display: flex;
+    align-items: center; /* DIT forceert alles op dezelfde hoogte */
+    justify-content: center;
+    gap: 18px;
+
+    .dock-app {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px; /* Iets groter klikgebied */
+      height: 40px;
+      cursor: pointer;
+      transition: transform 0.2s;
+      
+      /* Forceer SVG (Lucide) en IMG (je eigen .png's) naar hetzelfde formaat */
+      svg {
+        width: 24px;
+        height: 24px;
+        display: block;
+      }
+
+      img {
+        width: 30px; /* Misschien een fractie groter omdat plaatjes vaak een witrandje hebben */
+        height: 30px;
+        object-fit: contain; /* Voorkomt dat je plaatje wordt uitgerekt */
+        display: block;
+      }
+      
+      &:hover { transform: scale(1.1); }
+      &.active { border-bottom: 2px solid $color-blue-active; padding-bottom: 4px; }
+    }
+  }
+}
+
+@keyframes tsl-volume-popup-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}

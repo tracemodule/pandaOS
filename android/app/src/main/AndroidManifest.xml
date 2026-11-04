@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- GPS: ritcomputer, snelheidswaarschuwing, P/D en navigatie -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Software-updates: een nieuwe PandaOS-versie zelf installeren (UpdateInstaller) -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- CAN-monitor: het logboek van de radio lezen (eenmalig geven via ADB: pm grant ... READ_LOGS) -->
+    <uses-permission android:name="android.permission.READ_LOGS" tools:ignore="ProtectedPermissions" />
+    <!-- Bluetooth en wifi tonen in Settings (gekoppelde apparaten, netwerknaam) -->
+    <!-- targetSdk 28: de oude Bluetooth-toestemmingen (zoeken, koppelen, aan/uit) en wifi zelf verbinden -->
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Achteruitrijcamera in PandaOS (camerabeeld in de WebView, getUserMedia) -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <!-- Schermhelderheid voor het hele apparaat (Settings > Display); de gebruiker geeft dit apart toe -->
+    <uses-permission android:name="android.permission.WRITE_SETTINGS" tools:ignore="ProtectedPermissions" />
+
+    <!-- Nodig om vanaf Android 11 de geïnstalleerde (startbare) apps te zien: getInstalledApps() -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
+
+    <application
+        android:label="@string/app_name"
+        android:icon="@drawable/ic_launcher"
+        android:roundIcon="@drawable/ic_launcher"
+        android:theme="@style/Theme.PandaOS"
+        android:hardwareAccelerated="true"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:supportsRtl="false">
+
+        <!-- PandaOS als startscherm (HOME): de radio opent PandaOS bij opstarten en bij de HOME-knop -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:stateNotNeeded="true"
+            android:screenOrientation="sensorLandscape"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Uitslag van een software-update (UpdateInstaller) -->
+        <receiver android:name=".UpdateInstaller$InstallResultReceiver" android:exported="false" />
+        <!-- Na een update PandaOS meteen weer openen -->
+        <receiver android:name=".UpdateInstaller$PackageReplacedReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- PandaOS-toetsenbord als Android-toetsenbord (ook in Chrome, YouTube, Maps ...) -->
+        <service
+            android:name=".PandaKeyboardService"
+            android:exported="true"
+            android:label="PandaOS-toetsenbord"
+            android:permission="android.permission.BIND_INPUT_METHOD">
+            <intent-filter>
+                <action android:name="android.view.InputMethod" />
+            </intent-filter>
+            <meta-data android:name="android.view.im" android:resource="@xml/method" />
+        </service>
+
+        <!-- Apparaatbeheer: Android-paneel uitzetten als PandaOS apparaateigenaar is (PandaAdminReceiver) -->
+        <receiver
+            android:name=".PandaAdminReceiver"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_DEVICE_ADMIN">
+            <meta-data android:name="android.app.device_admin" android:resource="@xml/device_admin" />
+            <intent-filter>
+                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Meldingen-luisteraar: wat er speelt in andere apps (MediaWatcher) en de meldingen in het PandaOS-paneel -->
+        <service
+            android:name=".MediaListenerService"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+    </application>
+</manifest>

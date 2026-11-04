@@ -1,0 +1,61 @@
+@use '../../assets/scss/variables' as *;
+
+.tsl-quick-actions {
+  background-color: $color-gray-800; // Vaak standaard donker, zelfs in light mode
+  border-radius: 12px;
+  padding: 24px;
+  width: 100%;
+  max-width: 600px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+
+  /* Grid voor de iconen */
+  .actions-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    gap: 16px;
+
+    .action-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      color: $color-gray-300;
+
+      .icon-wrapper {
+        width: 48px;
+        height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 12px;
+        transition: transform 0.2s, background-color 0.2s;
+
+        svg, img { width: 32px; height: 32px; }
+      }
+
+      span {
+        font-size: calc(12px * var(--text-scale, 1));
+        font-weight: 500;
+        text-align: center;
+      }
+
+      &:hover .icon-wrapper {
+        background-color: rgba(255,255,255,0.1);
+        transform: scale(1.05);
+      }
+    }
+  }
+
+  /* De subtiele scheidingslijn */
+  .divider {
+    height: 1px;
+    background-color: rgba(255,255,255,0.1);
+    width: 100%;
+  }
+}

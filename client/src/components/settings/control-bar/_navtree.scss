@@ -1,0 +1,87 @@
+@use '../../../assets/scss/variables' as *;
+
+// Geen eigen achtergrond: de lijst ligt op dezelfde achtergrond als de rest van Settings (zoals in de Tesla-UI).
+.tsl-navtree {
+  width: 100%;
+  background-color: transparent;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 0; // Padding verticaal, horizontaal via container
+  user-select: none; // Voorkomt dat tekst geselecteerd kan worden
+  height: 100%;
+  overflow: hidden;
+
+  // De container die het scrollen mogelijk maakt
+  .nav-scroll-container {
+    overflow-y: auto;
+    height: 100%;
+    padding: 0 8px;
+
+    &::-webkit-scrollbar {
+      width: 0px; // Verbergt scrollbar voor de cleane Tesla-look
+    }
+  }
+
+  ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  li {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 16px;
+    font-size: calc(15px * var(--text-scale, 1));
+    font-weight: 500;
+    color: $color-gray-800;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+
+    svg {
+      width: 20px;
+      height: 20px;
+      color: $color-gray-600;
+    }
+
+    // Compact scherm (radio 1024×600): smallere regels zodat de menulijst in 190 px past
+    @media (max-width: 1280px) {
+      gap: 10px;
+      padding: 9px 10px;
+      font-size: calc(14px * var(--text-scale, 1));
+      svg { width: 18px; height: 18px; flex-shrink: 0; }
+    }
+
+    &:hover {
+      background-color: $color-gray-200;
+    }
+
+    &.active {
+      background-color: $color-gray-300; 
+      color: $color-black;
+      svg { color: $color-black; }
+    }
+  }
+
+  /* --- Dark Mode --- */
+  &.dark-mode {
+    li {
+      color: $color-white;
+      svg { color: $color-gray-300; }
+
+      // Figma Menu Screens donker: achtergrond #414141, actief vak #757575
+      &:hover { background-color: #4d4d4d; }
+
+      &.active {
+        background-color: #757575;
+        color: $color-white;
+        svg { color: $color-white; }
+      }
+    }
+  }
+}

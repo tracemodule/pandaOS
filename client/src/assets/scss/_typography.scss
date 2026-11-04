@@ -1,0 +1,47 @@
+@use 'variables' as *;
+
+body {
+  font-family: $font-family-base;
+  color: $color-black;
+  -webkit-font-smoothing: antialiased;
+}
+
+// H1 - Heading
+h1 {
+  font-size: 46px;
+  line-height: 56px;
+  letter-spacing: 0.01em; // 1%
+  font-weight: 500;
+}
+
+// H2 - Heading
+h2 {
+  font-size: calc(36px * var(--text-scale, 1));
+  line-height: 46px;
+  letter-spacing: 0;
+  font-weight: 500;
+}
+
+// H3 - Heading
+h3 {
+  font-size: calc(28px * var(--text-scale, 1));
+  line-height: 40px;
+  letter-spacing: 0.01em;
+  font-weight: 500;
+}
+
+// H4 - Headings (Tesla heeft meerdere varianten, we pakken de meest gebruikte)
+h4 {
+  font-size: calc(24px * var(--text-scale, 1));
+  line-height: 29px;
+  letter-spacing: 0.01em;
+  font-weight: 500;
+}
+
+// Standaard tekst / Labels
+.text-label {
+  font-size: calc(16px * var(--text-scale, 1));
+  line-height: 19.2px;
+  letter-spacing: 0.01em;
+  color: $color-gray-600;
+}

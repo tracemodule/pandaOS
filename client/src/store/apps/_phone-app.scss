@@ -1,0 +1,310 @@
+// Phone-app en oproepschermen. Kleuren komen uit de Tesla UI Kit-variabelen (_tesla-ui.scss).
+
+.tsl-ui {
+  // Extra knopvarianten voor bellen: rood ophangen/weigeren, groen opnemen (Color Guidance #ED4E3B / #25CB55)
+  .tsl-btn.is-danger { background-color: var(--tsl-red); color: var(--tsl-white); }
+  .tsl-btn.is-success { background-color: var(--tsl-green); color: var(--tsl-white); }
+  .tsl-btn.is-round { width: 56px; min-width: 0; height: 56px; padding: 0; border-radius: 50%; }
+
+  .call-avatar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background-color: var(--tsl-btn-secondary);
+    color: var(--tsl-btn-secondary-text);
+    font-size: calc(16px * var(--text-scale, 1));
+    font-weight: 600;
+
+    &.is-large { width: 96px; height: 96px; font-size: calc(34px * var(--text-scale, 1)); }
+  }
+
+  .is-missed { color: var(--tsl-red) !important; }
+}
+
+.phone-app {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 24px 40px;
+  box-sizing: border-box;
+  background-color: var(--tsl-bg);
+  overflow: hidden; // de lijst links scrolt zelf; het toetsenblok rechts blijft staan
+
+  // Twee vakken naast elkaar (zoals de Android-telefoonapp): links de lijst, rechts het toetsenblok
+  .phone-columns {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 300px;
+    gap: 20px;
+  }
+
+  .phone-panel {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    border-radius: 8px;
+    background-color: var(--tsl-tile-bg, var(--tsl-btn-secondary));
+    padding: 14px;
+    box-sizing: border-box;
+  }
+
+  .phone-list-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .phone-row { cursor: pointer; }
+
+  // Donker: tegels hebben geen eigen kleur (transparant), dus hier een iets lichtere ondergrond
+  &.dark-mode .phone-panel { background-color: rgba(255, 255, 255, 0.04); }
+
+  .phone-dial-panel {
+    align-items: center;
+    justify-content: center;
+  }
+
+  .phone-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .phone-device {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--tsl-text);
+
+    .phone-device-text { display: flex; flex-direction: column; gap: 2px; }
+  }
+
+  .phone-close {
+    display: flex;
+    background: none;
+    border: none;
+    color: var(--tsl-text);
+    cursor: pointer;
+  }
+
+  .phone-content {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .phone-empty { margin: 24px 0; }
+
+  // Zoekbalk (Figma "Search Bar")
+  .phone-search {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    max-width: 640px;
+    height: 44px;
+    padding: 0 14px;
+    box-sizing: border-box;
+    border-radius: 4px;
+    background-color: var(--tsl-btn-secondary);
+    color: var(--tsl-muted);
+
+    input {
+      flex: 1;
+      border: none;
+      outline: none;
+      background: transparent;
+      font-size: calc(16px * var(--text-scale, 1));
+      color: var(--tsl-text);
+      &::placeholder { color: var(--tsl-muted); }
+    }
+  }
+}
+
+// --- Toetsenblok ---
+.phone-keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 72px);
+  gap: 14px 28px;
+  justify-content: center;
+
+  .keypad-key {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 72px;
+    height: 72px;
+    border: none;
+    border-radius: 50%;
+    background-color: var(--tsl-btn-secondary);
+    color: var(--tsl-btn-secondary-text);
+    cursor: pointer;
+
+    &:active { filter: brightness(0.9); }
+  }
+  .keypad-digit { font-size: calc(28px * var(--text-scale, 1)); font-weight: 500; line-height: 1; }
+  .keypad-letters { font-size: calc(10px * var(--text-scale, 1)); font-weight: 600; letter-spacing: 0.1em; color: var(--tsl-muted); min-height: 12px; }
+}
+
+.phone-dialer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  padding-top: 8px;
+
+  // Vaste breedte en hoogte: links een lege ruimte zo breed als de wisknop, zodat het nummer in het midden blijft
+  // en de toetsen eronder niet verschuiven tijdens het typen
+  .dialer-number {
+    display: grid;
+    grid-template-columns: 32px minmax(0, 1fr) 32px;
+    align-items: center;
+    width: 100%;
+    max-width: 260px;
+    height: 44px;
+
+    &::before { content: ''; }
+    .dialer-digits { text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    font-size: calc(34px * var(--text-scale, 1));
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    color: var(--tsl-text);
+  }
+
+  .dialer-backspace {
+    display: flex;
+    background: none;
+    border: none;
+    color: var(--tsl-muted);
+    cursor: pointer;
+  }
+
+  .dialer-call {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 72px;
+    height: 72px;
+    border: none;
+    border-radius: 50%;
+    background-color: var(--tsl-green);
+    color: #fff;
+    cursor: pointer;
+
+    &:disabled { opacity: 0.4; cursor: default; }
+  }
+}
+
+// --- Lopend gesprek ---
+.phone-active-call {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding-top: 32px;
+
+  .call-name { font-size: calc(28px * var(--text-scale, 1)); font-weight: 600; color: var(--tsl-text); margin-top: 8px; }
+
+  .phone-keypad { margin-top: 16px; }
+
+  .call-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 24px;
+
+    .tsl-btn { min-width: 130px; }
+  }
+}
+
+// --- Compact scherm (radio 1024×600): kleiner toetsenblok zodat alles zonder scrollen past ---
+@media (max-width: 1280px) {
+  .phone-app { gap: 12px; padding: 12px 20px; }
+
+  .phone-keypad {
+    grid-template-columns: repeat(3, 54px);
+    gap: 8px 22px;
+
+    .keypad-key { width: 54px; height: 54px; }
+    .keypad-digit { font-size: calc(22px * var(--text-scale, 1)); }
+    .keypad-letters { font-size: calc(8px * var(--text-scale, 1)); min-height: 10px; }
+  }
+
+  .phone-dialer {
+    gap: 10px;
+    padding-top: 0;
+
+    .dialer-number { height: 36px; font-size: calc(26px * var(--text-scale, 1)); }
+    .dialer-call { width: 54px; height: 54px; }
+  }
+
+  .phone-active-call {
+    padding-top: 8px;
+    .call-avatar.is-large { width: 72px; height: 72px; font-size: calc(26px * var(--text-scale, 1)); }
+    .call-name { font-size: calc(22px * var(--text-scale, 1)); }
+    // Rechtervak is smal: knoppen naast elkaar, alleen pictogram + korte tekst
+    .call-actions { margin-top: 12px; gap: 8px; .tsl-btn { min-width: 0; padding: 0 12px; } }
+  }
+  .phone-app .phone-columns { grid-template-columns: minmax(0, 1fr) 290px; gap: 14px; }
+  .phone-app .phone-panel { padding: 10px; }
+
+  .call-overlay { width: 440px; padding: 12px 16px; }
+}
+
+// --- Inkomende oproep: kaart bovenaan het scherm, boven alle apps ---
+.call-overlay {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 520px;
+  padding: 16px 20px;
+  box-sizing: border-box;
+  border-radius: 4px;
+  background-color: var(--tsl-bg);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+  animation: call-overlay-in 0.25s ease-out;
+
+  .call-overlay-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+}
+
+@keyframes call-overlay-in {
+  from { opacity: 0; transform: translate(-50%, -12px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+// --- Gesprek-balkje als de Phone-app dicht is ---
+.call-pill {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 18px;
+  border: none;
+  border-radius: 18px;
+  background-color: var(--tsl-green);
+  color: #fff;
+  font-size: calc(14px * var(--text-scale, 1));
+  font-weight: 600;
+  cursor: pointer;
+}

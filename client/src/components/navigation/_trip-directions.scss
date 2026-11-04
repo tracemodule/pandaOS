@@ -1,0 +1,107 @@
+@use 'variables' as *;
+
+/* --- Navigatie Zoekveld --- */
+.tsl-nav-search {
+  display: flex;
+  align-items: center;
+  background-color: $color-white;
+  border-radius: 6px;
+  padding: 12px 16px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  gap: 12px;
+
+  input {
+    border: none;
+    outline: none;
+    font-size: calc(16px * var(--text-scale, 1));
+    flex: 1;
+    color: $color-black;
+    &::placeholder { color: $color-gray-500; }
+  }
+
+  svg { color: $color-gray-500; }
+
+  &.dark-mode {
+    background-color: $color-gray-800;
+    input { background: transparent; color: $color-white; }
+  }
+}
+
+/* --- Straat Richting (De Grote Turn-by-Turn blokken) --- */
+.tsl-direction-primary {
+  display: flex;
+  align-items: center;
+  background-color: $color-white;
+  border-radius: 8px;
+  padding: 20px;
+  gap: 20px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+
+  .direction-icon {
+    svg { width: 40px; height: 40px; color: $color-black; }
+  }
+
+  .direction-info {
+    display: flex;
+    flex-direction: column;
+
+    .distance {
+      font-size: calc(36px * var(--text-scale, 1)); // Enorm font voor leesbaarheid tijdens rijden
+      font-weight: 600;
+      line-height: 1;
+      color: $color-black;
+    }
+    .street-name {
+      font-size: calc(16px * var(--text-scale, 1));
+      font-weight: 500;
+      color: $color-gray-600;
+      margin-top: 4px;
+    }
+  }
+
+  &.dark-mode {
+    background-color: $color-gray-800;
+    .direction-icon svg { color: $color-white; }
+    .direction-info .distance { color: $color-white; }
+    .direction-info .street-name { color: $color-gray-300; }
+  }
+}
+
+/* --- Bestemming Samenvatting (Onderin scherm) --- */
+.tsl-destination-summary {
+  background-color: $color-white;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 -4px 15px rgba(0,0,0,0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+
+  .eta-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    
+    .time-left { font-size: calc(24px * var(--text-scale, 1)); font-weight: 500; color: $color-black; }
+    .stats { font-size: calc(14px * var(--text-scale, 1)); color: $color-gray-600; }
+    .battery-arrival { display: flex; align-items: center; gap: 4px; font-size: calc(14px * var(--text-scale, 1)); font-weight: 500;}
+  }
+
+  .action-row {
+    display: flex;
+    gap: 8px;
+
+    button {
+      flex: 1;
+      padding: 12px;
+      background-color: $color-gray-200;
+      border: none;
+      border-radius: 6px;
+      font-weight: 500;
+      cursor: pointer;
+      
+      &:hover { background-color: $color-gray-300; }
+      &.icon-btn { flex: 0 0 48px; display: flex; align-items: center; justify-content: center; }
+    }
+  }
+}

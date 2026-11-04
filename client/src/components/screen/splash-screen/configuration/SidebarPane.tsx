@@ -1,0 +1,637 @@
+import React, { useEffect, useState, useRef, Suspense, useMemo } from 'react';
+import { Canvas, useThree, useFrame } from '@react-three/fiber';
+import { Fuel, DoorOpen } from 'lucide-react';
+import { useT } from '../../../../i18n';
+import { markCarReady } from '../../../../services/preload';
+import { useGLTF, PerspectiveCamera, Environment, ContactShadows, Center } from '@react-three/drei';
+import * as THREE from 'three';
+import MusicBar from '../../../music/MusicBar';
+import { useUIStore, type WindowTint, type CarState, type DoorId, DOOR_LABELS } from '../../../../store/uiStore';
+import { getEffectiveTheme } from '../../../../../src/settings';
+import { getVehicleModel, type VehicleModel, type TrimRegion } from './vehicleModels';
+import './_sidebar-pane.scss';
+
+// Welke onderdelen lak, velgen, ramen en losse rommel zijn, staat per model in vehicleModels.ts.
+// Voorruit en voorportierramen blijven altijd licht (wettelijk); alleen de achterste ramen krijgen tint.
+const TINT_OPACITY: Record<WindowTint, number> = { None: 0.25, Light: 0.45, Medium: 0.65, Dark: 0.82, Limo: 0.93 };
+
+const makeGlass = (opacity: number) =>
+  new THREE.MeshPhysicalMaterial({ color: '#0b0f12', metalness: 0.1, roughness: 0.05, transparent: true, opacity });
+
+// --- CAMERA DIE DE HELE AUTO IN BEELD HOUDT ---
+// In een smal paneel (bijv. Settings open, 30% breed) wordt het beeld horizontaal krapper dan verticaal.
+// Dan schuift de camera verder naar achteren, zodat de auto (halfLength van het model aan weerszijden) niet wordt afgesneden.
+const CAMERA_FOV = 35;
+const CAMERA_TARGET = new THREE.Vector3(0, 1, 0);
+const FitCamera = ({ position, halfLength }: { position: [number, number, number]; halfLength: number }) => {
+  const { width, height } = useThree((state) => state.size);
+  const aspect = width / Math.max(height, 1);
+  const tanHalfHorizontal = Math.tan(THREE.MathUtils.degToRad(CAMERA_FOV / 2)) * aspect;
+
+  const offset = new THREE.Vector3(...position).sub(CAMERA_TARGET);
+  const neededDistance = halfLength / tanHalfHorizontal;
+  const factor = Math.max(1, neededDistance / offset.length());
+  const fitted = offset.multiplyScalar(factor).add(CAMERA_TARGET);
+
+  return (
+    <PerspectiveCamera
+      makeDefault
+      position={[fitted.x, fitted.y, fitted.z]}
+      fov={CAMERA_FOV}
+      onUpdate={(self) => {
+        self.lookAt(CAMERA_TARGET); // Camera kijkt altijd netjes naar het midden van de auto
+        self.updateProjectionMatrix();
+      }}
+    />
+  );
+};
+
+// --- CAR MODEL COMPONENT ---
+const CarModel = ({ model, carRot, brakeApplied, gear, carState, vehicle }: { model: VehicleModel; carRot: [number, number, number]; brakeApplied: boolean; gear: string; carState: CarState; vehicle: any }) => {
+  const { url, scale, paintMaterial, rimParts, frontGlass: frontGlassParts, rearGlass: rearGlassParts, strayParts, lightGlass, tailLightGlass, reverseLightGlass, headlightTypes, materialColors, lights, doors, exhaust, trim } = model;
+  const { scene } = useGLTF(url) as any;
+  const [blink, setBlink] = useState(false);
+
+  // --- UITERLIJK UIT SETTINGS > VEHICLE: lak, velgen, ramentint ---
+  const frontGlass = useMemo(() => makeGlass(TINT_OPACITY.None), []);
+  const rearGlass = useMemo(() => makeGlass(TINT_OPACITY[vehicle.windowTint as WindowTint]), [vehicle.windowTint]);
+  const rimMaterial = useMemo(() => new THREE.MeshStandardMaterial({ metalness: 0.8, roughness: 0.3 }), []);
+
+  useEffect(() => {
+    rimMaterial.color.set(vehicle.rimColor);
+    scene.traverse((child: any) => {
+      if (!child.isMesh) return;
+      const parentName = (child.parent?.name || '').toLowerCase();
+      if (paintMaterial.test((child.material?.name || '').toLowerCase())) child.material.color.set(vehicle.paintColor);
+      else if (frontGlassParts.test(parentName)) child.material = frontGlass;
+      else if (rearGlassParts.test(parentName)) child.material = rearGlass;
+      else if (rimParts.test(parentName)) child.material = rimMaterial;
+    });
+  }, [scene, vehicle.paintColor, vehicle.rimColor, frontGlass, rearGlass, rimMaterial, paintMaterial, frontGlassParts, rearGlassParts, rimParts]);
+
+  // Modelfouten wegwerken: getint lampglas helder maken, bonte binnendelen een vaste neutrale kleur geven
+  const clearLightGlass = useMemo(() => new THREE.MeshPhysicalMaterial({
+    color: '#ffffff', metalness: 0, roughness: 0.05, transparent: true, opacity: 0.15
+  }), []);
+  useEffect(() => {
+    scene.traverse((child: any) => {
+      if (!child.isMesh) return;
+      const parentName = (child.parent?.name || '').toLowerCase();
+      if (lightGlass?.test(parentName)) child.material = clearLightGlass;
+      const fixedColor = materialColors?.[child.material?.name];
+      if (fixedColor) child.material.color.set(fixedColor);
+    });
+  }, [scene, lightGlass, materialColors, clearLightGlass]);
+
+  // Losse onderdelen buiten de auto verwijderen (niet alleen verbergen), anders rekken ze de bounding box van <Center> op
+  useMemo(() => {
+    const strays: any[] = [];
+    scene.traverse((child: any) => {
+      // Exacte naam: "exhaustpipe_single" mag "exhaustpipe_single_sport" niet meeslepen
+      if (strayParts.includes(child.name.toLowerCase())) strays.push(child);
+    });
+    strays.forEach((child) => child.parent?.remove(child));
+  }, [scene, strayParts]);
+
+  // Knipperritme van de richtingaanwijzers (alarmlichten: beide kanten)
+  useEffect(() => {
+    const interval = setInterval(() => setBlink((prev) => !prev), 450);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Banden en chroom een vaste look geven
+  useMemo(() => {
+    scene.traverse((child: any) => {
+      if (!child.isMesh) return;
+      const name = child.name.toLowerCase();
+      if (name.includes('tire')) {
+        child.material.color = new THREE.Color('#111');
+        child.material.roughness = 0.9;
+      } else if (name.includes('chrome')) {
+        child.material.color = new THREE.Color('#999');
+        child.material.metalness = 1;
+        child.material.roughness = 0.1;
+      }
+    });
+  }, [scene]);
+
+  // --- LAMPEN: lichtschakelaar, grootlicht, knipperlichten, remlicht, achteruitrijlicht (lights in vehicleModels.ts) ---
+  // Materialen worden in het model gedeeld: één knipperlicht-materiaal links = voor, achter en spiegel tegelijk.
+  const lightMaterials = useMemo(() => {
+    const found: Record<string, THREE.MeshStandardMaterial[]> = {};
+    if (!lights) return found;
+    scene.traverse((child: any) => {
+      if (!child.isMesh || !child.material) return;
+      const matName = (child.material.name || '').toLowerCase();
+      for (const [role, pattern] of Object.entries(lights)) {
+        if (pattern && (pattern as RegExp).test(matName)) {
+          const list = (found[role] ??= []);
+          if (!list.includes(child.material)) list.push(child.material);
+        }
+      }
+    });
+    return found;
+  }, [scene, lights]);
+
+  const blinkLeft = (carState.blinker === 'left' || carState.blinker === 'hazard') && blink;
+  const blinkRight = (carState.blinker === 'right' || carState.blinker === 'hazard') && blink;
+  const lightsOn = carState.lights !== 'off';
+  useEffect(() => {
+    // Lamp aan: gloeien in de lampkleur; uit: terug naar de oorspronkelijke kleur
+    const setLamp = (role: string, on: boolean, color: string, intensity: number) => {
+      (lightMaterials[role] ?? []).forEach((mat) => {
+        if (!mat.userData.baseColor) mat.userData.baseColor = mat.color.clone();
+        mat.emissive = new THREE.Color(on ? color : '#000000');
+        mat.emissiveIntensity = on ? intensity : 0;
+        mat.color.copy(on ? new THREE.Color(color) : mat.userData.baseColor);
+        mat.toneMapped = !on; // fel, ook in een lichte omgeving
+        mat.needsUpdate = true;
+      });
+    };
+    setLamp('lowBeam', carState.lights === 'low', '#f4f8ff', 3);
+    setLamp('highBeam', carState.highBeam, '#f4f8ff', 4);
+    // Stadslicht/dagrijlicht; knippert die kant, dan oranje
+    setLamp('parkingLeft', blinkLeft || lightsOn, blinkLeft ? '#ffa000' : '#f4f8ff', blinkLeft ? 4 : 2);
+    setLamp('parkingRight', blinkRight || lightsOn, blinkRight ? '#ffa000' : '#f4f8ff', blinkRight ? 4 : 2);
+    setLamp('signalLeft', blinkLeft, '#ffa000', 4);
+    setLamp('signalRight', blinkRight, '#ffa000', 4);
+    // Achterlichten: zwak rood met de lichten aan, fel bij remmen
+    setLamp('tail', brakeApplied || lightsOn, '#ff1010', brakeApplied ? 5 : 1.2);
+    setLamp('brake', brakeApplied, '#ff1010', 5);
+    setLamp('reverse', gear === 'R', '#ffffff', 4);
+  }, [lightMaterials, carState.lights, carState.highBeam, blinkLeft, blinkRight, lightsOn, brakeApplied, gear]);
+
+  // --- DEUREN: draaien om hun scharnier aan de voorkant (doors in vehicleModels.ts) ---
+  // Het model staat Z-omhoog met de neus naar -Y (binnen de eigen rotatie van het model). Per deur een draaipunt
+  // op de voorste buitenhoek; de deur en zijn ruit hangen daaronder. Eén keer per scene (useGLTF hergebruikt hem).
+  type DoorPivot = { pivot: THREE.Group; dir: number };
+  const doorPivots = useMemo(() => {
+    if (!doors) return {} as Partial<Record<DoorId, DoorPivot>>;
+    if (scene.userData.doorPivots) return scene.userData.doorPivots as Partial<Record<DoorId, DoorPivot>>;
+    const pivots: Partial<Record<DoorId, DoorPivot>> = {};
+    for (const [door, partNames] of Object.entries(doors) as [DoorId, string[]][]) {
+      const parts = partNames.map((n) => scene.getObjectByName(n)).filter(Boolean) as THREE.Object3D[];
+      const parent = parts[0]?.parent;
+      if (!parent) continue;
+      const box = new THREE.Box3();
+      parts.forEach((part) => part.traverse((o: any) => {
+        if (!o.isMesh) return;
+        o.geometry.computeBoundingBox();
+        box.union(o.geometry.boundingBox);
+      }));
+      const centerX = (box.min.x + box.max.x) / 2;
+      // Scharnier op de voorrand van het deurpaneel: alleen vertices vlak bij de voorrand tellen, anders zou de
+      // uitstekende spiegel het draaipunt naar buiten trekken en staat de open deur los van de auto
+      // (onderste helft van de deur: daar zit geen spiegel)
+      let edgeX = centerX;
+      const lowerHalf = (box.min.z + box.max.z) / 2;
+      parts.forEach((part) => part.traverse((o: any) => {
+        if (!o.isMesh || o.name.includes('mirror')) return;
+        const pos = o.geometry.attributes.position;
+        for (let i = 0; i < pos.count; i++) {
+          if (pos.getY(i) > box.min.y + 0.08 || pos.getZ(i) > lowerHalf) continue;
+          const x = pos.getX(i);
+          edgeX = centerX > 0 ? Math.max(edgeX, x) : Math.min(edgeX, x);
+        }
+      }));
+      const hinge = new THREE.Vector3(edgeX, box.min.y, (box.min.z + box.max.z) / 2);
+      const pivot = new THREE.Group();
+      pivot.name = `pivot_${door}`;
+      pivot.position.copy(hinge);
+      parent.add(pivot);
+      parts.forEach((part) => { part.position.sub(hinge); pivot.add(part); });
+      // Linkerkant (+X) draait de andere kant op dan rechts, zodat de deur altijd naar buiten opent
+      pivots[door] = { pivot, dir: centerX > 0 ? -1 : 1 };
+    }
+    scene.userData.doorPivots = pivots;
+    return pivots;
+  }, [scene, doors]);
+
+  // Zachtjes open en dicht. Het eerste getekende beeld betekent ook: de auto is klaar (opstartscherm mag weg).
+  const firstFrame = useRef(true);
+  useFrame((_, delta) => {
+    if (firstFrame.current) { firstFrame.current = false; markCarReady(); }
+    const openAngle = THREE.MathUtils.degToRad(62);
+    for (const [door, entry] of Object.entries(doorPivots) as [DoorId, DoorPivot][]) {
+      const target = carState.doors[door] ? entry.dir * openAngle : 0;
+      const current = entry.pivot.rotation.z;
+      if (Math.abs(target - current) > 0.001) entry.pivot.rotation.z = THREE.MathUtils.damp(current, target, 8, delta);
+    }
+  });
+
+  // --- UITLAAT: varianten gemaakt van één uitlaatpunt (exhaust in vehicleModels.ts), gespiegeld of verschoven ---
+  type ExhaustRig = { root: THREE.Group; template: THREE.Group; x: number };
+  const exhaustRig = useMemo(() => {
+    if (!exhaust) return null;
+    if (scene.userData.exhaustRig) return scene.userData.exhaustRig as ExhaustRig;
+    const parts = exhaust.parts.map((n) => scene.getObjectByName(n)).filter(Boolean) as THREE.Object3D[];
+    const parent = parts[0]?.parent;
+    if (!parent) return null;
+    const template = new THREE.Group();
+    parts.forEach((p) => template.add(p)); // uit de scene halen; de varianten zijn kopieën
+    const box = new THREE.Box3();
+    template.traverse((o: any) => { if (o.isMesh) { o.geometry.computeBoundingBox(); box.union(o.geometry.boundingBox); } });
+    const root = new THREE.Group();
+    root.name = 'exhaust_variants';
+    parent.add(root);
+    const rig: ExhaustRig = { root, template, x: (box.min.x + box.max.x) / 2 };
+    scene.userData.exhaustRig = rig;
+    return rig;
+  }, [scene, exhaust]);
+
+  useEffect(() => {
+    if (!exhaustRig || !exhaust) return;
+    const { root, template, x } = exhaustRig;
+    root.clear();
+    const gap = exhaust.spacing; // afstand tussen twee punten aan dezelfde kant
+    // Elke plek: kant (1 = zoals het origineel, -1 = gespiegeld naar de andere kant) en verschuiving naar het midden
+    const side = (s: number, n: number) => Array.from({ length: n }, (_, i) => ({ s, inward: i * gap }));
+    const layout = vehicle.exhaust ?? 'left1';
+    const spots = layout === 'left1' ? side(1, 1) : layout === 'left2' ? side(1, 2)
+      : layout === 'right1' ? side(-1, 1) : layout === 'right2' ? side(-1, 2)
+      : layout === 'both1' ? [...side(1, 1), ...side(-1, 1)] : layout === 'both2' ? [...side(1, 2), ...side(-1, 2)]
+      : [{ s: 1, inward: Math.abs(x) - gap / 2 }, { s: -1, inward: Math.abs(x) - gap / 2 }]; // center2
+    spots.forEach(({ s, inward }) => {
+      const copy = template.clone(true);
+      copy.position.x = -Math.sign(x) * inward; // naar het midden schuiven
+      const holder = new THREE.Group();
+      holder.scale.x = s; // -1 = spiegelen over x = 0 (andere kant van de auto)
+      holder.add(copy);
+      root.add(holder);
+    });
+  }, [exhaustRig, exhaust, vehicle.exhaust]);
+
+  // --- LAMPGLAS: koplampglas licht op met de lichten aan (sterker bij grootlicht), achterlichtglas rood (fel bij remmen) ---
+  // De lampjes zelf zijn in dit model klein; zo is van een afstand goed te zien dat de lichten aan zijn.
+  const tailGlass = useMemo(() => new THREE.MeshPhysicalMaterial({
+    color: '#3a0000', metalness: 0, roughness: 0.1, transparent: true, opacity: 0.55,
+  }), []);
+  const reverseGlass = useMemo(() => new THREE.MeshPhysicalMaterial({
+    color: '#3a0000', metalness: 0, roughness: 0.1, transparent: true, opacity: 0.55,
+  }), []);
+  useEffect(() => {
+    scene.traverse((child: any) => {
+      if (!child.isMesh) return;
+      const parentName = (child.parent?.name || '').toLowerCase();
+      if (reverseLightGlass?.test(parentName)) child.material = reverseGlass;
+      else if (tailLightGlass?.test(parentName)) child.material = tailGlass;
+    });
+  }, [scene, tailLightGlass, reverseLightGlass, tailGlass, reverseGlass]);
+  useEffect(() => {
+    const front = carState.highBeam ? 1.4 : carState.lights === 'low' ? 0.9 : carState.lights === 'parking' ? 0.35 : 0;
+    clearLightGlass.emissive = new THREE.Color(front > 0 ? '#eaf2ff' : '#000000');
+    clearLightGlass.emissiveIntensity = front;
+    clearLightGlass.opacity = front > 0 ? 0.55 : 0.15;
+    const rear = brakeApplied ? 2.2 : lightsOn ? 0.8 : 0;
+    tailGlass.emissive = new THREE.Color(rear > 0 ? '#ff0a0a' : '#000000');
+    tailGlass.emissiveIntensity = rear;
+    // Achteruitrijlicht: wit bij R; anders gloeit dit deel mee met de achterlichten
+    const reversing = gear === 'R';
+    reverseGlass.color.set(reversing ? '#ffffff' : '#3a0000');
+    reverseGlass.emissive = new THREE.Color(reversing ? '#ffffff' : rear > 0 ? '#ff0a0a' : '#000000');
+    reverseGlass.emissiveIntensity = reversing ? 1.6 : rear;
+  }, [clearLightGlass, tailGlass, reverseGlass, carState.lights, carState.highBeam, brakeApplied, lightsOn, gear]);
+
+  // --- KOPLAMPUITVOERING: halogeen of xenon (headlightTypes in vehicleModels.ts) ---
+  useEffect(() => {
+    if (!headlightTypes) return;
+    const chosen = vehicle.headlightType ?? 'halogen';
+    for (const [type, names] of Object.entries(headlightTypes)) {
+      names.forEach((n) => { const node = scene.getObjectByName(n); if (node) node.visible = type === chosen; });
+    }
+  }, [scene, headlightTypes, vehicle.headlightType]);
+
+  // --- SPIEGELS EN GRILL: uit grotere meshes geknipt (trim in vehicleModels.ts), daarna een eigen materiaal ---
+  type TrimPart = { mesh: THREE.Mesh; original: THREE.Material };
+  const trimParts = useMemo(() => {
+    const result: Record<'mirrors' | 'grille', TrimPart[]> = { mirrors: [], grille: [] };
+    if (!trim) return result;
+    if (scene.userData.trimParts) return scene.userData.trimParts as typeof result;
+    const meshes: THREE.Mesh[] = [];
+    scene.traverse((o: any) => { if (o.isMesh) meshes.push(o); });
+    for (const [key, regions] of Object.entries(trim) as ['mirrors' | 'grille', TrimRegion[]][]) {
+      for (const region of regions) {
+        const [x0, x1, y0, y1, z0, z1] = region.box;
+        meshes.forEach((mesh) => {
+          const geometry = mesh.geometry as THREE.BufferGeometry;
+          const index = geometry.index;
+          const pos = geometry.attributes.position;
+          if (!index || !pos) return;
+          if (!region.node.test((mesh.parent?.name || '').toLowerCase())) return;
+          if (!region.material.test(((mesh.material as THREE.Material)?.name || '').toLowerCase())) return;
+          const keep: number[] = [];
+          const cut: number[] = [];
+          for (let i = 0; i < index.count; i += 3) {
+            const a = index.getX(i), b = index.getX(i + 1), c = index.getX(i + 2);
+            const cx = (pos.getX(a) + pos.getX(b) + pos.getX(c)) / 3;
+            const cy = (pos.getY(a) + pos.getY(b) + pos.getY(c)) / 3;
+            const cz = (pos.getZ(a) + pos.getZ(b) + pos.getZ(c)) / 3;
+            const inside = cx >= x0 && cx <= x1 && cy >= y0 && cy <= y1 && cz >= z0 && cz <= z1;
+            (inside ? cut : keep).push(a, b, c);
+          }
+          if (!cut.length) return;
+          geometry.setIndex(keep);
+          // Nieuwe mesh met dezelfde vertices, alleen de geknipte driehoeken; zelfde plek in de boom (beweegt mee met de deur)
+          const piece = new THREE.BufferGeometry();
+          Object.entries(geometry.attributes).forEach(([name, attr]) => piece.setAttribute(name, attr));
+          piece.setIndex(cut);
+          const original = mesh.material as THREE.Material;
+          const part = new THREE.Mesh(piece, original);
+          part.name = `${mesh.name}_${key}`;
+          part.position.copy(mesh.position);
+          part.quaternion.copy(mesh.quaternion);
+          part.scale.copy(mesh.scale);
+          mesh.parent!.add(part);
+          result[key].push({ mesh: part, original });
+        });
+      }
+    }
+    scene.userData.trimParts = result;
+    return result;
+  }, [scene, trim]);
+
+  // Afwerkingen: wagenkleur, (glans)zwart, chroom, carbon
+  const trimMaterials = useMemo(() => {
+    // Carbon: schuin geweven patroon op een klein canvas, herhaald, met een laklaag
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 32;
+    const ctx = canvas.getContext('2d')!;
+    // Licht patroon op een donkere basiskleur: zonder bruikbare textuurcoördinaten blijft het dan toch donker
+    ctx.fillStyle = '#9a9a9a';
+    ctx.fillRect(0, 0, 32, 32);
+    ctx.fillStyle = '#ffffff';
+    for (let y = 0; y < 32; y += 8) for (let x = 0; x < 32; x += 8) if (((x + y) / 8) % 2 === 0) ctx.fillRect(x, y, 8, 8);
+    const weave = new THREE.CanvasTexture(canvas);
+    weave.wrapS = weave.wrapT = THREE.RepeatWrapping;
+    weave.repeat.set(40, 40);
+    return {
+      black: new THREE.MeshPhysicalMaterial({ color: '#0a0a0a', metalness: 0.2, roughness: 0.25, clearcoat: 1, clearcoatRoughness: 0.1 }),
+      chrome: new THREE.MeshStandardMaterial({ color: '#d8d8d8', metalness: 1, roughness: 0.08 }),
+      carbon: new THREE.MeshPhysicalMaterial({ color: '#2a2a2a', map: weave, metalness: 0.3, roughness: 0.35, clearcoat: 1, clearcoatRoughness: 0.05 }),
+      body: new THREE.MeshPhysicalMaterial({ metalness: 0.6, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.1 }),
+    };
+  }, []);
+
+  useEffect(() => {
+    trimMaterials.body.color.set(vehicle.paintColor);
+    const apply = (parts: TrimPart[], finish: string) => parts.forEach(({ mesh, original }) => {
+      mesh.material = finish === 'standard' ? original : (trimMaterials as Record<string, THREE.Material>)[finish] ?? original;
+    });
+    // Spiegels in wagenkleur = het originele lakmateriaal (krijgt de lakkleur al mee)
+    apply(trimParts.mirrors, (vehicle.mirrors ?? 'body') === 'body' ? 'standard' : vehicle.mirrors);
+    apply(trimParts.grille, vehicle.grille ?? 'standard');
+  }, [trimParts, trimMaterials, vehicle.mirrors, vehicle.grille, vehicle.paintColor]);
+
+  return (
+    // <Center top> plaatst de wielen exact op Y=0, ongeacht de interne afmetingen van het .glb bestand!
+    // De rotatie zit op een groep buiten <Center>, zodat de auto om zijn eigen midden draait (ook als je hem sleept).
+    <group rotation={carRot}>
+      <Center top>
+        <primitive object={scene} scale={scale} />
+      </Center>
+    </group>
+  );
+};
+
+// --- HOOFD COMPONENT ---
+// widthFraction = breedte van dit paneel als deel van het scherm (1 = vol, 0.3 = Settings open), zie SplashScreen.
+const SidebarPane: React.FC<{ widthFraction?: number }> = ({ widthFraction = 1 }) => {
+  const { 
+    btDevices, btConnectedAddress, gear, speed, brakeApplied, screenMode, vehicleLightsOn, displaySettings, vehicleSettings,
+    carState, safetySettings, speedLimit
+  } = useUIStore();
+  
+  const isBluetoothConnected = btConnectedAddress !== null || btDevices.some(device => device.connected);
+  
+  const [isDarkMode, setIsDarkMode] = useState(getEffectiveTheme(screenMode) === 'dark');
+
+  useEffect(() => { 
+    setIsDarkMode(getEffectiveTheme(screenMode, vehicleLightsOn) === 'dark');
+  }, [screenMode, vehicleLightsOn]);
+
+  const isDriving = ['R', 'D', '1', '2', '3', '4', '5', '6'].includes(gear) || speed > 0;
+
+  // Snelheidswaarschuwing (Settings > Safety): snelheid rood boven limiet + marge, met Chime ook een piep
+  const isSpeeding = safetySettings.speedWarning && speedLimit !== null && speed > speedLimit + safetySettings.offset;
+  useEffect(() => {
+    if (!isSpeeding || !safetySettings.chime) return;
+    try {
+      const audio = new AudioContext();
+      const tone = audio.createOscillator();
+      const gain = audio.createGain();
+      tone.frequency.value = 880;
+      gain.gain.setValueAtTime(0.2, audio.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + 0.4);
+      tone.connect(gain).connect(audio.destination);
+      tone.start();
+      tone.stop(audio.currentTime + 0.4);
+      tone.onended = () => audio.close();
+    } catch {
+      // Geen geluid mogelijk (bijv. nog geen interactie met de pagina): alleen de rode snelheid
+    }
+  }, [isSpeeding, safetySettings.chime]);
+  const isBigScreen = screenMode === 'visualizer';
+
+  // --- AUTO DRAAIEN (alleen in Park) ---
+  const canRotate = gear === 'P' && !isDriving;
+  const [userYaw, setUserYaw] = useState(0);
+  const dragRef = useRef<{ x: number; yaw: number } | null>(null);
+  // Was de laatste aanraking een sleepbeweging? Dan telt hij niet als klik (die sluit anders het open menu).
+  const draggedRef = useRef(false);
+
+  // Zodra je gaat rijden of Park verlaat, springt de auto terug naar de standaardstand.
+  useEffect(() => {
+    if (!canRotate) { setUserYaw(0); dragRef.current = null; }
+  }, [canRotate]);
+
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    draggedRef.current = false;
+    if (!canRotate) return;
+    dragRef.current = { x: e.clientX, yaw: userYaw };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragRef.current) return;
+    if (Math.abs(e.clientX - dragRef.current.x) > 5) draggedRef.current = true;
+    // Pas draaien na 5 px: een gewone klik (bijv. om Settings te sluiten) mag de auto niet een klein beetje verdraaien
+    if (draggedRef.current) setUserYaw(dragRef.current.yaw + (e.clientX - dragRef.current.x) * 0.01);
+  };
+  const onClickCapture = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (draggedRef.current) e.stopPropagation();
+  };
+  const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    dragRef.current = null;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+  };
+
+  // --- COÖRDINATEN LOGICA ---
+  let cameraPosition: [number, number, number] = [0.20, 1.20, 9.50]; 
+  // car.glb (Golf 6): Y is boven, neus wijst naar +Z. Geen pitch (x) meer, anders staat de auto met de neus omlaag.
+  let carRotation: [number, number, number] = [0.00, -0.66, 0.00];
+
+  if (isDriving) {
+    cameraPosition = [0.20, 1.80, 13.80];
+    carRotation = [0.00, Math.PI, 0.00]; // auto van achteren gezien
+  } else if (isBigScreen) {
+    cameraPosition = [0.20, 1.20, 7.80];
+    carRotation = [0.00, -0.66, 0.00];
+  }
+
+  // --- AUTO MEESCHUIVEN MET HET PANEEL ---
+  // Het canvas blijft altijd schermbreed (100vw), zodat WebGL niet bij elke animatiestap opnieuw van grootte hoeft
+  // te veranderen. Als het paneel smaller wordt, schuift en krimpt het canvas met een CSS-transform. Die gebruikt
+  // dezelfde duur en curve als de breedte-animatie in SplashScreen, dus de auto beweegt precies mee.
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [canvasHeight, setCanvasHeight] = useState(0);
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => setCanvasHeight(entry.contentRect.height));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const cameraDistance = new THREE.Vector3(...cameraPosition).sub(CAMERA_TARGET).length();
+  const vehicleModel = getVehicleModel(vehicleSettings.model);
+  const carHalfPx = (canvasHeight * vehicleModel.halfLength) / (2 * cameraDistance * Math.tan(THREE.MathUtils.degToRad(CAMERA_FOV / 2)));
+  const paneHalfPx = (widthFraction * window.innerWidth) / 2;
+  const carScale = carHalfPx > 0 ? Math.max(0.2, Math.min(1, paneHalfPx / carHalfPx)) : 1;
+  const canvasTransform = `translateX(${-(1 - widthFraction) * 50}vw) scale(${carScale})`;
+
+  const speedUnit = displaySettings?.distance === 'Kilometers' ? 'KM/H' : 'MPH';
+  // Brandstof: percentage of actieradius (Settings > Display > Energy Display). Komt straks uit OBD2 (tankniveau).
+  const energyDisplay = displaySettings?.energyDisplay === 'Percentage' ? '72%' : (displaySettings?.distance === 'Kilometers' ? '540 km' : '335 mi');
+
+  // Versnellingsweergave: automaat P R N D; handgeschakeld P R D, want zonder OBD2 is de versnelling (1-6)
+  // niet uit te lezen. P = stilstand, D = rijden (GPS), R = achteruit-signaal van de radio.
+  // Automatisch herkennen: wat de auto doorgeeft (CAN/OBD2); zolang dat onbekend is P R N D
+  const transmission = vehicleSettings.transmission === 'Detect' ? (carState.detectedTransmission ?? 'Automatic') : vehicleSettings.transmission;
+  const isManual = transmission === 'Manual';
+  // Open deuren, zoals in het dashboard van de auto (ook als melding bij het opengaan, zie setCarState)
+  const openDoors = (Object.keys(carState.doors) as DoorId[]).filter((d) => carState.doors[d]);
+  const t = useT();
+  const gearLabels = isManual ? ['P', 'R', 'D'] : ['P', 'R', 'N', 'D'];
+  const activeGearLabel = isManual && !['P', 'R'].includes(gear) ? 'D' : gear;
+
+  return (
+    <aside 
+      // Nieuwe classname om styling conflicten uit je SCSS te negeren
+      className="panda-sidebar-view" 
+      style={{ 
+        display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+        // React forceert nu 100% de achtergrond kleur:
+        backgroundColor: isDarkMode ? '#111111' : '#e5e5ea', 
+        transition: 'background-color 0.3s ease',
+        height: '100%', width: '100%', overflow: 'hidden', position: 'relative'
+      }}
+    >
+      {/* --- VERSNELLING EN BRANDSTOF (links boven, zodat ze nooit met de statusbalk rechts botsen) --- */}
+      <div style={{
+         position: 'absolute', top: 0, left: 0, right: 0, padding: '18px 25px',
+         display: 'flex', alignItems: 'center', gap: '28px', zIndex: 20
+      }}>
+         {/* Automaat: P R N D. Handgeschakeld: N, R of de versnelling (1-6), uit Settings > Vehicle > Transmission */}
+         <div style={{ display: 'flex', gap: '15px', fontSize: 'calc(20px * var(--text-scale, 1))', fontWeight: '800', color: isDarkMode ? '#555' : '#aaa' }}>
+           {gearLabels.map(g => (
+              <span key={g} style={{ color: g === activeGearLabel ? (isDarkMode ? '#fff' : '#000') : '' }}>{g}</span>
+           ))}
+         </div>
+         {/* Brandstof (tankniveau via OBD2; tot die er is een vaste waarde) */}
+         <div style={{ fontWeight: '600', fontSize: 'calc(18px * var(--text-scale, 1))', display: 'flex', alignItems: 'center', gap: '8px', color: isDarkMode ? '#fff' : '#555' }}>
+           <Fuel size={20} strokeWidth={2.2} />
+           {energyDisplay}
+         </div>
+      </div>
+
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative' }}>
+        
+        {/* Speedometer */}
+        {isDriving && (
+          <div style={{ textAlign: 'center', position: 'absolute', top: '80px', width: '100%', zIndex: 10, pointerEvents: 'none' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px' }}>
+              <div style={{ fontSize: '80px', fontWeight: 'bold', color: isSpeeding ? '#ed4e3b' : (isDarkMode ? '#fff' : '#000'), lineHeight: 1 }}>{speed}</div>
+              {/* Maximumsnelheidsbord (Settings > Safety > Show Speed Limit) */}
+              {safetySettings.showSpeedLimit && speedLimit !== null && (
+                <div style={{ width: 48, height: 48, borderRadius: '50%', border: '5px solid #ed4e3b', background: '#fff', color: '#000',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 'calc(18px * var(--text-scale, 1))', fontWeight: 'bold', boxSizing: 'border-box' }}>
+                  {speedLimit}
+                </div>
+              )}
+            </div>
+            <div style={{ fontSize: 'calc(16px * var(--text-scale, 1))', color: '#888', fontWeight: 'bold' }}>{speedUnit}</div>
+          </div>
+        )}
+
+        {/* Deur(en) open: rode aanduiding in het midden, onder de snelheid */}
+        {openDoors.length > 0 && (
+          <div style={{ position: 'absolute', top: isDriving ? '185px' : '70px', left: 0, right: 0, display: 'flex', justifyContent: 'center', zIndex: 11, pointerEvents: 'none' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 14px', borderRadius: '20px',
+              background: 'rgba(237, 78, 59, 0.12)', color: '#ed4e3b', fontWeight: 600, fontSize: 'calc(14px * var(--text-scale, 1))' }}>
+              <DoorOpen size={18} />
+              {openDoors.length > 1 ? t('DOORS OPEN') : t(DOOR_LABELS[openDoors[0]])}
+            </div>
+          </div>
+        )}
+
+        {/* 3D Visualizer */}
+        <div
+          ref={containerRef}
+          className="car-visualization-container"
+          style={{ flex: 1, position: 'relative', overflow: 'hidden', touchAction: 'none', cursor: canRotate ? 'grab' : 'default' }}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
+          onClickCapture={onClickCapture}
+        >
+          <div style={{
+            position: 'absolute', top: 0, left: 0, height: '100%', width: '100vw',
+            transform: canvasTransform, transformOrigin: 'center center',
+            transition: 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)', // gelijk aan de paneel-animatie in SplashScreen
+            willChange: 'transform'
+          }}>
+          {/* offsetSize: meet de echte (ongeschaalde) grootte. getBoundingClientRect telt de CSS-transform hierboven mee,
+              waardoor het canvas zich soms op de verkleinde maat instelde en de auto versprong. */}
+          <Canvas shadows dpr={[1, 2]} resize={{ offsetSize: true }}>
+            <Suspense fallback={null}>
+              <ambientLight intensity={isDarkMode ? 0.3 : 0.7} />
+              <spotLight position={[10, 10, 10]} angle={0.15} penumbra={1} intensity={1} castShadow />
+              <Environment preset={isDarkMode ? "night" : "city"} />
+
+              <FitCamera position={cameraPosition} halfLength={vehicleModel.halfLength} />
+              
+              <CarModel 
+                key={vehicleModel.id} // ander model = nieuwe component (schone materialen en state)
+                model={vehicleModel}
+                carRot={[carRotation[0], carRotation[1] + userYaw, carRotation[2]]}
+                brakeApplied={brakeApplied}
+                gear={gear}
+                carState={carState}
+                vehicle={vehicleSettings}
+              />
+
+              {/* Vaste schaduw op de "vloer" (Y=0) */}
+              <ContactShadows 
+                position={[0, -0.01, 0]} 
+                opacity={isDarkMode ? 0.8 : 0.3} 
+                scale={15} 
+                blur={2} 
+                far={4.5} 
+              />
+            </Suspense>
+          </Canvas>
+          </div>
+        </div>
+      </div>
+
+      {/* Music Bar: zwevende kaart over de auto (absoluut), zodat het 3D-canvas niet kleiner wordt en de auto niet verspringt */}
+      {isBluetoothConnected && (
+        <div className="sidebar-music-container" style={{ position: 'absolute', left: '15px', right: '15px', bottom: '15px', zIndex: 10 }}>
+          <MusicBar />
+        </div>
+      )}
+    </aside>
+  );
+};
+
+export default SidebarPane;

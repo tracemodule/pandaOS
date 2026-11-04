@@ -1,0 +1,407 @@
+// Tesla Model 3 UI Kit (Figma): kleuren, typografie, knoppen, tabs en veld-onderdelen voor Settings en andere schermen.
+// Gebruik: zet `tsl-ui` (+ `dark-mode`) op de container; de onderdelen hieronder lezen de kleuren uit de CSS-variabelen.
+// Maten zijn ca. 0,75× de Figma-maten, gelijk aan de rest van PandaOS.
+
+.tsl-ui {
+  // Color Guidance
+  --tsl-white: #ffffff;
+  --tsl-gray-100: #f0f0f0;
+  --tsl-gray-200: #e0e0e0;
+  --tsl-gray-300: #d0d1d2;
+  --tsl-gray-500: #a2a3a5;
+  --tsl-gray-600: #757575;
+  --tsl-gray-800: #414141;
+  --tsl-black: #171717;
+  --tsl-blue: #005aff;
+  --tsl-blue-link: #2e78ff;
+  --tsl-green: #25cb55;
+  --tsl-red: #ed4e3b;
+
+  // Licht (Menu Screens, Dark Mode=Off)
+  --tsl-bg: var(--tsl-gray-100);
+  --tsl-text: var(--tsl-black);
+  --tsl-title: #393c41;
+  --tsl-muted: var(--tsl-gray-500);
+  --tsl-border: var(--tsl-gray-300);
+  --tsl-segment-active: var(--tsl-white);
+  --tsl-segment-text: var(--tsl-gray-600);
+  --tsl-segment-active-text: var(--tsl-black);
+  --tsl-btn-secondary: var(--tsl-gray-300);
+  --tsl-btn-secondary-text: var(--tsl-black);
+  --tsl-switch-off: var(--tsl-gray-300);
+  --tsl-tile-bg: var(--tsl-white);
+
+  &.dark-mode {
+    // Donker (Menu Screens, Dark Mode=On)
+    --tsl-bg: var(--tsl-gray-800);
+    --tsl-text: var(--tsl-white);
+    --tsl-title: var(--tsl-white);
+    --tsl-muted: var(--tsl-gray-500);
+    --tsl-border: var(--tsl-gray-600);
+    --tsl-segment-active: var(--tsl-gray-600);
+    --tsl-segment-text: var(--tsl-gray-500);
+    --tsl-segment-active-text: var(--tsl-white);
+    --tsl-btn-secondary: var(--tsl-gray-600);
+    --tsl-btn-secondary-text: var(--tsl-white);
+    --tsl-switch-off: var(--tsl-gray-600);
+    --tsl-tile-bg: transparent;
+  }
+
+  // Indeling van Settings (groot scherm: laptop/1920 px)
+  --settings-header-height: 80px;
+  --settings-sidebar-width: 320px;
+  --settings-gutter: 24px;
+  --settings-content-padding: 10px 40px 40px;
+
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: var(--tsl-text);
+}
+
+// Compact scherm (Android-radio 1024×600, tot 1280 px breed): smallere menulijst en minder witruimte
+@media (max-width: 1280px) {
+  .tsl-ui {
+    --settings-header-height: 52px;
+    --settings-sidebar-width: 190px;
+    --settings-gutter: 12px;
+    --settings-content-padding: 4px 18px 24px;
+  }
+}
+
+// Dunne, rustige scrollbalk (de standaard grijze balken vallen op op een klein scherm)
+.tsl-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--tsl-border, #757575) transparent;
+  &::-webkit-scrollbar { width: 4px; height: 4px; }
+  &::-webkit-scrollbar-thumb { background: var(--tsl-border, #757575); border-radius: 2px; }
+  &::-webkit-scrollbar-track { background: transparent; }
+}
+
+// --- Typografie (Figma: titel 18/21.6, veldtekst 16/19.2, uitleg 14/16.8) ---
+.tsl-ui {
+  .tsl-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .tsl-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .tsl-title {
+    font-size: calc(18px * var(--text-scale, 1));
+    line-height: 21.6px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--tsl-title);
+  }
+
+  .tsl-overline {
+    font-size: calc(12px * var(--text-scale, 1));
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--tsl-muted);
+  }
+
+  .tsl-field-text {
+    font-size: calc(16px * var(--text-scale, 1));
+    line-height: 19.2px;
+    font-weight: 600;
+    color: var(--tsl-text);
+  }
+
+  .tsl-hint {
+    font-size: calc(14px * var(--text-scale, 1));
+    line-height: 16.8px;
+    color: var(--tsl-muted);
+  }
+
+  .tsl-link {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: calc(16px * var(--text-scale, 1));
+    font-weight: 600;
+    color: var(--tsl-blue-link);
+    cursor: pointer;
+  }
+
+  .tsl-divider {
+    height: 1px;
+    border: none;
+    margin: 4px 0;
+    background-color: var(--tsl-border);
+  }
+
+  // --- Tabs / segmenten (Figma "Toggles": kader met rand, actief vak wit of grijs) ---
+  .tsl-segmented {
+    display: inline-flex;
+    width: 344px;
+    max-width: 100%; // past zich aan op een smal scherm
+    height: 48px;
+    padding: 0;
+    box-sizing: border-box;
+    border: 1px solid var(--tsl-border);
+    border-radius: 4px;
+    overflow: hidden;
+
+    &.is-wide { width: 100%; max-width: 560px; }
+
+    button {
+      flex: 1;
+      border: none;
+      background: transparent;
+      font-size: calc(16px * var(--text-scale, 1));
+      font-weight: 500;
+      color: var(--tsl-segment-text);
+      cursor: pointer;
+      transition: background-color 0.15s ease, color 0.15s ease;
+
+      &.is-active {
+        background-color: var(--tsl-segment-active);
+        color: var(--tsl-segment-active-text);
+        font-weight: 600;
+      }
+    }
+  }
+
+  // --- Knoppen (Figma "Buttons": primair blauw, secundair grijs, radius 4) ---
+  .tsl-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    height: 48px;
+    min-width: 160px;
+    padding: 0 20px;
+    border: none;
+    border-radius: 4px;
+    font-size: calc(16px * var(--text-scale, 1));
+    font-weight: 600;
+    background-color: var(--tsl-btn-secondary);
+    color: var(--tsl-btn-secondary-text);
+    cursor: pointer;
+    transition: filter 0.15s ease;
+
+    &:active { filter: brightness(0.92); }
+    &:disabled { opacity: 0.5; cursor: default; }
+
+    &.is-primary { background-color: var(--tsl-blue); color: var(--tsl-white); }
+    &.is-small { height: 40px; min-width: 0; padding: 0 16px; font-size: calc(14px * var(--text-scale, 1)); }
+    &.is-dropdown { justify-content: space-between; min-width: 230px; }
+  }
+
+  // --- Schakelaar (Figma "Radio Button": blauw als hij aan staat) ---
+  .tsl-switch-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+
+    .tsl-switch-text { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+  }
+
+  .tsl-toggle {
+    appearance: none;
+    flex-shrink: 0;
+    width: 48px;
+    height: 28px;
+    margin: 0;
+    border-radius: 14px;
+    background-color: var(--tsl-switch-off);
+    position: relative;
+    cursor: pointer;
+    transition: background-color 0.2s;
+
+    &::after {
+      content: '';
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background-color: var(--tsl-white);
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+      transition: transform 0.2s;
+    }
+
+    &:checked {
+      background-color: var(--tsl-blue);
+      &::after { transform: translateX(20px); }
+    }
+  }
+
+  // --- Tegels (Figma "Titles": vakken met pictogram + label, gedeelde randen) ---
+  // Breedte groeit mee met het aantal tegels (geen lege rand bij één model)
+  .tsl-tiles {
+    display: flex;
+    flex-wrap: wrap;
+    width: fit-content;
+    max-width: 640px;
+
+    .tsl-tile { flex: 0 0 150px; }
+    border: 1px solid var(--tsl-border);
+    border-radius: 4px;
+    overflow: hidden;
+
+    .tsl-tile {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 88px;
+      padding: 12px;
+      border: none;
+      border-right: 1px solid var(--tsl-border);
+      background-color: var(--tsl-tile-bg);
+      font-size: calc(14px * var(--text-scale, 1));
+      font-weight: 500;
+      text-align: center;
+      color: var(--tsl-segment-text);
+      cursor: pointer;
+
+      &:last-child { border-right: none; }
+      svg { color: var(--tsl-segment-text); }
+
+      &.is-active {
+        background-color: var(--tsl-btn-secondary);
+        color: var(--tsl-segment-active-text);
+        svg { color: var(--tsl-segment-active-text); }
+      }
+    }
+  }
+
+  // --- Lijstregel (bijv. Bluetooth-apparaat): tekst links, actie rechts, scheidingslijn ---
+  .tsl-list {
+    display: flex;
+    flex-direction: column;
+    max-width: 640px;
+
+    .tsl-list-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      min-height: 64px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--tsl-border);
+
+      .tsl-list-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+      svg { color: var(--tsl-segment-text); flex-shrink: 0; }
+      &.is-active svg { color: var(--tsl-blue); }
+    }
+  }
+
+  // --- Schuifregelaar (Figma "Brightness": kader met rand, gevuld deel, pictogrammen links/rechts) ---
+  .tsl-slider {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    width: 100%;
+    max-width: 460px;
+    height: 48px;
+    padding: 0 14px;
+    box-sizing: border-box;
+    border: 1px solid var(--tsl-border);
+    border-radius: 4px;
+    color: var(--tsl-segment-text);
+    user-select: none;
+
+    &.is-disabled { opacity: 0.5; }
+
+    .tsl-slider-icon { display: flex; flex-shrink: 0; }
+
+    .tsl-slider-track {
+      position: relative;
+      flex: 1;
+      height: 100%;
+      cursor: pointer;
+      touch-action: none;
+    }
+
+    .tsl-slider-fill {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      background-color: var(--tsl-segment-active);
+    }
+
+    .tsl-slider-zero {
+      position: absolute;
+      top: 10px;
+      bottom: 10px;
+      width: 1px;
+      background-color: var(--tsl-border);
+    }
+
+    .tsl-slider-value {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: calc(15px * var(--text-scale, 1));
+      font-weight: 600;
+      color: var(--tsl-segment-active-text);
+      pointer-events: none;
+    }
+  }
+
+  // Regel met schuifregelaar en een knop ernaast (bijv. Brightness + Auto)
+  .tsl-slider-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    max-width: 600px;
+
+    .tsl-btn { min-width: 110px; }
+  }
+
+  // Compact: kleinere knoppen en tabs, zodat alles naast elkaar past
+  @media (max-width: 1280px) {
+    .tsl-segmented { height: 42px; button { font-size: calc(14px * var(--text-scale, 1)); } }
+    .tsl-btn { height: 42px; min-width: 0; padding: 0 16px; font-size: calc(14px * var(--text-scale, 1)); }
+    .tsl-slider { height: 42px; }
+    .tsl-slider-row .tsl-btn { min-width: 76px; }
+    .tsl-title { font-size: calc(16px * var(--text-scale, 1)); }
+  }
+
+  // --- Kleurvakjes (lak/velgen) met blauwe ring als actief ---
+  .tsl-swatches {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+
+    .tsl-swatch {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      padding: 0;
+      background: none;
+      border: none;
+      font-size: calc(13px * var(--text-scale, 1));
+      font-weight: 500;
+      color: var(--tsl-segment-text);
+      cursor: pointer;
+
+      .tsl-swatch-color {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        border: 1px solid var(--tsl-border);
+        transition: box-shadow 0.15s ease;
+      }
+
+      &.is-active {
+        color: var(--tsl-segment-active-text);
+        font-weight: 600;
+        .tsl-swatch-color { box-shadow: 0 0 0 3px var(--tsl-bg), 0 0 0 5px var(--tsl-blue); }
+      }
+    }
+  }
+}

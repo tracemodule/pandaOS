@@ -1,0 +1,163 @@
+@use '../../../assets/scss/variables' as *;
+
+.tsl-splash-screen {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden !important; /* Forceert de root container om scrollbars te negeren */
+  position: relative;
+
+  .tsl-split-view {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+  }
+
+  .tsl-sidebar-pane {
+    position: relative;
+    z-index: 2;
+    box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+  }
+
+  .tsl-content-pane {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    overflow: hidden; /* Fix voor ongewenst scrollen in het dashboard */
+  }
+
+  .tsl-bottom-container {
+    flex-shrink: 0;
+    z-index: 100;
+    position: relative; 
+  }
+
+  /* --- Volume Slider Overlay --- */
+  .tsl-volume-overlay {
+    position: absolute;
+    bottom: 100px; 
+    right: 40px;
+    padding: 15px 25px;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+    z-index: 1000;
+
+    .volume-slider-container {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      
+      input[type="range"] {
+        width: 150px;
+        cursor: pointer;
+      }
+      
+      .volume-value {
+        font-weight: 600;
+        min-width: 25px;
+        font-size: calc(14px * var(--text-scale, 1));
+      }
+    }
+  }
+
+  /* --- Quick Actions Window --- */
+  .quick-actions-wrapper {
+    position: absolute;
+    bottom: 100px;  
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: center;
+    z-index: 60;
+    pointer-events: none; 
+  }
+
+  .tsl-quick-actions-overlay {
+    pointer-events: auto; 
+    border-radius: 8px;
+    padding: 24px 32px;
+    width: 650px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+    display: flex;
+    flex-direction: column;
+
+    .qa-row {
+      display: flex;
+      gap: 20px;
+      &.qa-climate {
+        button { color: $color-gray-500; }
+        button:hover { color: $color-white; }
+      }
+      &.qa-apps { gap: 30px; }
+      button {
+        background: transparent;
+        border: none;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+        cursor: pointer;
+        span { font-size: calc(11px * var(--text-scale, 1)); font-weight: 500; white-space: nowrap; }
+        .app-icon { width: 40px; height: 40px; border-radius: 8px; object-fit: contain; }
+      }
+    }
+    .qa-divider { height: 1px; background-color: rgba(255,255,255,0.1); margin: 20px 0; width: 100%; }
+  }
+
+  /* =========================================
+     LIGHT MODE OVERRIDES (Nieuw toegevoegd!)
+     ========================================= */
+  &.light-mode {
+    background-color: #f2f2f2; /* De achtergrond van het lege app-gedeelte */
+    color: $color-black;
+
+    .tsl-sidebar-pane {
+      background-color: #e5e5ea !important; /* Forceert de lichtgrijze Tesla sidebar tint */
+    }
+
+    .tsl-content-pane {
+      background-color: #f2f2f2;
+    }
+
+    .tsl-volume-overlay {
+      background: $color-gray-100;
+      color: $color-black;
+      input[type="range"] { accent-color: $color-gray-800; }
+    }
+
+    .tsl-quick-actions-overlay {
+      background-color: $color-gray-100;
+      button span { color: $color-black; }
+      .qa-divider { background-color: rgba(0,0,0,0.1); }
+    }
+  }
+
+  /* =========================================
+     DARK MODE OVERRIDES
+     ========================================= */
+  &.dark-mode {
+    background-color: $color-black; /* Zwart voor de dark mode root */
+    color: $color-white; 
+
+    .tsl-sidebar-pane { 
+      background-color: #111111 !important; /* Forceert de diep donkergrijze sidebar */
+    }
+    
+    .tsl-content-pane { 
+      background-color: $color-black; 
+    }
+
+    .tsl-volume-overlay {
+      background-color: $color-gray-800;
+      color: $color-white;
+      input[type="range"] { accent-color: $color-white; }
+    }
+
+    .tsl-quick-actions-overlay {
+      background-color: $color-gray-800;
+      button span { color: $color-white; }
+      .qa-divider { background-color: rgba(255,255,255,0.1); }
+    }
+  }
+}

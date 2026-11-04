@@ -1,0 +1,16 @@
+{
+  "name": "pandaos-server",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "server": "node index.js"
+  },
+  "dependencies": {
+    "@coooookies/windows-smtc-monitor": "^1.0.12",
+    "node-carplay": "^4.1.0",
+    "node-media-controller": "^0.0.6",
+    "serialport": "^13.0.0",
+    "socket.io": "^4.8.3",
+    "ws": "^8.20.0"
+  }
+}

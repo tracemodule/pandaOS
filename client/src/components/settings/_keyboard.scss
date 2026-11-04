@@ -1,0 +1,163 @@
+// src/components/settings/_keyboard.scss
+@use '../../assets/scss/variables' as *;
+
+// Maten afgeleid van het Figma-ontwerp (2017 design-px breed, getoond op ~1335px)
+$kb-row-height: 64px;      // Hoogte van een toetsrij (ruim boven de 56px touch-minimum)
+$kb-row-gap: 14px;         // Verticale ruimte tussen rijen
+$kb-col-gap: 10px;         // Horizontale ruimte tussen toetsen
+$kb-block-gap: 72px;       // Ruimte tussen letterblok en numpad
+$kb-numpad-width: 300px;   // Breedte van het numpad
+
+.keyboard-wrapper {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 64px; // Precies boven de Control Bar (hoogte in _control-bar.scss)
+  z-index: 1000;
+  display: flex;
+  align-items: flex-end; // Plakt aan de onderkant
+  // Laat klikken door naar wat erboven ligt (bijv. een zoekresultaat); sluiten bij een klik buiten
+  // het toetsenbord gebeurt in Keyboard.tsx met een pointerdown-luisteraar
+  pointer-events: none;
+
+  .tsl-keyboard { pointer-events: auto; }
+}
+
+.tsl-keyboard {
+  // Kleuren (licht)
+  --kb-bg: #efefef;
+  --kb-text: #333333;
+  --kb-special-bg: #e0e0e0;
+  --kb-special-pressed: #c9c9c9;
+  --kb-char-pressed: rgba(0, 0, 0, 0.08);
+  --kb-active-bg: #c4c4c4;
+
+  width: 100%;
+  background-color: var(--kb-bg);
+  padding: 40px 50px 32px;
+  display: flex;
+  align-items: flex-start;
+  gap: $kb-block-gap;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12); // Subtiele schaduw aan de onderkant
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+  animation: tsl-keyboard-slide-up 0.22s ease-out;
+
+  // Letterblok: 4 rijen, elk een raster van 24 halve toetsen
+  .letters-block {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: $kb-row-gap;
+  }
+
+  .keyboard-row {
+    display: grid;
+    grid-template-columns: repeat(24, minmax(0, 1fr));
+    grid-auto-rows: $kb-row-height;
+    column-gap: $kb-col-gap;
+
+    // Standaard: een teken-toets beslaat 2 halve kolommen
+    .key.char { grid-column: span 2; }
+  }
+
+  // RIJ 1: 10 letters (20) + backspace (4)
+  .row-1 .backspace { grid-column: span 4; }
+
+  // RIJ 2: halve toets inspringen, 9 letters (18) + Enter (5)
+  .row-2 .key.char:first-child { grid-column: 2 / span 2; }
+  .row-2 .enter { grid-column: span 5; }
+
+  // RIJ 3: hele toets inspringen, 10 tekens (20)
+  .row-3 .key.char:first-child { grid-column: 3 / span 2; }
+
+  // RIJ 4: shift (4), mic (2), spatie (10), ?#& (4), ‹ (2), › (2)
+  .row-4 {
+    .shift { grid-column: span 4; }
+    .mic { grid-column: span 2; }
+    .spacebar { grid-column: span 10; }
+    .symbols { grid-column: span 4; }
+    .caret-left,
+    .caret-right { grid-column: span 2; }
+  }
+
+  // Numpad: 3x3 raster met de 0 gecentreerd onder de 8
+  .numpad-block {
+    flex: 0 0 $kb-numpad-width;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-auto-rows: $kb-row-height;
+    column-gap: $kb-col-gap;
+    row-gap: $kb-row-gap;
+
+    .zero { grid-column: 2; }
+  }
+
+  .key {
+    appearance: none;
+    background-color: transparent;
+    border: none;
+    border-radius: 4px;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    min-height: 56px;
+    font-family: inherit;
+    font-size: calc(26px * var(--text-scale, 1));
+    font-weight: 500;
+    line-height: 1;
+    color: var(--kb-text);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    outline: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: background-color 0.08s ease;
+
+    svg { pointer-events: none; }
+
+    // Ingedrukt: teken-toetsen krijgen een lichte achtergrond
+    &.char.is-pressed,
+    &.char:active { background-color: var(--kb-char-pressed); }
+
+    // Speciale toetsen: grijs afgerond blok met kleiner label
+    &.special {
+      background-color: var(--kb-special-bg);
+      font-size: calc(15px * var(--text-scale, 1));
+      font-weight: 500;
+      white-space: nowrap;
+
+      &.is-pressed,
+      &:active { background-color: var(--kb-special-pressed); }
+    }
+
+    // Shift actief (eenmalig) of vergrendeld (caps lock)
+    &.shift.is-active { background-color: var(--kb-active-bg); }
+    &.shift.is-locked {
+      background-color: var(--kb-active-bg);
+      box-shadow: inset 0 -3px 0 var(--kb-text);
+    }
+  }
+
+  /* Dark Mode */
+  &.dark-mode {
+    --kb-bg: #1a1a1a;
+    --kb-text: #ffffff;
+    --kb-special-bg: #424242;
+    --kb-special-pressed: #5a5a5a;
+    --kb-char-pressed: rgba(255, 255, 255, 0.1);
+    --kb-active-bg: #636363;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5);
+  }
+}
+
+// Inschuifanimatie vanaf de onderkant
+@keyframes tsl-keyboard-slide-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}

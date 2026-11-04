@@ -1,0 +1,131 @@
+// Tijdelijke lokale variabelen zodat je geen import-errors krijgt! 
+// (Als je later een globaal theme-bestand hebt, kun je deze weghalen en weer @use gebruiken)
+$color-white: #ffffff;
+$color-black: #111111;
+$color-gray-200: #e5e7eb;
+$color-gray-300: #d1d5db;
+$color-gray-500: #6b7280;
+$color-gray-600: #4b5563;
+$color-gray-800: #1f2937;
+
+.tsl-music-bar {
+  background-color: $color-white;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15); // Zwevend effect
+  width: 100%;
+  max-width: 400px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+
+  /* --- Bovenste helft: Info & Progress --- */
+  .music-info {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    gap: 16px;
+    position: relative;
+
+    .album-art {
+      width: 48px;
+      height: 48px;
+      border-radius: 4px;
+      background-color: $color-gray-300;
+      object-fit: cover;
+    }
+
+    .track-details {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+
+      .track-name {
+        font-size: calc(16px * var(--text-scale, 1));
+        font-weight: 500;
+        color: $color-black;
+      }
+
+      .artist-name {
+        font-size: calc(12px * var(--text-scale, 1));
+        color: $color-gray-600;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+
+        svg { width: 12px; height: 12px; } // Voor het kleine source icon
+      }
+    }
+
+    .favorite-btn {
+      color: $color-gray-500;
+      cursor: pointer;
+      &:hover { color: $color-black; }
+    }
+  }
+
+  /* Progress Bar (De lijn onder de info) */
+  .progress-bar-container {
+    height: 2px;
+    background-color: $color-gray-200;
+    width: 100%;
+    position: relative;
+
+    .progress-fill {
+      height: 100%;
+      background-color: $color-gray-600;
+      width: 30%; // Voorbeeld waarde
+      position: relative;
+
+      &::after {
+        content: '';
+        position: absolute;
+        right: -4px;
+        top: -3px;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background-color: $color-gray-800;
+      }
+    }
+  }
+
+  /* --- Onderste helft: Controls --- */
+  .music-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 24px;
+    background-color: #FAFAFA; // Iets lichter grijs voor de controls sectie
+
+    button {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: $color-black;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+
+      &:hover { color: $color-gray-600; }
+      
+      // De Play knop is vaak iets groter
+      &.play-btn svg { width: 24px; height: 24px; }
+      svg { width: 20px; height: 20px; }
+    }
+  }
+
+  /* --- Dark Mode Variant --- */
+  &.dark-mode {
+    background-color: $color-gray-800;
+    
+    .music-info .track-name { color: $color-white; }
+    .music-info .artist-name { color: $color-gray-300; }
+    .music-controls { 
+      background-color: $color-black;
+      button { color: $color-white; }
+    }
+    .progress-bar-container { background-color: $color-gray-600; }
+    .progress-fill { background-color: $color-white; }
+    .progress-fill::after { background-color: $color-white; }
+  }
+}
