@@ -32,6 +32,8 @@ export const CAN_FUNCTIONS: CanFunction[] = [
   { id: 'speed', label: 'Speed', group: 'Values', kind: 'value', unit: 'km/h', hint: 'Drive a short distance so the speed changes.' },
   { id: 'fuel', label: 'Fuel level', group: 'Values', kind: 'value', unit: '%', hint: 'The fuel level line usually comes by itself; wait a moment.' },
   { id: 'outside_temp', label: 'Outside temperature', group: 'Values', kind: 'value', unit: '°C', hint: 'The temperature line usually comes by itself; wait a moment.' },
+  // Volume van de radio zelf (VOL-knoppen gaan buiten Android om naar de audiochip; log bijv. 'setvolume881 to 12')
+  { id: 'radio_volume', label: 'Radio volume', group: 'Values', kind: 'value', unit: '0-40', hint: 'Press VOL+ and VOL- on the radio a few times.' },
   { id: 'range', label: 'Range', group: 'Values', kind: 'value', unit: 'km', hint: 'The range line usually comes by itself; wait a moment.' },
 ];
 
@@ -74,6 +76,7 @@ export const applyCanSignal = (signal: { func: string; action: CanAction; value:
     case 'speed': if (!isNaN(num)) store.setGpsSpeed(Math.max(0, Math.round(num))); break;
     case 'fuel': if (!isNaN(num)) store.setCarState({ fuelPercent: Math.max(0, Math.min(100, num)) }); break;
     case 'outside_temp': if (!isNaN(num)) store.setCarState({ outsideTemp: num }); break;
+    case 'radio_volume': if (!isNaN(num)) useUIStore.setState({ volume: Math.max(0, Math.min(100, Math.round((num / 40) * 100))), isVolumeOpen: true }); break;
     case 'range': if (!isNaN(num)) store.setCarState({ rangeKm: Math.max(0, num) }); break;
     default:
       if (doors[signal.func]) store.setCarState({ doors: { [doors[signal.func]]: on } });

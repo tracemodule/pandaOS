@@ -312,6 +312,17 @@ const SettingsApp: React.FC = () => {
                      </div>
                    </div>
                  ))}
+                 {/* Achteruitcamera: die van de radio of die van PandaOS (alleen zinvol als de radio de camera vrijgeeft) */}
+                 <div className="tsl-section">
+                   <span className="tsl-title">{t('Reverse camera')}</span>
+                   <div className="tsl-segmented">
+                     {(['radio', 'pandaos'] as const).map((c) => (
+                       <button key={c} className={(vehicleSettings.reverseCamera ?? (isAndroidLauncher() ? 'radio' : 'pandaos')) === c ? 'is-active' : ''}
+                         onClick={() => updateVehicleSetting('reverseCamera', c)}>{t(c === 'radio' ? 'Of the radio' : 'Of PandaOS')}</button>
+                     ))}
+                   </div>
+                   <small className="tsl-hint">{t('Of the radio: the camera app of the radio shows the image, PandaOS shows R. Of PandaOS: PandaOS shows the image itself (only works if the radio releases the camera).')}</small>
+                 </div>
                  {/* Grafische kwaliteit van het 3D-model: Laag = geen schaduwen en minder pixels, sneller op de radio */}
                  <div className="tsl-section">
                    <span className="tsl-title">{t('Graphics')}</span>

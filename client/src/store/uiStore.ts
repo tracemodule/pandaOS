@@ -175,6 +175,9 @@ export interface VehicleSettings {
   canProtocol?: CanProtocol;
   // 3D-weergave van de auto: 'High' = schaduwen en scherp beeld, 'Low' = zonder schaduwen en minder pixels (sneller)
   graphics?: 'High' | 'Low';
+  // Achteruitcamera in R: die van de radio (eigen camera-app van de radio, PandaOS toont alleen R) of die van PandaOS.
+  // Niet ingesteld: op de radio 'radio' (de camera-app van de radio houdt de camera bezet), anders 'pandaos'.
+  reverseCamera?: 'radio' | 'pandaos';
 }
 
 export type CanBox = 'radio' | 'raise' | 'hiworld' | 'simplesoft' | 'oudi' | 'binarytek' | 'luzheng' | 'other';

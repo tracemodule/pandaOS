@@ -256,6 +256,14 @@ toetsenbord of auto-/Bluetooth-/CarPlay-apps); paneel van de fabrikant vervangen
 paneel dicht (ACTION_CLOSE_SYSTEM_DIALOGS/collapsePanels, mag door targetSdk 28) en PandaOS-paneel open. Getest op de
 emulator ook op 1280×720 en 800×480. Nog testen op de radio: het paneel van de fabrikant.
 
+**Derde test in de auto (5 november 2026, 1.3.2)**: radio is echt **Android 9** (sdk 28; versietekst zegt 12/15),
+SoC ac8257 (MediaTek-achtig, Jancar/ATC). Achteruit geleerd via Koppelen werkt. Dubbele achteruitcamera (PandaOS + radio):
+nieuw Settings → Voertuig → Achteruitcamera "Van de radio" (standaard op de radio: PandaOS toont alleen R) of
+"Van PandaOS". Volume: VOL-knoppen van de radio gaan via de radio-dienst (JLOG KeyCodeListener keyCode 330) naar de
+audiochip (AudioBD37534 setvolume881), niet via het Android-volume. Nieuw: CarSignals volgt systeeminstellingen met
+vol/sound/audio/gain in de naam (logboek "Instelling veranderd: ...") en Koppelen heeft "Volume van de radio" (0-40,
+bijv. leren op "setvolume881 to"). "Systeempaneel opent bij achteruit": nog onduidelijk welk paneel (foto nodig).
+Geen CAN-regels in het rapport: CAN-kastje geeft nog niets door.
 **CAN-koppelen en Verbinding (5 november 2026, nog niet uitgebracht)**: CAN-monitor heeft nu de tabbladen Live, Detectie,
 **Koppelen**, **Verbinding** en Apps.
 - Koppelen (`CanLinkPanel.tsx`, `canSignals.ts`, `CanLinks.kt`): per functie (achteruit, handrem, 4 deuren, achterklep,

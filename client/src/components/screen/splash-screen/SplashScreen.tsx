@@ -34,7 +34,7 @@ const SplashScreen: React.FC = () => {
     isMenuOpen, isMusicOpen, activeWebApp, isQuickActionsOpen, closeAll,
     initSocketListeners, initSpotify, screenMode, gear, brakeApplied,
     displaySettings, isCarPlayOpen, isMapOpen, isPhoneOpen, appLinks, vehicleLightsOn, isCameraOpen,
-    isCanMonitorOpen, closeCanMonitor
+    isCanMonitorOpen, closeCanMonitor, vehicleSettings
   } = useUIStore();
   const t = useT();
   // Een andere app opent: de CAN-monitor gaat dicht (anders liggen ze over elkaar)
@@ -158,7 +158,9 @@ const SplashScreen: React.FC = () => {
   const isDriving = !isParked; 
   const isReverse = gear === 'R';
   // Camera: automatisch in R, of zelf geopend via het Camera-pictogram
-  const showCamera = isReverse || isCameraOpen;
+  // In R alleen de PandaOS-camera als die gekozen is (Settings > Voertuig); anders doet de camera-app van de radio het
+  const reverseCamera = vehicleSettings?.reverseCamera ?? ((window as any).PandaAndroid ? 'radio' : 'pandaos');
+  const showCamera = (isReverse && reverseCamera === 'pandaos') || isCameraOpen;
 
   let leftWidth = '100%';
   let rightWidth = '0%';

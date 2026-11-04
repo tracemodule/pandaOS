@@ -21,6 +21,7 @@ export interface PandaOSWebBridge {
   stepVolume: (delta: number) => void;
   setReverseSignal: (active: boolean) => void;
   systemVolume: (percent: number) => void;
+  radioSetting: (setting: { table: string; key: string; value: string }) => void;
   canSignal: (signal: { func: string; action: 'on' | 'off' | 'value'; value: string }) => void;
   setNowPlaying: (media: AndroidNowPlaying | null) => void;
   setNowPlayingCover: (url: string | null) => void;
@@ -69,6 +70,9 @@ export const initAndroidBridge = () => {
     // tonen en niet terugsturen (anders een lus)
     // Gekoppeld CAN-signaal herkend door de launcher (CAN-monitor > Koppelen, CanLinks.kt)
     canSignal: (signal) => applyCanSignal(signal),
+    // Systeeminstelling over geluid veranderd (CarSignals.kt): staat al in het logboek van de launcher; om het
+    // volume van de radio te vinden. Hier (nog) niets mee doen.
+    radioSetting: () => undefined,
     systemVolume: (percent) => {
       const state = useUIStore.getState();
       if (Math.abs(state.volume - percent) >= 1) useUIStore.setState({ volume: percent, isVolumeOpen: true });

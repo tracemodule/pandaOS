@@ -52,9 +52,41 @@ class CarSignals(private val activity: Activity, private val send: (String) -> U
         for (prefix in BACKCAR_PREFIXES) for (word in START_WORDS + END_WORDS) filter.addAction("$prefix$word")
         if (Build.VERSION.SDK_INT >= 33) activity.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
         else activity.registerReceiver(receiver, filter)
+        // Volume van de radio zoeken: de VOL-knoppen van de Golf-radio gaan via de eigen dienst van de radio naar de
+        // audiochip (AudioBD37534), buiten het Android-volume om. Veel radio's bewaren dat volume in een
+        // systeeminstelling; elke wijziging met vol/sound/audio/gain in de naam komt in het diagnoselogboek.
+        val resolver = activity.contentResolver
+        for (uri in listOf(android.provider.Settings.System.CONTENT_URI, android.provider.Settings.Global.CONTENT_URI, android.provider.Settings.Secure.CONTENT_URI)) {
+            try { resolver.registerContentObserver(uri, true, settingsObserver) } catch (_: Exception) {}
+        }
     }
 
-    fun stop() { try { activity.unregisterReceiver(receiver) } catch (_: Exception) {} }
+    fun stop() {
+        try { activity.unregisterReceiver(receiver) } catch (_: Exception) {}
+        try { activity.contentResolver.unregisterContentObserver(settingsObserver) } catch (_: Exception) {}
+    }
+
+    private val loggedSettings = HashMap<String, String>()
+    private val settingsObserver = object : android.database.ContentObserver(android.os.Handler(android.os.Looper.getMainLooper())) {
+        override fun onChange(selfChange: Boolean, uri: android.net.Uri?) {
+            val segments = uri?.pathSegments ?: return
+            if (segments.size < 2) return
+            val table = segments[0]
+            val key = segments[1]
+            if (!Regex("vol|sound|audio|gain|amp|mute|bd37|loud", RegexOption.IGNORE_CASE).containsMatchIn(key)) return
+            val value = try {
+                when (table) {
+                    "system" -> android.provider.Settings.System.getString(activity.contentResolver, key)
+                    "global" -> android.provider.Settings.Global.getString(activity.contentResolver, key)
+                    else -> android.provider.Settings.Secure.getString(activity.contentResolver, key)
+                }
+            } catch (_: Exception) { null } ?: return
+            if (loggedSettings["$table/$key"] == value) return
+            loggedSettings["$table/$key"] = value
+            DiagLog.add("info", "Instelling veranderd: $table/$key = $value")
+            send("radioSetting(${org.json.JSONObject().put("table", table).put("key", key).put("value", value)})")
+        }
+    }
 
     // Achteruit aan/uit naar de webapp (alleen bij een verandering)
     fun setReverse(active: Boolean, source: String) {
