@@ -4,7 +4,8 @@ import basicSsl from '@vitejs/plugin-basic-ssl'
 import { readFileSync } from 'node:fs'
 
 // Versie van PandaOS: één bron voor webapp en launcher (../version.json, verhoogd door tools/release.ps1)
-const version = JSON.parse(readFileSync(new URL('../version.json', import.meta.url), 'utf8')) as { version: string; code: number }
+// (een eventueel BOM-teken vooraan negeren)
+const version = JSON.parse(readFileSync(new URL('../version.json', import.meta.url), 'utf8').replace(/^﻿/, '')) as { version: string; code: number }
 
 export default defineConfig({
   plugins: [

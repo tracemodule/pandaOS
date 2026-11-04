@@ -21,7 +21,8 @@ $parts = $Version.Split('.') | ForEach-Object { [int]$_ }
 $code = $parts[0] * 10000 + $parts[1] * 100 + $parts[2]
 
 Write-Host "PandaOS $Version (versiecode $code) uitbrengen..."
-@{ version = $Version; code = $code } | ConvertTo-Json | Set-Content (Join-Path $root 'version.json') -Encoding utf8
+# Zonder BOM schrijven (Windows PowerShell 5.1 zet anders een onzichtbaar teken vooraan dat JSON.parse breekt)
+[IO.File]::WriteAllText((Join-Path $root 'version.json'), "{ `"version`": `"$Version`", `"code`": $code }`n", (New-Object Text.UTF8Encoding $false))
 
 # Webapp
 Push-Location (Join-Path $root 'client')

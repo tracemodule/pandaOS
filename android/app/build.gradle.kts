@@ -9,7 +9,7 @@ val devUrl = (findProperty("pandaos.devUrl") as String?) ?: ""
 
 // Versie: één bron voor webapp en launcher (version.json in de projectmap; tools/release.ps1 verhoogt hem)
 val versionFile = rootProject.layout.projectDirectory.file("../version.json").asFile
-val versionJson = groovy.json.JsonSlurper().parse(versionFile) as Map<*, *>
+val versionJson = groovy.json.JsonSlurper().parseText(versionFile.readText().removePrefix("﻿")) as Map<*, *>
 
 // Ondertekening: altijd dezelfde sleutel, anders weigert Android een update over de geïnstalleerde versie heen.
 // Pad en wachtwoorden in android/local.properties (niet in git), standaard de debug-sleutel van deze laptop.
