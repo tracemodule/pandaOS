@@ -2,6 +2,7 @@ package nl.pandaos.launcher
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.Intent
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.inputmethodservice.InputMethodService
@@ -88,7 +89,7 @@ class PandaKeyboardService : InputMethodService() {
         })
         letters.addView(row { r ->
             r.special("", 4f, icon = R.drawable.ic_kb_shift, active = shift != Shift.OFF, underline = shift == Shift.LOCK) { toggleShift() }
-            r.special("", 2f, icon = R.drawable.ic_kb_mic) { /* spraakinvoer: nog niet, zoals in de webapp */ }
+            r.special("", 2f, icon = R.drawable.ic_kb_mic, active = voice?.listening == true) { toggleVoice() }
             r.special("", 10f) { commit(" ") }
             r.special(if (symbols) "abc" else "? # &", 4f) { symbols = !symbols; build() }
             r.special("", 2f, icon = R.drawable.ic_kb_left) { sendKey(KeyEvent.KEYCODE_DPAD_LEFT) }
@@ -186,6 +187,37 @@ class PandaKeyboardService : InputMethodService() {
 
     private fun commit(text: String) { currentInputConnection?.commitText(text, 1) }
 
+    // ---------- Spraakinvoer (microfoon-toets) ----------
+    // Tussenresultaat als 'composing' tekst (onderstreept), eindresultaat definitief. Zonder microfoontoestemming
+    // opent PandaOS, dat de toestemming vraagt (een toetsenbord kan dat zelf niet).
+    private var voice: VoiceInput? = null
+
+    private fun toggleVoice() {
+        val v = voice ?: VoiceInput(this,
+            onPartial = { currentInputConnection?.setComposingText(it, 1) },
+            onFinal = { text ->
+                val ic = currentInputConnection
+                ic?.setComposingText(text, 1)
+                ic?.finishComposingText()
+                ic?.commitText(" ", 1)
+            },
+            onState = { state, error ->
+                if (state == "error" && error == "permission") {
+                    startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        .putExtra(MainActivity.EXTRA_REQUEST_MIC, true))
+                }
+                if (state != "listening") currentInputConnection?.finishComposingText()
+                build() // mic-toets aan/uit tonen
+            },
+        ).also { voice = it }
+        if (v.listening) v.stop() else v.start(language(this))
+    }
+
+    override fun onFinishInputView(finishingInput: Boolean) {
+        super.onFinishInputView(finishingInput)
+        voice?.cancel()
+    }
+
     private fun typeChar(char: String) {
         commit(label(char))
         if (shift == Shift.ONCE) { shift = Shift.OFF; build() }
@@ -235,5 +267,10 @@ class PandaKeyboardService : InputMethodService() {
 
         fun setDark(context: Context, dark: Boolean) =
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_DARK, dark).apply()
+
+        // Taal voor spraakinvoer (zelfde als PandaOS; gezet door de webapp bij spraakinvoer)
+        fun language(context: Context): String = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("voiceLang", "nl-NL") ?: "nl-NL"
+        fun setLanguage(context: Context, lang: String) =
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("voiceLang", lang).apply()
     }
 }

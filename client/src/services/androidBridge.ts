@@ -22,6 +22,7 @@ export interface PandaOSWebBridge {
   setReverseSignal: (active: boolean) => void;
   systemVolume: (percent: number) => void;
   radioSetting: (setting: { table: string; key: string; value: string }) => void;
+  voiceInput: (event: { state: string; text?: string; error?: string }) => void;
   canSignal: (signal: { func: string; action: 'on' | 'off' | 'value'; value: string }) => void;
   setNowPlaying: (media: AndroidNowPlaying | null) => void;
   setNowPlayingCover: (url: string | null) => void;
@@ -73,6 +74,8 @@ export const initAndroidBridge = () => {
     // Systeeminstelling over geluid veranderd (CarSignals.kt): staat al in het logboek van de launcher; om het
     // volume van de radio te vinden. Hier (nog) niets mee doen.
     radioSetting: () => undefined,
+    // Spraakinvoer (VoiceInput.kt) -> webtoetsenbord (Keyboard.tsx)
+    voiceInput: (event) => window.dispatchEvent(new CustomEvent('pandaos-voice', { detail: event })),
     systemVolume: (percent) => {
       const state = useUIStore.getState();
       if (Math.abs(state.volume - percent) >= 1) useUIStore.setState({ volume: percent, isVolumeOpen: true });

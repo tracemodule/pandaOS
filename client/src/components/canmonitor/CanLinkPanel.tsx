@@ -140,7 +140,7 @@ const CanLinkPanel: React.FC<{ logAccess: boolean }> = ({ logAccess }) => {
       )}
       {groups.map((group) => (
         <div key={group} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <span className="tsl-title">{t(group)}</span>
+          <span className="tsl-title">{t(group === 'Drive' ? 'Driving' : group)}</span>
           <div className="tsl-list">
             {CAN_FUNCTIONS.filter((f) => f.group === group).map((fn) => {
               const own = links.filter((l) => l.func === fn.id);

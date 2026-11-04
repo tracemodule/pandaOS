@@ -58,6 +58,12 @@ class MainActivity : Activity() {
         applyCanLinks()
         updates = UpdateInstaller(this) { call -> callWeb(call) }
         signals = CarSignals(this) { call -> callWeb(call) }.also { it.start() }
+        voice = VoiceInput(this,
+            onPartial = { callWeb("voiceInput(${org.json.JSONObject().put("state", "partial").put("text", it)})") },
+            onFinal = { callWeb("voiceInput(${org.json.JSONObject().put("state", "final").put("text", it)})") },
+            onState = { state, error -> callWeb("voiceInput(${org.json.JSONObject().put("state", state).put("error", error ?: "")})") },
+        )
+        if (intent?.getBooleanExtra(EXTRA_REQUEST_MIC, false) == true) requestMicrophone()
         // Nieuwe of verdwenen melding: het PandaOS-paneel werkt zijn lijst bij
         MediaListenerService.onChange = { runOnUiThread { callWeb("notificationsChanged()") } }
 
@@ -130,6 +136,12 @@ class MainActivity : Activity() {
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_MIC) {
+            val granted = grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
+            DiagLog.add("info", "Microfoon voor spraakinvoer: ${if (granted) "toegestaan" else "geweigerd"}")
+            callWeb("voiceInput(${org.json.JSONObject().put("state", if (granted) "ready" else "error").put("error", if (granted) "" else "permission")})")
+            return
+        }
         if (requestCode == REQUEST_CAMERA) {
             val request = pendingCameraRequest ?: return
             pendingCameraRequest = null
@@ -219,6 +231,20 @@ class MainActivity : Activity() {
     fun applyCanLinks() {
         can.setExtraActions(links.broadcastActions)
         can.setBackground(!links.isEmpty)
+    }
+
+    // Spraakinvoer (webtoetsenbord via PandaBridge)
+    lateinit var voice: VoiceInput
+
+    fun requestMicrophone() {
+        if (voice.hasPermission()) return
+        ignoreFocusLoss(10_000) // toestemmingsvenster is geen meldingenpaneel of camera
+        requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQUEST_MIC)
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        if (intent.getBooleanExtra(EXTRA_REQUEST_MIC, false)) requestMicrophone()
     }
 
     // Eigen schermen van Android die PandaOS zelf opent zonder pauze (keuzelijst van toetsenborden): niet vervangen
@@ -396,6 +422,8 @@ class MainActivity : Activity() {
     companion object {
         private const val REQUEST_LOCATION = 1
         private const val REQUEST_CAMERA = 2
+        private const val REQUEST_MIC = 3
+        const val EXTRA_REQUEST_MIC = "requestMicrophone" // vanuit het Android-toetsenbord
         const val MIN_WEBVIEW = 111 // Chrome-versie van het standaard bouwdoel van Vite 8 (chrome111)
 
         // Module-scripts weigert de WebView zonder het juiste type

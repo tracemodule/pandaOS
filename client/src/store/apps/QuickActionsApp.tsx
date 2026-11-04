@@ -4,7 +4,8 @@ import { getEffectiveTheme } from '../../settings';
 import { useT } from '../../i18n';
 import { getLaunchAction, runLaunchAction, useInstalledApps, getAndroidAppIcon, getAndroidAppName, isAndroidAppVisible, launchAndroidPackage, androidAppKey, getPackagesBehindPandaOSIcons, isAndroidLauncher, type LaunchAction } from '../appLinks';
 import { pressApp } from '../appDrag';
-import { Wind, Settings2, ChevronLeft } from 'lucide-react';
+import { Wind, Settings2, ChevronLeft, Plus, Pencil, Trash2, Check, ListChecks } from 'lucide-react';
+import { useAppGroups } from '../appGroups';
 
 // Keuzes voor App Settings (tandwiel rechtsboven in het app-menu)
 const APP_SETTING_ROWS: { key: keyof AppSettings; title: string; options: { id: string; label: string }[] }[] = [
@@ -47,6 +48,11 @@ const QuickActionsApp: React.FC = () => {
   } = useUIStore();
   const [showAppSettings, setShowAppSettings] = useState(false);
   const t = useT();
+  // App-groepen (mappen): open groep, en of je apps kiest of de naam bewerkt
+  const { groups, addGroup, renameGroup, removeGroup, toggleApp } = useAppGroups();
+  const [openGroupId, setOpenGroupId] = useState<string | null>(null);
+  const [groupMode, setGroupMode] = useState<'view' | 'choose' | 'rename'>('view');
+  const [groupName, setGroupName] = useState('');
 
   const isDarkMode = getEffectiveTheme(screenMode) === 'dark';
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -81,6 +87,16 @@ const QuickActionsApp: React.FC = () => {
   const coveredPackages = getPackagesBehindPandaOSIcons(appLinks, installedApps);
   // (zelf uitgezet in Settings > Apps = niet tonen)
   const otherAndroidApps = installedApps.filter((a) => !coveredPackages.has(a.package) && isAndroidAppVisible(appLinks, a.package));
+
+  // Alle apps uit het menu als één lijst (voor groepen): sleutel, naam, pictogram en wat een tik doet
+  type MenuItem = { key: string; name: string; icon: string; launch: () => void };
+  const allItems: MenuItem[] = [
+    ...visibleApps.map((app) => ({ key: app.id, name: t(app.name), icon: app.icon, launch: () => handleAppClick(app.id) })),
+    ...otherAndroidApps.map((app) => ({ key: androidAppKey(app.package), name: t(getAndroidAppName(app)), icon: getAndroidAppIcon(app.package), launch: () => handleAndroidAppClick(app.package) })),
+  ];
+  const itemByKey = new Map(allItems.map((i) => [i.key, i]));
+  const groupedKeys = new Set(groups.flatMap((g) => g.apps));
+  const openGroup = groups.find((g) => g.id === openGroupId) ?? null;
 
   const handleAndroidAppClick = (pkg: string) => {
     if (isAppEditMode) return;
@@ -166,6 +182,72 @@ const QuickActionsApp: React.FC = () => {
     );
   };
 
+  // Open groep: apps starten, apps kiezen, hernoemen of de groep verwijderen
+  const renderGroup = (group: { id: string; name: string; apps: string[] }) => {
+    const members = group.apps.map((k) => itemByKey.get(k)).filter(Boolean) as MenuItem[];
+    const text = isDarkMode ? '#fff' : '#000';
+    const googleKeys = allItems.filter((i) => i.key.startsWith('pkg:com.google.') || i.key === 'pkg:com.android.vending').map((i) => i.key);
+    const saveName = () => { renameGroup(group.id, groupName.trim() || group.name); setGroupMode('view'); };
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button className="tsl-btn is-small" aria-label={t('Back')} onClick={() => { setOpenGroupId(null); setGroupMode('view'); }}><ChevronLeft size={18} /></button>
+          {groupMode === 'rename' ? (
+            <input autoFocus value={groupName} onChange={(e) => setGroupName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') saveName(); }}
+              style={{ flex: 1, fontSize: 'calc(18px * var(--text-scale, 1))', padding: '6px 10px', borderRadius: 8, border: '1px solid #888' }} />
+          ) : (
+            <span className="tsl-title" style={{ flex: 1 }}>{group.name}</span>
+          )}
+          {groupMode === 'rename' ? (
+            <button className="tsl-btn is-small is-primary" onClick={saveName}><Check size={16} /> {t('Save')}</button>
+          ) : groupMode === 'choose' ? (
+            <button className="tsl-btn is-small is-primary" onClick={() => setGroupMode('view')}><Check size={16} /> {t('Done')}</button>
+          ) : (
+            <>
+              <button className="tsl-btn is-small" onClick={() => { setGroupName(group.name); setGroupMode('rename'); }}><Pencil size={16} /> {t('Rename')}</button>
+              <button className="tsl-btn is-small" onClick={() => setGroupMode('choose')}><ListChecks size={16} /> {t('Choose apps')}</button>
+              <button className="tsl-btn is-small" onClick={() => { removeGroup(group.id); setOpenGroupId(null); }}><Trash2 size={16} /> {t('Delete group')}</button>
+            </>
+          )}
+        </div>
+
+        {groupMode === 'choose' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <small className="tsl-hint" style={{ flex: 1 }}>{t('Tap apps to put them in this group or take them out.')}</small>
+            {googleKeys.length > 0 && (
+              <button className="tsl-btn is-small" onClick={() => googleKeys.forEach((k) => { if (!useAppGroups.getState().groups.find((g) => g.id === group.id)?.apps.includes(k)) toggleApp(group.id, k); })}>{t('Add all Google apps')}</button>
+            )}
+          </div>
+        )}
+
+        <div style={{ maxHeight: 262, overflowY: 'auto', overflowX: 'hidden', paddingBottom: 4 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '25px 10px' }}>
+            {(groupMode === 'choose' ? allItems : members).map((item) => {
+              const inGroup = group.apps.includes(item.key);
+              return (
+                <button key={item.key} onClick={() => (groupMode === 'choose' ? toggleApp(group.id, item.key) : item.launch())}
+                  style={{ position: 'relative', background: 'none', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', outline: 'none', cursor: 'pointer', minWidth: 0,
+                    opacity: groupMode === 'choose' && !inGroup ? 0.45 : 1 }}>
+                  <img src={item.icon} alt="" draggable={false} style={{ width: 40, height: 40, borderRadius: 8, objectFit: 'contain', pointerEvents: 'none' }} />
+                  {groupMode === 'choose' && inGroup && (
+                    <span style={{ position: 'absolute', top: -6, right: 'calc(50% - 26px)', width: 18, height: 18, borderRadius: 9, background: 'var(--tsl-blue, #3e6ae1)', color: '#fff',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Check size={12} /></span>
+                  )}
+                  <span style={{ color: text, fontSize: 'calc(12px * var(--text-scale, 1))', fontWeight: '500', pointerEvents: 'none',
+                    maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
+                </button>
+              );
+            })}
+          </div>
+          {groupMode !== 'choose' && members.length === 0 && (
+            <small className="tsl-hint">{t('This group is empty. Tap Choose apps.')}</small>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div style={{ position: 'relative' }} ref={overlayRef}>
       
@@ -241,10 +323,27 @@ const QuickActionsApp: React.FC = () => {
 
         <div style={{ height: '1px', background: isDarkMode ? '#333' : '#eee', marginBottom: '25px' }}></div>
 
+        {openGroup ? renderGroup(openGroup) : (<>
         {/* Grid van alle apps; op de radio scrollt dit als er veel Android-apps zijn */}
         <div style={{ maxHeight: 262, overflowY: 'auto', overflowX: 'hidden', paddingBottom: 4 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '25px 10px' }}>
-          {visibleApps.map(app => {
+          {/* Groepen (mappen) eerst */}
+          {groups.map((group) => {
+            const members = group.apps.map((k) => itemByKey.get(k)).filter(Boolean) as MenuItem[];
+            return (
+              <button key={group.id} onClick={() => { if (!isAppEditMode) { setOpenGroupId(group.id); setGroupMode('view'); } }}
+                style={{ background: 'none', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', outline: 'none', cursor: 'pointer', minWidth: 0 }}>
+                <div style={{ width: 40, height: 40, borderRadius: 8, padding: 3, boxSizing: 'border-box', background: isDarkMode ? '#333' : '#e6e6e6',
+                  display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, pointerEvents: 'none' }}>
+                  {members.slice(0, 4).map((m) => <img key={m.key} src={m.icon} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: 3 }} />)}
+                </div>
+                <span style={{ color: isDarkMode ? '#fff' : '#000', fontSize: 'calc(12px * var(--text-scale, 1))', fontWeight: '500', pointerEvents: 'none',
+                  maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{group.name}</span>
+              </button>
+            );
+          })}
+
+          {visibleApps.filter((app) => !groupedKeys.has(app.id)).map(app => {
             const isPinned = pinnedApps.includes(app.id);
             // Niet geïnstalleerd op de radio: lichter, een tik opent de Play Store
             const notInstalled = actions.get(app.id)!.kind === 'store';
@@ -272,7 +371,7 @@ const QuickActionsApp: React.FC = () => {
           })}
 
           {/* Overige Android-apps van de radio, met hun eigen pictogram (volledig scherm) */}
-          {otherAndroidApps.map((app) => (
+          {otherAndroidApps.filter((app) => !groupedKeys.has(androidAppKey(app.package))).map((app) => (
             <button key={app.package} onClick={() => handleAndroidAppClick(app.package)}
               onContextMenu={(e) => e.preventDefault()}
               onPointerDown={(e) => pressApp(e, { id: androidAppKey(app.package), icon: getAndroidAppIcon(app.package), onTap: () => pinApp(androidAppKey(app.package)) })}
@@ -286,8 +385,19 @@ const QuickActionsApp: React.FC = () => {
               </span>
             </button>
           ))}
+
+          {/* Nieuwe groep */}
+          {!isAppEditMode && (
+            <button onClick={() => { const id = addGroup(t('New group')); setOpenGroupId(id); setGroupMode('choose'); }}
+              style={{ background: 'none', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', outline: 'none', cursor: 'pointer' }}>
+              <div style={{ width: 40, height: 40, borderRadius: 8, border: `2px dashed ${isDarkMode ? '#555' : '#ccc'}`, boxSizing: 'border-box',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888', pointerEvents: 'none' }}><Plus size={20} /></div>
+              <span style={{ color: '#888', fontSize: 'calc(12px * var(--text-scale, 1))', fontWeight: '500', pointerEvents: 'none' }}>{t('New group')}</span>
+            </button>
+          )}
         </div>
         </div>
+        </>)}
         </>)}
       </div>
     </div>

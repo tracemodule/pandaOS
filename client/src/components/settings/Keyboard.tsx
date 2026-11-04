@@ -28,6 +28,26 @@ type ShiftMode = 'off' | 'once' | 'lock';
 // Tijd (ms) waarbinnen een tweede shift-tik caps lock aanzet
 const DOUBLE_TAP_MS = 400;
 
+// Spraakinvoer: meldingen (Nederlands; het toetsenbord heeft verder geen vertaalde teksten)
+const VOICE_MESSAGES: Record<string, string> = {
+  permission: 'Sta de microfoon toe en tik opnieuw op de microfoon.',
+  ready: 'Microfoon toegestaan. Tik op de microfoon om te praten.',
+  unavailable: 'Spraakherkenning is niet beschikbaar op dit apparaat (installeer of update de Google-app).',
+  nothing: 'Niets verstaan. Probeer het nog eens.',
+  network: 'Geen internet: spraakherkenning werkt alleen online.',
+  audio: 'De microfoon geeft geen geluid.',
+  error: 'Spraakinvoer lukte niet.',
+};
+
+// Herkende tekst achteraan het invoerveld toevoegen (met een spatie ertussen)
+const insertVoiceText = (text: string) => {
+  const { keyboardValue, setKeyboardValue } = useUIStore.getState();
+  const clean = text.trim();
+  if (!clean) return;
+  const separator = keyboardValue && !keyboardValue.endsWith(' ') ? ' ' : '';
+  setKeyboardValue(keyboardValue + separator + clean);
+};
+
 interface KeyProps {
   className?: string;
   onPress: () => void;
@@ -73,6 +93,30 @@ const Keyboard: React.FC = () => {
   const [shiftMode, setShiftMode] = useState<ShiftMode>('off');
   const [showSymbols, setShowSymbols] = useState(false);
   const lastShiftTap = useRef(0);
+  // Spraakinvoer (microfoon-toets): luistert, tussenresultaat, foutmelding
+  const [voice, setVoice] = useState<{ listening: boolean; preview: string; message: string }>({ listening: false, preview: '', message: '' });
+  const webRecognizer = useRef<any>(null);
+
+  // Resultaten van de spraakherkenning van Android (VoiceInput.kt via window.PandaOS.voiceInput)
+  useEffect(() => {
+    const onVoice = (e: Event) => {
+      const { state, text = '', error = '' } = (e as CustomEvent).detail as { state: string; text?: string; error?: string };
+      if (state === 'listening') setVoice({ listening: true, preview: '', message: '' });
+      else if (state === 'partial') setVoice((v) => ({ ...v, preview: text }));
+      else if (state === 'final') insertVoiceText(text);
+      else if (state === 'ready') setVoice({ listening: false, preview: '', message: VOICE_MESSAGES.ready });
+      else if (state === 'error') setVoice({ listening: false, preview: '', message: VOICE_MESSAGES[error] ?? VOICE_MESSAGES.error });
+      else setVoice((v) => ({ ...v, listening: false, preview: '' }));
+    };
+    window.addEventListener('pandaos-voice', onVoice);
+    return () => window.removeEventListener('pandaos-voice', onVoice);
+  }, []);
+  // Melding (toestemming, geen internet ...) na 5 seconden weer weg
+  useEffect(() => {
+    if (!voice.message) return;
+    const timer = window.setTimeout(() => setVoice((v) => ({ ...v, message: '' })), 5000);
+    return () => window.clearTimeout(timer);
+  }, [voice.message]);
 
   useEffect(() => {
     setTheme(getEffectiveTheme(screenMode, vehicleLightsOn));
@@ -102,6 +146,35 @@ const Keyboard: React.FC = () => {
   const isDarkMode = theme === 'dark';
 
   if (!isKeyboardOpen) return null;
+
+  // Microfoon-toets: op de radio de spraakherkenning van Android, op laptop/Pi die van de browser (als die er is)
+  const toggleVoice = () => {
+    const language = useUIStore.getState().displaySettings.language === 'en' ? 'en-US' : 'nl-NL';
+    const android = (window as any).PandaAndroid;
+    if (android?.startVoiceInput) {
+      if (voice.listening) { android.stopVoiceInput(); return; }
+      const result = android.startVoiceInput(language);
+      if (result === 'permission') setVoice({ listening: false, preview: '', message: VOICE_MESSAGES.permission });
+      else if (result === 'unavailable') setVoice({ listening: false, preview: '', message: VOICE_MESSAGES.unavailable });
+      return;
+    }
+    const Recognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!Recognition) { setVoice({ listening: false, preview: '', message: VOICE_MESSAGES.unavailable }); return; }
+    if (voice.listening) { webRecognizer.current?.stop(); return; }
+    const rec = new Recognition();
+    rec.lang = language;
+    rec.interimResults = true;
+    rec.onstart = () => setVoice({ listening: true, preview: '', message: '' });
+    rec.onresult = (e: any) => {
+      const result = e.results[e.results.length - 1];
+      if (result.isFinal) insertVoiceText(result[0].transcript);
+      else setVoice((v) => ({ ...v, preview: result[0].transcript }));
+    };
+    rec.onerror = () => setVoice({ listening: false, preview: '', message: VOICE_MESSAGES.error });
+    rec.onend = () => setVoice((v) => ({ ...v, listening: false, preview: '' }));
+    webRecognizer.current = rec;
+    rec.start();
+  };
 
   // Huidige cursorpositie, begrensd op de lengte van de tekst
   const caretPos = caret === null ? keyboardValue.length : Math.min(caret, keyboardValue.length);
@@ -162,6 +235,12 @@ const Keyboard: React.FC = () => {
 
   return (
     <div className="keyboard-wrapper">
+      {/* Spraakinvoer: wat er gehoord wordt, of waarom het niet lukt */}
+      {(voice.listening || voice.message) && (
+        <div className={`voice-strip ${isDarkMode ? 'dark-mode' : ''}`}>
+          {voice.listening ? <><span className="voice-dot" /> {voice.preview || 'Luisteren…'}</> : voice.message}
+        </div>
+      )}
       <div className={`tsl-keyboard ${isDarkMode ? 'dark-mode' : 'light-mode'}`} onClick={(e) => e.stopPropagation()}>
 
         {/* LETTERBLOK (links) */}
@@ -201,7 +280,7 @@ const Keyboard: React.FC = () => {
             >
               <ChevronUp size={24} strokeWidth={2} />
             </Key>
-            <Key className="special mic" ariaLabel="Spraak" onPress={() => { /* Spraakinvoer nog niet beschikbaar */ }}>
+            <Key className={`special mic ${voice.listening ? 'is-listening' : ''}`} ariaLabel="Spraak" onPress={toggleVoice}>
               <Mic size={20} strokeWidth={2} />
             </Key>
             <Key className="special spacebar" ariaLabel="Spatie" onPress={() => insertText(' ')}>{null}</Key>

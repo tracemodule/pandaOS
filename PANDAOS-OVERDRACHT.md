@@ -256,6 +256,19 @@ toetsenbord of auto-/Bluetooth-/CarPlay-apps); paneel van de fabrikant vervangen
 paneel dicht (ACTION_CLOSE_SYSTEM_DIALOGS/collapsePanels, mag door targetSdk 28) en PandaOS-paneel open. Getest op de
 emulator ook op 1280×720 en 800×480. Nog testen op de radio: het paneel van de fabrikant.
 
+**Na 1.3.3 (5 november 2026, nog niet uitgebracht)**:
+- **App-groepen** (`store/appGroups.ts`, QuickActionsApp): tegel "Nieuwe groep" → apps kiezen (tikken = erin/eruit, knop
+  "Alle Google-apps toevoegen"), hernoemen, groep verwijderen (apps weer los). Map toont 4 mini-pictogrammen. Opgeslagen in
+  localStorage `pandaos-app-groups`. Sleutels: PandaOS-id of `pkg:<pakket>`.
+- **Spraakinvoer** op de microfoon-toets: `VoiceInput.kt` (Android SpeechRecognizer, meestal van de Google-app; online).
+  Webtoetsenbord: bridge startVoiceInput/stopVoiceInput → `PandaOS.voiceInput` → strook boven het toetsenbord
+  (Luisteren…/tussenresultaat/melding), eindresultaat achteraan het veld. Android-toetsenbord: tussenresultaat als
+  composing-tekst, zonder toestemming opent PandaOS de vraag (EXTRA_REQUEST_MIC). Taal volgt PandaOS (nl-NL/en-US).
+  RECORD_AUDIO in het manifest. Laptop/Pi: Web Speech API als de browser die heeft. Op de emulator: toestemming en
+  foutmelding getest; de herkenning zelf gaf "network" (emulator), op de radio nog testen.
+- Weergave op de lichtschakelaar: werkt al via Koppelen → Stadslicht/Dimlicht (zet vehicleLightsOn → donker thema).
+- i18n: app-namen van Android gaan door t(); daarom CAN-groep "Rijden" als sleutel 'Driving' (niet 'Drive', anders heet
+  Google Drive "Rijden").
 **Derde test in de auto (5 november 2026, 1.3.2)**: radio is echt **Android 9** (sdk 28; versietekst zegt 12/15),
 SoC ac8257 (MediaTek-achtig, Jancar/ATC). Achteruit geleerd via Koppelen werkt. Dubbele achteruitcamera (PandaOS + radio):
 nieuw Settings → Voertuig → Achteruitcamera "Van de radio" (standaard op de radio: PandaOS toont alleen R) of

@@ -16,12 +16,37 @@ $kb-numpad-width: 300px;   // Breedte van het numpad
   bottom: var(--dock-height, 64px); // Precies boven de dock (hoogte instelbaar, zie _control-bar.scss)
   z-index: 1000;
   display: flex;
-  align-items: flex-end; // Plakt aan de onderkant
+  flex-direction: column; // spraakstrook (voice-strip) boven het toetsenbord
+  justify-content: flex-end; // Plakt aan de onderkant
   // Laat klikken door naar wat erboven ligt (bijv. een zoekresultaat); sluiten bij een klik buiten
   // het toetsenbord gebeurt in Keyboard.tsx met een pointerdown-luisteraar
   pointer-events: none;
 
   .tsl-keyboard { pointer-events: auto; }
+
+  // Spraakinvoer: wat er gehoord wordt (of een melding), als pil boven het toetsenbord
+  .voice-strip {
+    align-self: center;
+    margin-bottom: 10px;
+    max-width: 80%;
+    padding: 10px 20px;
+    border-radius: 24px;
+    background: rgba(255, 255, 255, 0.95);
+    color: #222;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    font-size: calc(16px * var(--text-scale, 1));
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    &.dark-mode { background: rgba(40, 40, 40, 0.95); color: #fff; }
+  }
+  .voice-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #e53935;
+    flex-shrink: 0;
+  }
 }
 
 .tsl-keyboard {
@@ -78,6 +103,7 @@ $kb-numpad-width: 300px;   // Breedte van het numpad
   .row-4 {
     .shift { grid-column: span 4; }
     .mic { grid-column: span 2; }
+    .mic.is-listening { background-color: #e53935; color: #fff; } // microfoon luistert
     .spacebar { grid-column: span 10; }
     .symbols { grid-column: span 4; }
     .caret-left,

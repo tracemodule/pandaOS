@@ -191,6 +191,21 @@ class PandaBridge(
     @JavascriptInterface
     fun setUiTheme(dark: Boolean) = PandaKeyboardService.setDark(activity, dark)
 
+    // Spraakinvoer voor het webtoetsenbord. Zonder microfoontoestemming eerst het Android-venster; daarna
+    // komt voiceInput({state:'ready'}) en tikt de gebruiker opnieuw op de microfoon.
+    @JavascriptInterface
+    fun startVoiceInput(language: String): String {
+        val main = activity as? MainActivity ?: return "unavailable"
+        PandaKeyboardService.setLanguage(activity, language)
+        if (!main.voice.hasPermission()) { activity.runOnUiThread { main.requestMicrophone() }; return "permission" }
+        if (!main.voice.isAvailable()) return "unavailable"
+        main.voice.start(language)
+        return "ok"
+    }
+
+    @JavascriptInterface
+    fun stopVoiceInput() { (activity as? MainActivity)?.voice?.stop() }
+
     // "enabled" = aangezet in Android; "default" = het toetsenbord dat nu verschijnt
     @JavascriptInterface
     fun getKeyboardState(): String {
