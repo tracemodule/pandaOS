@@ -256,6 +256,48 @@ toetsenbord of auto-/Bluetooth-/CarPlay-apps); paneel van de fabrikant vervangen
 paneel dicht (ACTION_CLOSE_SYSTEM_DIALOGS/collapsePanels, mag door targetSdk 28) en PandaOS-paneel open. Getest op de
 emulator ook op 1280×720 en 800×480. Nog testen op de radio: het paneel van de fabrikant.
 
+**CAN-koppelen en Verbinding (5 november 2026, nog niet uitgebracht)**: CAN-monitor heeft nu de tabbladen Live, Detectie,
+**Koppelen**, **Verbinding** en Apps.
+- Koppelen (`CanLinkPanel.tsx`, `canSignals.ts`, `CanLinks.kt`): per functie (achteruit, handrem, 4 deuren, achterklep,
+  stadslicht, dimlicht, grootlicht, knipperlichten, alarmlichten, snelheid, brandstof, buitentemperatuur, actieradius)
+  "Leer aan/uit" of "Leren" → 10 s de handeling doen → regels die in de 30 s daarvoor niet voorkwamen (getallen genegeerd)
+  → regel kiezen, zoektekst aanpassen → Koppeling opslaan. Opgeslagen op de radio (SharedPreferences `pandaos_canlinks`).
+  Launcher vergelijkt elke logregel/broadcast en roept `PandaOS.canSignal({func, action, value})` aan → autostatus,
+  3D-model, meldingen. Met koppelingen leest de monitor op de achtergrond door (ook met de app dicht).
+  Getest op de emulator met een testregel (deur linksvoor ging open in het model).
+- Let op: Android 13+ vraagt bij elke nieuwe logcat-sessie om eenmalige toegang, ook na `pm grant READ_LOGS`.
+  Dus één keer "Toestaan" per opstart van PandaOS; broadcasts werken zonder.
+- Verbinding (`CanConnectionPanel.tsx`): seriële poorten (bekende namen rechtstreeks geprobeerd, want /dev doorbladeren mag
+  niet), leesbaar/schrijfbaar, CAN-interfaces, systeemeigenschappen (can/mcu/protocol/backcar/jancar), CAN-apps.
+  Seriële poorten zijn normaal alleen voor het systeem; zijn ze op de radio leesbaar, dan kan PandaOS later de ruwe data lezen.
+- Startscherm: Settings → Apps → Startscherm (`HomeScreenPanel.tsx`, bridge getHomeApps/setHomeApp/openHomeSettings/openHomeApp).
+**Tweede test in de auto (5 november 2026, 1.3.1) en wat er daarna veranderd is (nog niet uitgebracht):**
+- Werkt: wifi, Bluetooth, helderheid, nachtfilter, update via GitHub, WebView 138.
+- Achteruit: de radio is een **Jancar**-platform. Bij R neemt de camera-app `com.jancar.hd2cam` het scherm over
+  (Camera Type: DVR(RCA), videobron AHD 720P 25fps); in de log `BackCarService`/`BackcarMonitor` (MSG_EVENT_BACKCAR_STOP),
+  de CAN-app `com.can.activity` (pakket `com.autoai.canbus`, RadarBase.doReverse) en de broadcast
+  **`android.backcar.action.FINISH`** bij het einde. Nieuw: `CarSignals.kt` luistert naar backcar-broadcasts
+  (START/ENTER/... en FINISH/EXIT/...), schrijft elke backcar-broadcast in het diagnoselogboek en zet R in PandaOS.
+  Omdat de naam voor het begin nog onbekend is: venster over PandaOS zonder aanraking + ooit een backcar-broadcast gezien
+  = achteruit (focus terug = einde). Achteruitcamera in PandaOS zelf kan pas als de camera niet door hd2cam bezet is
+  (log: Camera3-Device "No such device"); later: hd2cam uitzetten (apparaateigenaar: setApplicationHidden) en testen.
+- Bug 1.3.1: bij R opende het PandaOS-paneel (focusverlies door de camera-app). Nu telt alleen een veeg vanaf de
+  bovenrand (laatste aanraking < 1,5 s, y < 60 dp) als paneel.
+- Volume: PandaOS-volume was alleen weergave. Nu gekoppeld aan het Android-mediavolume (STREAM_MUSIC): ophalen bij start,
+  `android.media.VOLUME_CHANGED_ACTION` → `PandaOS.systemVolume`, pijltjes = één echte stap (adjustStreamVolume),
+  schuifbalk = setStreamVolume. Nog testen of de VOL-knoppen van de radio (gaan naar de audiochip BD37534) het
+  Android-volume veranderen: zie "Volume van de radio" in het diagnoselogboek.
+- Muziek zei "geen telefoon verbonden": keek alleen naar de PandaOS-server (Pi). Nu op de radio via de Bluetooth van Android.
+- Telefoon: bellen gaat via de Bluetooth-app van de radio (proces "Bluetooth2023"); de Telefoon-app herkent die nu als
+  keuze in Settings → Apps → Telefoon.
+- CAN: Simple heeft voor Golf alleen 2013~Now; **Hiworld** heeft Golf 2008~2012 (gekozen, systeem herstart). Beide gaven
+  nog geen autodata (`mCarSpeedAvailableInProtocol false`). Na Hiworld veranderde de airco-weergave (misschien toeval, of
+  het kastje praat wel met de auto). Volgende stap: merk op het CAN-kastje achter de radio aflezen (sticker), dan dat
+  merk + Golf 2008~2012 kiezen. Raise (RZC) is bij VW PQ ook gangbaar.
+- Geen data zonder CAN: deuren, lichten/grootlicht, brandstof, onderhoud (kilometerstand), weergave op lichtschakelaar.
+- PandaOS wordt vaak overschreven door de radio-software: PandaOS is nog geen startscherm en geen apparaateigenaar.
+  Radio: Meer instellingen → **Selectie van het startvenster** → PandaOS; Fabrieksinstelling → Applicatieselectie starten.
+
 **Gevonden in de auto, nog uitzoeken:**
 - **Achteruit**: in R verandert PandaOS niets en de camera-app van de radio neemt het scherm over. Volgende keer: CAN-monitor
   aan (Alles, niet Alleen auto), in R zetten, Probleem melden → daarin staat welk signaal/welke app de radio gebruikt.

@@ -7,6 +7,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Activity, Play, Square, Trash2, Save, X, Filter, Share2 } from 'lucide-react';
 import { reportProblem } from '../../services/diagnostics';
+import CanLinkPanel from '../../components/canmonitor/CanLinkPanel';
+import CanConnectionPanel from '../../components/canmonitor/CanConnectionPanel';
 import { useUIStore } from '../uiStore';
 import { getEffectiveTheme } from '../../settings';
 import { useT } from '../../i18n';
@@ -16,7 +18,7 @@ interface MonitorState {
   logAccess: boolean; running: boolean; onlyCan: boolean;
   lines: MonitorLine[]; canApps: { package: string; name: string }[];
 }
-type Tab = 'Live' | 'Detection' | 'Apps';
+type Tab = 'Live' | 'Detection' | 'Link' | 'Connection' | 'Apps';
 
 // Soorten signalen om te herkennen in de regels (Detectie)
 const SIGNALS: { label: string; pattern: RegExp }[] = [
@@ -119,7 +121,7 @@ const CanMonitorApp: React.FC = () => {
           )}
 
           <div className="tsl-segmented">
-            {(['Live', 'Detection', 'Apps'] as Tab[]).map((name) => (
+            {(['Live', 'Detection', 'Link', 'Connection', 'Apps'] as Tab[]).map((name) => (
               <button key={name} className={tab === name ? 'is-active' : ''} onClick={() => setTab(name)}>{t(name)}</button>
             ))}
           </div>
@@ -156,6 +158,12 @@ const CanMonitorApp: React.FC = () => {
               </div>
             </div>
           )}
+
+          {/* Koppelen: signalen van de radio aan functies van PandaOS koppelen, door te leren */}
+          {tab === 'Link' && <CanLinkPanel logAccess={!!state?.logAccess} />}
+
+          {/* Verbinding: poorten, eigenschappen en apps van de radio */}
+          {tab === 'Connection' && <CanConnectionPanel />}
 
           {/* CAN-apps van de fabrikant en de gekozen instelling */}
           {tab === 'Apps' && (

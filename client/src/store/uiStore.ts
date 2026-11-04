@@ -677,11 +677,24 @@ export const useUIStore = create<UIState>()(persist((set, get) => ({
   
   closeKeyboard: () => set({ isKeyboardOpen: false }),
   setKeyboardValue: (val) => set({ keyboardValue: val }),
-  setVolume: (val) => set({ volume: Math.max(0, Math.min(100, val)) }),
+  // Op de radio ook het Android-mediavolume zetten (CarSignals.kt); terugkoppeling via window.PandaOS.systemVolume
+  setVolume: (val) => {
+    const volume = Math.max(0, Math.min(100, val));
+    set({ volume });
+    (window as any).PandaAndroid?.setSystemVolume?.(Math.round(volume));
+  },
   toggleVolume: () => set((state) => ({ isVolumeOpen: !state.isVolumeOpen })),
   // Volume omhoog/omlaag (pijltjes en straks VOL+/VOL-): stap van 1 en de popup even tonen.
   // De popup sluit zelf 3 seconden na de laatste wijziging (VolumePopup).
-  stepVolume: (delta) => set((state) => ({ volume: Math.max(0, Math.min(100, state.volume + delta)), isVolumeOpen: true })),
+  stepVolume: (delta) => {
+    // Op de radio: één echte volumestap van Android (de radio heeft minder dan 100 stappen) en het echte percentage tonen
+    const android = (window as any).PandaAndroid;
+    if (android?.stepSystemVolume) {
+      const percent = android.stepSystemVolume(delta);
+      if (percent >= 0) { set({ volume: percent, isVolumeOpen: true }); return; }
+    }
+    set({ volume: Math.max(0, Math.min(100, get().volume + delta)), isVolumeOpen: true });
+  },
   
   setActiveTab: (tab) => set({ activeTab: tab }),
 

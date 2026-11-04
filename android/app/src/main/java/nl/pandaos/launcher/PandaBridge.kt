@@ -74,6 +74,29 @@ class PandaBridge(
     @JavascriptInterface
     fun canMonitorClear() = can.clear()
 
+    // ---------------- CAN-koppelen en Verbinding (CAN-monitor) ----------------
+
+    @JavascriptInterface
+    fun canLinksGet(): String = (activity as? MainActivity)?.links?.json() ?: "[]"
+
+    @JavascriptInterface
+    fun canLinksSave(json: String): Boolean {
+        val main = activity as? MainActivity ?: return false
+        val ok = main.links.save(json)
+        if (ok) activity.runOnUiThread { main.applyCanLinks() }
+        return ok
+    }
+
+    // Leren: begin (handeling doen) en uitslag (regels die er nieuw bijkwamen)
+    @JavascriptInterface
+    fun canLearnStart() = can.learnStart()
+
+    @JavascriptInterface
+    fun canLearnResult(): String = can.learnResult()
+
+    @JavascriptInterface
+    fun canConnectionInfo(): String = can.connectionInfo()
+
     // Geeft het pad van het opgeslagen bestand terug
     @JavascriptInterface
     fun canMonitorSave(): String = can.save()
@@ -429,5 +452,91 @@ class PandaBridge(
         val freed = ((after - before) / 1_048_576).coerceAtLeast(0)
         DiagLog.add("info", "Optimalisatie: $closed apps gesloten, $freed MB vrij")
         return JSONObject().put("closed", closed).put("freedMb", freed).toString()
+    }
+
+    // ---------------- Volume van de radio (Android-mediavolume) ----------------
+
+    @JavascriptInterface
+    fun getSystemVolume(): Int = (activity as? MainActivity)?.signals?.volumePercent() ?: -1
+
+    @JavascriptInterface
+    fun stepSystemVolume(delta: Int): Int = (activity as? MainActivity)?.signals?.stepVolume(delta) ?: -1
+
+    @JavascriptInterface
+    fun setSystemVolume(percent: Int) { (activity as? MainActivity)?.signals?.setVolumePercent(percent) }
+
+    // Achteruit zoals de launcher hem nu ziet (bij het opnieuw laden van de webapp)
+    @JavascriptInterface
+    fun isReverseActive(): Boolean = (activity as? MainActivity)?.signals?.reverseActive ?: false
+
+    // ---------------- Startscherm (Settings > Apps > Startscherm) ----------------
+    // Welk startscherm de Home-knop opent: PandaOS of dat van de radio. Als apparaateigenaar zet PandaOS het meteen
+    // vast; anders opent Android zijn eigen keuzescherm (of het radiomenu "Selectie van het startvenster").
+
+    private fun homeIntent() = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+
+    // [{"package":"..","activity":"..","name":"..","default":true,"pandaos":false}]
+    @JavascriptInterface
+    fun getHomeApps(): String {
+        val pm = activity.packageManager
+        val current = pm.resolveActivity(homeIntent(), PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo
+        val array = JSONArray()
+        pm.queryIntentActivities(homeIntent(), 0)
+            .filter { it.activityInfo.packageName != "com.android.settings" } // terugvalscherm van Android zelf
+            .distinctBy { it.activityInfo.packageName }
+            .forEach { info ->
+                val a = info.activityInfo
+                array.put(JSONObject()
+                    .put("package", a.packageName).put("activity", a.name)
+                    .put("name", info.loadLabel(pm).toString())
+                    .put("default", current?.packageName == a.packageName && current.name == a.name)
+                    .put("pandaos", a.packageName == activity.packageName))
+            }
+        return array.toString()
+    }
+
+    // Startscherm kiezen. true = meteen ingesteld (apparaateigenaar); false = Android-keuzescherm geopend.
+    @JavascriptInterface
+    fun setHomeApp(pkg: String): Boolean {
+        activity.getSharedPreferences("pandaos_home", android.content.Context.MODE_PRIVATE).edit().putString("home", pkg).apply()
+        DiagLog.add("info", "Startscherm gekozen: $pkg")
+        if (isDeviceOwner()) {
+            try {
+                val target = activity.packageManager.queryIntentActivities(homeIntent(), 0).firstOrNull { it.activityInfo.packageName == pkg }?.activityInfo
+                    ?: return false
+                policy!!.clearPackagePersistentPreferredActivities(admin, activity.packageName)
+                val filter = android.content.IntentFilter(Intent.ACTION_MAIN).apply {
+                    addCategory(Intent.CATEGORY_HOME); addCategory(Intent.CATEGORY_DEFAULT)
+                }
+                policy!!.addPersistentPreferredActivity(admin, filter, ComponentName(target.packageName, target.name))
+                return true
+            } catch (_: Exception) { /* niet toegestaan: via het keuzescherm hieronder */ }
+        }
+        openHomeSettings()
+        return false
+    }
+
+    // Android-scherm 'Startscherm-app' (Standaard-apps); anders de gewone instellingen
+    @JavascriptInterface
+    fun openHomeSettings() {
+        activity.runOnUiThread {
+            try { activity.startActivity(Intent(Settings.ACTION_HOME_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            catch (_: Exception) {
+                try { activity.startActivity(Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                catch (_: Exception) { activity.startActivity(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            }
+        }
+    }
+
+    // Een ander startscherm één keer openen (bijv. even naar het scherm van de radio)
+    @JavascriptInterface
+    fun openHomeApp(pkg: String): Boolean {
+        val target = activity.packageManager.queryIntentActivities(homeIntent(), 0).firstOrNull { it.activityInfo.packageName == pkg }?.activityInfo
+            ?: return false
+        return try {
+            activity.startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+                .setComponent(ComponentName(target.packageName, target.name)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            true
+        } catch (_: Exception) { false }
     }
 }

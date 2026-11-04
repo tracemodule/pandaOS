@@ -33,8 +33,10 @@ class MainActivity : Activity() {
     private lateinit var webView: WebView
     private lateinit var media: MediaWatcher
     private lateinit var radio: RadioConnectivity // wifi en Bluetooth voor de eigen Settings-schermen
-    private lateinit var can: CanMonitor // CAN-monitor in Settings > Voertuig
+    private lateinit var can: CanMonitor // CAN-monitor (app in PandaOS)
+    lateinit var links: CanLinks // CAN-koppelingen: regel/broadcast van de radio -> functie in PandaOS
     private lateinit var updates: UpdateInstaller // software-updates uit GitHub Releases
+    lateinit var signals: CarSignals // achteruit en volume van de radio zelf
     private var pendingCameraRequest: PermissionRequest? = null // wacht op de Android-cameratoestemming
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -51,8 +53,11 @@ class MainActivity : Activity() {
 
         media = MediaWatcher(this) { call -> callWeb(call) }
         radio = RadioConnectivity(this) { call -> callWeb(call) }.also { it.start() }
-        can = CanMonitor(this)
+        links = CanLinks(this) { call -> callWeb(call) }
+        can = CanMonitor(this) { source, text -> links.check(source, text) }
+        applyCanLinks()
         updates = UpdateInstaller(this) { call -> callWeb(call) }
+        signals = CarSignals(this) { call -> callWeb(call) }.also { it.start() }
         // Nieuwe of verdwenen melding: het PandaOS-paneel werkt zijn lijst bij
         MediaListenerService.onChange = { runOnUiThread { callWeb("notificationsChanged()") } }
 
@@ -164,6 +169,7 @@ class MainActivity : Activity() {
         media.stop()
         radio.stop()
         can.stop()
+        signals.stop()
         MediaListenerService.onChange = null
         super.onDestroy()
     }
@@ -175,18 +181,44 @@ class MainActivity : Activity() {
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        if (hasFocus) { hideSystemBars(); return } // na terugkeer uit een Android-app weer volledig scherm
-        // Focus kwijt terwijl PandaOS vooraan blijft (geen onPause): er schuift iets over PandaOS heen. Op de
-        // Golf-radio is dat het meldingenpaneel van de fabrikant, dat niet als Android-statusbalk binnenkomt
-        // (watchSystemBars ziet het dan niet). Met het PandaOS-paneel gekozen: dat paneel dichtdoen en het onze openen.
-        if (!pandaPanel || SystemClock.uptimeMillis() < ignoreFocusLossUntil) return
+        if (hasFocus) {
+            hideSystemBars() // na terugkeer uit een Android-app weer volledig scherm
+            // Camera-app van de radio weer weg: achteruit voorbij (als we achteruit zelf zo afgeleid hadden)
+            if (reverseFromOverlay) { reverseFromOverlay = false; signals.setReverse(false, "camera-app van de radio weg") }
+            return
+        }
+        // Focus kwijt terwijl PandaOS vooraan blijft (geen onPause): er schuift een venster over PandaOS heen.
+        // Op de Golf-radio kan dat twee dingen zijn (gezien op 5 november 2026):
+        //  1. het meldingenpaneel van de fabrikant, na een veeg vanaf de bovenrand → PandaOS-paneel openen
+        //  2. de camera-app van de radio (com.jancar.hd2cam) bij achteruit, zonder aanraking → achteruit tonen
+        // Alleen een veeg vanaf de bovenrand telt als paneel; anders opende het paneel bij het inschakelen van R.
+        if (SystemClock.uptimeMillis() < ignoreFocusLossUntil || !::signals.isInitialized) return
         window.decorView.postDelayed({
-            if (resumed && !hasWindowFocus() && pandaPanel && SystemClock.uptimeMillis() >= ignoreFocusLossUntil) {
-                collapseSystemPanel()
-                callWeb("openPanel()")
-                DiagLog.add("info", "Paneel van het systeem vervangen door het PandaOS-paneel")
+            if (!resumed || hasWindowFocus() || SystemClock.uptimeMillis() < ignoreFocusLossUntil) return@postDelayed
+            val swipedFromTop = SystemClock.uptimeMillis() - lastTouchDownAt < 1500 &&
+                lastTouchDownY >= 0 && lastTouchDownY < resources.displayMetrics.density * 60
+            when {
+                swipedFromTop && pandaPanel -> {
+                    collapseSystemPanel()
+                    callWeb("openPanel()")
+                    DiagLog.add("info", "Paneel van het systeem vervangen door het PandaOS-paneel")
+                }
+                !swipedFromTop && signals.backcarKnown && !signals.reverseActive -> {
+                    // Deze radio stuurt achteruit-broadcasts; een venster dat zonder aanraking over PandaOS komt is
+                    // dan vrijwel zeker de achteruitcamera (de broadcast voor het begin kennen we nog niet)
+                    reverseFromOverlay = true
+                    signals.setReverse(true, "camera-app van de radio verscheen")
+                }
+                else -> DiagLog.add("info", "Venster over PandaOS zonder veeg van boven (niet als paneel behandeld)")
             }
         }, 400)
+    }
+    private var reverseFromOverlay = false
+
+    // Koppelingen gewijzigd: broadcasts van koppelingen ontvangen en (met koppelingen) op de achtergrond meelezen
+    fun applyCanLinks() {
+        can.setExtraActions(links.broadcastActions)
+        can.setBackground(!links.isEmpty)
     }
 
     // Eigen schermen van Android die PandaOS zelf opent zonder pauze (keuzelijst van toetsenborden): niet vervangen
@@ -267,6 +299,8 @@ class MainActivity : Activity() {
     private fun keepAsHomeScreen() {
         val policy = getSystemService(android.app.admin.DevicePolicyManager::class.java) ?: return
         if (!policy.isDeviceOwnerApp(packageName)) return
+        // Zelf een ander startscherm gekozen (Settings > Apps > Startscherm): PandaOS niet terugzetten
+        if (getSharedPreferences("pandaos_home", MODE_PRIVATE).getString("home", packageName) != packageName) return
         try {
             val filter = android.content.IntentFilter(android.content.Intent.ACTION_MAIN).apply {
                 addCategory(android.content.Intent.CATEGORY_HOME)

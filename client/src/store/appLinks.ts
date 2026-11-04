@@ -159,7 +159,9 @@ export const LINKABLE_APPS: LinkableApp[] = [
     { id: 'google-maps', name: 'Google Maps', package: 'com.google.android.apps.maps' },
     { id: 'waze', name: 'Waze', package: 'com.waze' },
   ] },
-  { id: 'phone', name: 'Phone', icon: '/app-icons/phone.svg', allowOther: true, options: [
+  // Telefoon: ook de Bluetooth-/beltelefoon-app van de radio (die regelt bellen via de telefoon; Android zelf niet)
+  { id: 'phone', name: 'Phone', icon: '/app-icons/phone.svg', allowOther: true,
+    detect: /bt ?phone|btphone|bluetooth|dialer|bellen|telefoon|handsfree|jancar.*(bt|phone)/i, options: [
     { id: 'google-phone', name: 'Google Phone', package: 'com.google.android.dialer' },
   ] },
   { id: 'camera', name: 'Camera', icon: '/app-icons/camera.svg', options: [] }, // achteruitrijcamera

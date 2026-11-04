@@ -5,6 +5,7 @@
 import { useUIStore } from '../store/uiStore';
 import { getLinkedAndroidPackage, launchAndroidPackage } from '../store/appLinks';
 import { diag } from './diagnostics';
+import { applyCanSignal } from './canSignals';
 
 // Wat er speelt in een Android-app (MediaWatcher.kt); positie en duur in seconden
 export interface AndroidNowPlaying {
@@ -19,6 +20,8 @@ export interface AndroidNowPlaying {
 export interface PandaOSWebBridge {
   stepVolume: (delta: number) => void;
   setReverseSignal: (active: boolean) => void;
+  systemVolume: (percent: number) => void;
+  canSignal: (signal: { func: string; action: 'on' | 'off' | 'value'; value: string }) => void;
   setNowPlaying: (media: AndroidNowPlaying | null) => void;
   setNowPlayingCover: (url: string | null) => void;
   // Autostatus van het CAN-kastje (lichtschakelaar, knipperlichten, deuren, versnellingsbak); zie CarState in uiStore
@@ -58,7 +61,18 @@ export const initAndroidBridge = () => {
     // VOL+/VOL-: stap 1, popup 3 seconden zichtbaar (zelfde als de pijltjes in de control-bar)
     stepVolume: (delta) => useUIStore.getState().stepVolume(delta),
     // R van de radio: toont R en straks de achteruitrijcamera
-    setReverseSignal: (active) => useUIStore.getState().setReverseSignal(active),
+    setReverseSignal: (active) => {
+      diag('info', 'car', `Achteruit-signaal van de radio: ${active ? 'aan' : 'uit'}`);
+      useUIStore.getState().setReverseSignal(active);
+    },
+    // Android-mediavolume veranderd (VOL-knoppen van de radio, andere app): alleen de weergave bijwerken, de popup
+    // tonen en niet terugsturen (anders een lus)
+    // Gekoppeld CAN-signaal herkend door de launcher (CAN-monitor > Koppelen, CanLinks.kt)
+    canSignal: (signal) => applyCanSignal(signal),
+    systemVolume: (percent) => {
+      const state = useUIStore.getState();
+      if (Math.abs(state.volume - percent) >= 1) useUIStore.setState({ volume: percent, isVolumeOpen: true });
+    },
 
     // Mediakaart en Music volgen de Android-app die speelt; null = niets meer (dan mogen Spotify/Bluetooth weer)
     setNowPlaying: (media) => {
@@ -98,6 +112,13 @@ export const initAndroidBridge = () => {
     },
   };
   (window as any).PandaOS = bridge;
+  // Volume en achteruit zoals ze nu op de radio staan
+  const android = (window as any).PandaAndroid;
+  if (android?.getSystemVolume) {
+    const percent = android.getSystemVolume();
+    if (percent >= 0) useUIStore.setState({ volume: percent });
+  }
+  if (android?.isReverseActive?.()) useUIStore.getState().setReverseSignal(true);
   // Na het opstartscherm (VW-logo) kijken of er al een telefoon verbonden is
   if ((window as any).PandaAndroid) window.setTimeout(checkPhoneAtStartup, 4000);
 };

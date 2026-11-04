@@ -73,10 +73,27 @@ const MusicApp: React.FC = () => {
       setContextItems(tracks);
   };
 
+  // Op de radio: verbonden telefoon volgens de Bluetooth van Android (zelfde bron als Settings > Bluetooth).
+  // De PandaOS-server (laptop/Pi) is daar niet, dus btConnectedAddress blijft dan leeg.
+  const [androidPhone, setAndroidPhone] = useState<{ name: string; address: string } | null>(null);
+  useEffect(() => {
+    const bridge = (window as any).PandaAndroid;
+    if (!isMusicOpen || !bridge?.getBluetoothState) return;
+    const read = () => {
+      try {
+        const connected = (JSON.parse(bridge.getBluetoothState()).devices ?? []).filter((d: { connected: boolean }) => d.connected);
+        setAndroidPhone(connected.find((d: { phone: boolean }) => d.phone) ?? connected[0] ?? null);
+      } catch { setAndroidPhone(null); }
+    };
+    read();
+    const timer = setInterval(read, 3000);
+    return () => clearInterval(timer);
+  }, [isMusicOpen]);
+
   if (!isMusicOpen) return null;
 
-  // Verbonden telefoon: ook na herladen bekend via My Devices (de scanlijst is dan nog leeg)
-  const connectedPhone = [...btKnownDevices, ...btDevices].find((d) => d.address === btConnectedAddress);
+  // Verbonden telefoon: op de radio via Android; anders ook na herladen bekend via My Devices (scanlijst dan nog leeg)
+  const connectedPhone = androidPhone ?? [...btKnownDevices, ...btDevices].find((d) => d.address === btConnectedAddress);
 
   const isDarkMode = theme === 'dark';
   const bgColor = isDarkMode ? '#1e1e1e' : '#f5f5f5';

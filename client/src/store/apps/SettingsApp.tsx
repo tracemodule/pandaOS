@@ -9,6 +9,7 @@ import AndroidWifiPanel from '../../components/settings/AndroidWifiPanel';
 import SoftwareUpdatePanel from '../../components/settings/SoftwareUpdatePanel';
 import DiagnosticsPanel from '../../components/settings/DiagnosticsPanel';
 import WebViewPanel from '../../components/settings/WebViewPanel';
+import HomeScreenPanel from '../../components/settings/HomeScreenPanel';
 import AndroidBluetoothPanel from '../../components/settings/AndroidBluetoothPanel';
 import TeslaSlider from '../../components/settings/TeslaSlider';
 import { useT } from '../../i18n';
@@ -646,6 +647,8 @@ const SettingsApp: React.FC = () => {
             {/* --- APPS TAB: per app aan/uit en welke app hij opent --- */}
             {activeTab === 'Apps' && (
               <div className="settings-list" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                {/* Startscherm: PandaOS of het scherm van de radio (alleen op de radio) */}
+                {isAndroidLauncher() && <><HomeScreenPanel /><hr className="tsl-divider" /></>}
                 <small className="tsl-hint">{t('Choose which app each PandaOS app opens. On the radio, your installed Android apps appear here.')}</small>
                 {/* Alleen op de radio: toegang om te zien wat er speelt in Spotify, YouTube enz. (mediakaart en Music) */}
                 {canAskMediaAccess && (
