@@ -343,6 +343,8 @@ Geen CAN-regels in het rapport: CAN-kastje geeft nog niets door.
   app-opslag), met terugval: eerst het opgeslagen model, anders internet, en het meegeleverde Golf 6-model altijd als
   laatste terugval. Nu zit het enige model (Golf 6) al in de APK en werkt het zonder internet.
 
+**Laptop met adb via wifi** (logs live met Claude, vaste logtoegang, CAN-app onderzoeken, root, apparaateigenaar): [LAPTOP-ADB.md](LAPTOP-ADB.md).
+
 **Radiotest**: draaiboek voor de laptop (alleen adb, geen Android Studio) in [RADIOTEST.md](RADIOTEST.md).
 
 **Met de emulator (afgesproken lijst, 4 november 2026, per stap):**
