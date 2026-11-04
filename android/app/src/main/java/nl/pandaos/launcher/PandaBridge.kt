@@ -265,6 +265,9 @@ class PandaBridge(
         if (!isDeviceOwner()) return false
         return try {
             policy!!.setStatusBarDisabled(admin, false)
+            // Vaste startscherm-keuze van PandaOS weg, anders blijft PandaOS ook na het opheffen geforceerd
+            try { policy!!.clearPackagePersistentPreferredActivities(admin, activity.packageName) } catch (_: Exception) {}
+            DiagLog.add("info", "Apparaateigenaar opgeheven")
             policy!!.clearDeviceOwnerApp(activity.packageName)
             true
         } catch (_: Exception) { false }

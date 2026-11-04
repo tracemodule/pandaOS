@@ -11,6 +11,8 @@ const HomeScreenPanel: React.FC = () => {
   const bridge = (window as any).PandaAndroid;
   const [apps, setApps] = useState<HomeApp[]>([]);
   const [message, setMessage] = useState<string | null>(null);
+  const [owner, setOwner] = useState<boolean>(() => !!bridge?.isDeviceOwner?.());
+  const [confirmClear, setConfirmClear] = useState(false);
 
   const read = useCallback(() => {
     try { setApps(JSON.parse(bridge?.getHomeApps?.() ?? '[]')); } catch { setApps([]); }
@@ -61,6 +63,21 @@ const HomeScreenPanel: React.FC = () => {
         <ExternalLink size={18} /> {t('Android home screen settings')}
       </button>
       <small className="tsl-hint">{t('Also possible in the radio menu: More settings → Selection of the start window.')}</small>
+
+      {/* Apparaateigenaar (ingesteld via de laptop, LAPTOP-ADB.md): hier weer opheffen, zonder fabrieksreset */}
+      {owner && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <small className="tsl-hint">{t('PandaOS is device owner: it stays the home screen and blocks the Android panel.')}</small>
+          {confirmClear ? (
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button className="tsl-btn is-primary" onClick={() => { bridge.clearDeviceOwner(); setOwner(!!bridge.isDeviceOwner()); setConfirmClear(false); read(); }}>{t('Yes, remove device owner')}</button>
+              <button className="tsl-btn" onClick={() => setConfirmClear(false)}>{t('Cancel')}</button>
+            </div>
+          ) : (
+            <button className="tsl-btn" style={{ alignSelf: 'flex-start' }} onClick={() => setConfirmClear(true)}>{t('Remove device owner')}</button>
+          )}
+        </div>
+      )}
     </div>
   );
 };
