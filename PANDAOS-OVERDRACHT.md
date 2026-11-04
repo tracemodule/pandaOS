@@ -219,6 +219,8 @@ Op de radio neemt die app de rol van de Node-server over.
 
 ## Nog open
 
+**Radiotest**: draaiboek voor de laptop (alleen adb, geen Android Studio) in [RADIOTEST.md](RADIOTEST.md).
+
 **Met de emulator (afgesproken lijst, 4 november 2026, per stap):**
 2. Achteruitrijcamera op de radio: via ADB kijken of de achteruitrijcamera als gewone Android-camera beschikbaar
    is (dan werkt het camerabeeld meteen; anders via de camera-app/-service van de fabrikant).
