@@ -15,6 +15,50 @@ logs meelezen.
   - vraagt Android na stap 4 **nooit meer** om logtoegang (de vraag "eenmalige toegang" bestaat pas vanaf Android 13).
 - Alles hieronder is **alleen lezen of PandaOS instellen**. Niets schrijft naar de CAN-bus, de MCU of de poorten.
 - Niet doen: fabrieksreset, OTA/MCU/CANBUS-update, `adb shell rm`, iets naar `/dev/...` schrijven.
+- **Je Google-account blijft staan.** Alles hieronder werkt met account. Alleen stap 7 (apparaateigenaar) vraagt om
+  het account te verwijderen; die stap slaan we voorlopig over.
+
+---
+
+## Draaiboek voor de laptop-sessie (PandaOS 1.3.6)
+
+Doel: de radio klaarmaken voor gebruik. Lampjes, gordel, deuren, snelheid en volume komen dan echt van de auto, en we
+weten waar de radio zijn eigen instellingen bewaart. Zeg tegen Claude op de laptop:
+*"Lees LAPTOP-ADB.md en PANDAOS-OVERDRACHT.md, we doen het draaiboek"*. Werk de blokken in deze volgorde af.
+
+**A. Voorbereiden (thuis, 10 min)**
+1. Radio bijwerken naar **1.3.6** (PandaOS → Instellingen → Software). Controleer het versienummer.
+2. Stap 1 hieronder: platform-tools en de code (ZIP) op de laptop.
+
+**B. Verbinden en controleren (in de auto, motor uit, contact aan)**
+3. Stap 2: `adb connect <ip>:5555`.
+4. Stap 3: wat voor radio het is. Bewaar de uitvoer (vooral `ro.build.type`).
+5. Stap 4: logboektoegang voor PandaOS (eenmalig, daarna voor altijd).
+6. Stap 8: microfoon, meldingen en het PandaOS-toetsenbord aanzetten (alleen wat je wilt).
+
+**C. De auto uitlezen en koppelen (contact aan, auto stil, handrem erop)**
+7. Live log starten (stap 5, de `findstr`-versie) of opslaan naar `radio-log.txt`.
+8. Doe elke handeling één keer, met 10 seconden ertussen, en zeg Claude wat je doet:
+   stadslicht → dimlicht → grootlicht → mistlampen voor/achter → knipperlicht links/rechts → alarmlichten →
+   elke deur open/dicht → kofferbak → gordel los/vast → handrem → achteruit (koppeling in, R) → VOL+ / VOL−.
+9. Claude zoekt per handeling de regel die erbij hoort. Daarna leer je ze in PandaOS: **CAN-monitor → Koppelen →
+   Leer aan / Leer uit** bij de functie, handeling doen, de regel kiezen die Claude noemde, **Koppeling opslaan**.
+10. Controle: lampjes onder P R D, de deur op de auto en R moeten meebewegen.
+
+**D. Instellingen van de radio vinden (alleen lezen)**
+11. Volume van de radio:
+    `powershell -ExecutionPolicy Bypass -File tools\settings-diff.ps1 -Name volume`
+    → bij de vraag één keer **VOL+** drukken → Enter. Het script toont welke instelling veranderde.
+12. Hetzelfde voor andere dingen die je wilt kunnen instellen (bijv. `-Name helderheid`, `-Name canbox`): één
+    handeling per keer.
+13. Stap 6: de CAN-app van de radio onderzoeken (`dumpsys`), voor de app Auto-info en latere koppelingen.
+
+**E. GPS controleren (rijden kan, laptop met hotspot mee)**
+14. `adb shell dumpsys location | findstr /i "gps fix accuracy satellites"` voor en tijdens rijden.
+15. In PandaOS: snelheid onder de auto en het snelheidsbord. Zegt het bord de verkeerde weg? Noteer waar en hoe laat.
+
+**F. Mee terug naar huis** (niet op GitHub): `radio-log.txt`, de mappen `tools\settings-diff-*`,
+`radio-diagnose-*`, de uitvoer van stap 3 en 6, en foto's van wat niet lukte.
 
 ---
 
@@ -134,7 +178,9 @@ adb shell getprop | findstr /i "can mcu uart tty"
 Met root kunnen we zien aan welke seriële poort het CAN-kastje/de MCU hangt. **Niet** zelf een poort openen of
 lezen met `cat`: dat kan berichten wegvangen bij de radio. Daar maken we samen een veilige aanpak voor.
 
-## Stap 7 – Apparaateigenaar (optioneel, als laatste)
+## Stap 7 – Apparaateigenaar (optioneel, voorlopig overslaan)
+
+> Voorlopig niet doen: hiervoor moet het Google-account van de radio af. Bewaard voor later.
 
 Wat het doet: PandaOS blijft altijd het startscherm (ook na updates), de radio-software duwt PandaOS niet meer weg,
 het Android-paneel wordt vervangen door het PandaOS-paneel, en updates installeren zonder vraag. Later ook: de

@@ -15,6 +15,7 @@ android/local.properties
 # Gereedschap: uitvoer van scripts
 tools/release/
 tools/radio-diagnose-*/
+tools/settings-diff-*/
 
 # Editors en systeem
 .idea/
