@@ -178,6 +178,11 @@ export interface VehicleSettings {
   // Achteruitcamera in R: die van de radio (eigen camera-app van de radio, PandaOS toont alleen R) of die van PandaOS.
   // Niet ingesteld: op de radio 'radio' (de camera-app van de radio houdt de camera bezet), anders 'pandaos'.
   reverseCamera?: 'radio' | 'pandaos';
+  // Colouriser (Settings > Vehicle > Paint): lakafwerking en zelf gemaakte kleuren. Metallic = het model zoals het is.
+  paintFinish?: 'Solid' | 'Metallic' | 'Matte';
+  customPaints?: string[];
+  // Naam van de auto (Settings > Software, "Name Your Vehicle"); leeg = de modelnaam
+  vehicleName?: string;
 }
 
 export type CanBox = 'radio' | 'raise' | 'hiworld' | 'simplesoft' | 'oudi' | 'binarytek' | 'luzheng' | 'other';

@@ -4,7 +4,7 @@ import { MY_VEHICLE, MY_VEHICLE_SETTINGS } from '../vehicleProfile';
 import { useUIStore, type WindowTint, type ExhaustLayout, type CanBox, type CanProtocol, applyTextScale, textScaleFor } from '../../store/uiStore';
 import { getEffectiveTheme, PANDA_CONFIG } from '../../settings';
 import NavTree from '../../../src/components/settings/control-bar/navtree';
-import { Smartphone, RotateCw, Signal, Search, Sun } from 'lucide-react';
+import { Smartphone, RotateCw, Signal, Search, Sun, Palette } from 'lucide-react';
 import AndroidWifiPanel from '../../components/settings/AndroidWifiPanel';
 import SoftwareUpdatePanel from '../../components/settings/SoftwareUpdatePanel';
 import DiagnosticsPanel from '../../components/settings/DiagnosticsPanel';
@@ -12,6 +12,9 @@ import WebViewPanel from '../../components/settings/WebViewPanel';
 import HomeScreenPanel from '../../components/settings/HomeScreenPanel';
 import AndroidBluetoothPanel from '../../components/settings/AndroidBluetoothPanel';
 import TeslaSlider from '../../components/settings/TeslaSlider';
+import Colouriser from '../../components/settings/Colouriser';
+import VehicleHero from '../../components/settings/VehicleHero';
+import { SETTINGS_INDEX } from '../settingsIndex';
 import { useT } from '../../i18n';
 import { LINKABLE_APPS, getAppLink, getChoices, useInstalledApps, isAndroidLauncher, otherAppTarget, getAndroidAppIcon, getLaunchAction,
   getAndroidAppName, isAndroidAppVisible, androidAppKey, getPackagesBehindPandaOSIcons } from '../appLinks';
@@ -54,7 +57,7 @@ const RIM_COLORS = [
 
 const SettingsApp: React.FC = () => {
   const { 
-    isMenuOpen, activeTab, screenMode, setScreenMode, vehicleLightsOn, keyboardValue, openKeyboard,
+    isMenuOpen, activeTab, screenMode, setScreenMode, vehicleLightsOn, keyboardValue, openKeyboard, closeKeyboard, setActiveTab,
     displaySettings, navigationSettings, vehicleSettings, updateVehicleSetting, safetySettings, updateSafetySetting,
     updateDisplaySetting, updateNavigationSetting,
     btDevices, isScanning, btStatusMessage, btRadioOn, startScan, turnOnBluetooth, btDiscoverable, makeDiscoverable,
@@ -187,6 +190,19 @@ const SettingsApp: React.FC = () => {
     if (!isMenuOpen && pendingText) cancelTextSize();
   }, [isMenuOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // --- Instellingen zoeken: het zoekveld gebruikt het PandaOS-toetsenbord; resultaten vervangen de pagina ---
+  const [searching, setSearching] = useState(false);
+  const [colouriserOpen, setColouriserOpen] = useState(false);
+  useEffect(() => { setSearching(false); }, [activeTab, isMenuOpen]);
+  const query = searching ? keyboardValue.trim().toLowerCase() : '';
+  const searchResults = query.length >= 2
+    ? Object.entries(SETTINGS_INDEX).flatMap(([tab, labels]) => [tab, ...labels]
+        .filter((label) => label.toLowerCase().includes(query) || t(label).toLowerCase().includes(query))
+        .map((label) => ({ tab, label })))
+        .filter((r, i, all) => all.findIndex((o) => o.tab === r.tab && t(o.label) === t(r.label)) === i)
+    : null;
+  const openResult = (tab: string) => { setSearching(false); closeKeyboard(); setActiveTab(tab); };
+
   // Rij ronde kleurvakjes (lak / velgen); het actieve vakje krijgt een blauwe ring (stijl: _tesla-ui.scss)
   const renderSwatches = (colors: { name: string; hex: string }[], current: string, onPick: (hex: string) => void) => (
     <div className="tsl-swatches">
@@ -241,7 +257,7 @@ const SettingsApp: React.FC = () => {
             <Search size={18} color="var(--tsl-muted)" style={{ marginRight: '10px' }} />
             <input 
               type="text" placeholder={t('Search Settings')}
-              value={keyboardValue} onFocus={() => openKeyboard(keyboardValue)} readOnly
+              value={searching ? keyboardValue : ''} onFocus={() => { if (!searching) { setSearching(true); openKeyboard(''); } else openKeyboard(keyboardValue); }} readOnly
               style={{ border: 'none', background: 'transparent', width: '100%', color: isDarkMode ? '#fff' : '#000', outline: 'none', fontSize: 'calc(15px * var(--text-scale, 1))', fontWeight: '500' }}
             />
           </div>
@@ -260,6 +276,20 @@ const SettingsApp: React.FC = () => {
         {/* Rechter Tab Content */}
         <div className="settings-right-content tsl-scroll" style={{ flex: 1, minWidth: 0, padding: 'var(--settings-content-padding)', overflowY: 'auto', overflowX: 'hidden' }}>
           <div className="settings-body" style={{ color: isDarkMode ? '#fff' : '#000', maxWidth: '600px' }}>
+            {/* Zoekresultaten: tik op een resultaat om naar die pagina te gaan */}
+            {searchResults && (
+              <div className="tsl-section">
+                <span className="tsl-title">{t('Search results')}</span>
+                {searchResults.length === 0 && <small className="tsl-hint">{t('Nothing found.')}</small>}
+                {searchResults.map(({ tab, label }) => (
+                  <button key={tab + label} className="tsl-search-result" onClick={() => openResult(tab)}>
+                    <span className="tsl-field-text">{t(label)}</span>
+                    <small className="tsl-hint">{t(tab)}</small>
+                  </button>
+                ))}
+              </div>
+            )}
+            <div style={{ display: searchResults ? 'none' : undefined }}>
             
             {/* --- VEHICLE TAB: uiterlijk van de 3D-auto --- */}
             {activeTab === 'Vehicle' && (
@@ -282,7 +312,12 @@ const SettingsApp: React.FC = () => {
                  <hr className="tsl-divider" />
                  <div className="tsl-section">
                    <span className="tsl-title">{t('Paint')}</span>
-                   {renderSwatches(PAINT_COLORS, vehicleSettings.paintColor, (hex) => updateVehicleSetting('paintColor', hex))}
+                   {renderSwatches([...PAINT_COLORS, ...(vehicleSettings.customPaints ?? []).map((hex) => ({ name: t('Own colour'), hex }))],
+                     vehicleSettings.paintColor, (hex) => updateVehicleSetting('paintColor', hex))}
+                   {/* Colouriser zoals in de Tesla: elke kleur, met Solid / Metallic / Matte */}
+                   <button className="tsl-btn" style={{ alignSelf: 'flex-start' }} onClick={() => setColouriserOpen(true)}>
+                     <Palette size={18} /> {t('Colouriser')}
+                   </button>
                  </div>
                  <div className="tsl-section">
                    <span className="tsl-title">{t('Wheels')}</span>
@@ -821,6 +856,10 @@ const SettingsApp: React.FC = () => {
             {/* --- SOFTWARE TAB --- */}
             {activeTab === 'Software' && (
               <div className="settings-list" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                 {/* De auto in zijn eigen kleur, naam en voertuiginformatie (zoals Tesla) */}
+                 <VehicleHero />
+                 <hr className="tsl-divider" />
+
                  {/* PandaOS-info en makers */}
                  <div className="tsl-section">
                    <span className="tsl-title" style={{ fontSize: 'calc(24px * var(--text-scale, 1))' }}>PandaOS</span>
@@ -849,7 +888,7 @@ const SettingsApp: React.FC = () => {
                      {[
                        ['Platform', /Android/i.test(navigator.userAgent) ? 'Android' : /Linux/i.test(navigator.userAgent) ? 'Linux (Raspberry Pi)' : 'Windows'],
                        ['Screen', `${window.screen.width} × ${window.screen.height}`],
-                       ['Map data', 'PDOK / Kadaster'],
+                       ['Map data', 'PDOK / Kadaster, OpenStreetMap'],
                        ['Routing', 'OSRM (OpenStreetMap)'],
                      ].map(([label, value]) => (
                        <div key={label} className="tsl-list-row">
@@ -1035,9 +1074,13 @@ const SettingsApp: React.FC = () => {
               </>
             )}
 
+            </div>
           </div>
         </div>
       </div>
+
+      {/* Colouriser (Vehicle > Paint): eigen kleur en lakafwerking */}
+      {colouriserOpen && <Colouriser onClose={() => setColouriserOpen(false)} />}
 
       {/* --- SCREEN CLEAN MODE: zwart scherm dat aanraking negeert; dubbeltik stopt eerder --- */}
       {cleanModeUntil && (

@@ -5,6 +5,7 @@ import { useT } from '../../../../i18n';
 import { markCarReady } from '../../../../services/preload';
 import { useGLTF, PerspectiveCamera, Environment, ContactShadows, Center } from '@react-three/drei';
 import { HDR_CITY, HDR_NIGHT } from './environmentFiles';
+import { registerCarCapture } from '../../../../services/carSnapshot';
 import * as THREE from 'three';
 import MusicBar from '../../../music/MusicBar';
 import { useUIStore, type WindowTint, type CarState, type DoorId, DOOR_LABELS } from '../../../../store/uiStore';
@@ -64,12 +65,23 @@ const CarModel = ({ model, carRot, brakeApplied, gear, carState, vehicle }: { mo
     scene.traverse((child: any) => {
       if (!child.isMesh) return;
       const parentName = (child.parent?.name || '').toLowerCase();
-      if (paintMaterial.test((child.material?.name || '').toLowerCase())) child.material.color.set(vehicle.paintColor);
+      if (paintMaterial.test((child.material?.name || '').toLowerCase())) {
+        const m = child.material;
+        m.color.set(vehicle.paintColor);
+        // Lakafwerking (Colouriser): Metallic = het model zoals het is; de originele waarden één keer bewaren
+        m.userData.original ??= { metalness: m.metalness, roughness: m.roughness, clearcoat: m.clearcoat };
+        const o = m.userData.original;
+        const finish = vehicle.paintFinish ?? 'Metallic';
+        m.metalness = finish === 'Metallic' ? o.metalness : 0;
+        m.roughness = finish === 'Matte' ? 0.85 : o.roughness;
+        if (o.clearcoat !== undefined) m.clearcoat = finish === 'Matte' ? 0 : o.clearcoat;
+        m.needsUpdate = true;
+      }
       else if (frontGlassParts.test(parentName)) child.material = frontGlass;
       else if (rearGlassParts.test(parentName)) child.material = rearGlass;
       else if (rimParts.test(parentName)) child.material = rimMaterial;
     });
-  }, [scene, vehicle.paintColor, vehicle.rimColor, frontGlass, rearGlass, rimMaterial, paintMaterial, frontGlassParts, rearGlassParts, rimParts]);
+  }, [scene, vehicle.paintColor, vehicle.paintFinish, vehicle.rimColor, frontGlass, rearGlass, rimMaterial, paintMaterial, frontGlassParts, rearGlassParts, rimParts]);
 
   // Modelfouten wegwerken: getint lampglas helder maken, bonte binnendelen een vaste neutrale kleur geven
   const clearLightGlass = useMemo(() => new THREE.MeshPhysicalMaterial({
@@ -395,6 +407,24 @@ const CarModel = ({ model, carRot, brakeApplied, gear, carState, vehicle }: { mo
   );
 };
 
+// Momentopname van de auto voor Settings > Software (services/carSnapshot.ts): één beeld renderen en als PNG lezen
+const SnapshotBridge: React.FC = () => {
+  const { gl, scene, camera } = useThree();
+  useEffect(() => {
+    registerCarCapture(() => {
+      // Zonder de schaduw op de vloer (die wordt anders een lichte rechthoek in de afbeelding)
+      const shadows = scene.getObjectByName('contact-shadows');
+      if (shadows) shadows.visible = false;
+      gl.render(scene, camera);
+      const png = gl.domElement.toDataURL('image/png');
+      if (shadows) shadows.visible = true;
+      return png;
+    });
+    return () => registerCarCapture(null);
+  }, [gl, scene, camera]);
+  return null;
+};
+
 // --- HOOFD COMPONENT ---
 // widthFraction = breedte van dit paneel als deel van het scherm (1 = vol, 0.3 = Settings open), zie SplashScreen.
 const SidebarPane: React.FC<{ widthFraction?: number }> = ({ widthFraction = 1 }) => {
@@ -613,6 +643,7 @@ const SidebarPane: React.FC<{ widthFraction?: number }> = ({ widthFraction = 1 }
               {/* Lichtomgeving uit de app zelf (public/hdr), niet van internet: zonder internet viel de app anders om */}
               <Environment files={isDarkMode ? HDR_NIGHT : HDR_CITY} />
 
+              <SnapshotBridge />
               <FitCamera position={cameraPosition} halfLength={vehicleModel.halfLength} />
               
               <CarModel 
@@ -627,14 +658,14 @@ const SidebarPane: React.FC<{ widthFraction?: number }> = ({ widthFraction = 1 }
 
               {/* Vaste schaduw op de "vloer" (Y=0); niet bij snelle weergave. frames={60}: de auto staat stil, dus na het
                   laden niet elk beeldje opnieuw berekenen (scheelt veel rekenwerk) */}
-              {!lowGraphics && <ContactShadows 
+              {!lowGraphics && <group name="contact-shadows"><ContactShadows 
                 position={[0, -0.01, 0]} 
                 opacity={isDarkMode ? 0.8 : 0.3} 
                 scale={15} 
                 blur={2} 
                 far={4.5} 
                 frames={60}
-              />}
+              /></group>}
             </Suspense>
           </Canvas>
           </div>

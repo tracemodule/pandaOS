@@ -64,22 +64,29 @@ const AndroidBluetoothPanel: React.FC = () => {
 
           {/* Gekoppelde apparaten */}
           <div className="tsl-section">
-            <span className="tsl-title">{t('My Devices')}</span>
+            <span className="tsl-title">{t('Paired Devices')}</span>
             {state.devices?.length ? (
-              <div className="tsl-list">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {state.devices.map((device) => (
-                  <div key={device.address} className={`tsl-list-row ${device.connected ? 'is-active' : ''}`}>
-                    <Smartphone size={22} />
-                    <div className="tsl-list-text">
-                      <span className="tsl-field-text">{device.name}</span>
-                      <small className="tsl-hint">{device.connected ? t('Connected') : t('Not connected')}</small>
+                  // Kaart per apparaat (zoals 'Paired Devices' in de Tesla): naam en status, daaronder twee brede knoppen
+                  <div key={device.address} className="tsl-card">
+                    <div className="tsl-card-head">
+                      <Smartphone size={24} color={device.connected ? 'var(--tsl-blue)' : undefined} />
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                        <span className="tsl-field-text">{device.name}</span>
+                        <small className="tsl-hint" style={{ color: device.connected ? 'var(--tsl-blue)' : undefined }}>
+                          {device.connected ? t('Connected') : t('Not connected')}
+                        </small>
+                      </div>
                     </div>
-                    <button className="tsl-link" onClick={() => { bridge()?.forgetBluetooth(device.address); setTimeout(read, 1000); }}>
-                      {t('Forget')}
-                    </button>
-                    {device.connected
-                      ? <button className="tsl-btn is-small" onClick={() => toggleConnection(device)}>{t('Disconnect')}</button>
-                      : <button className="tsl-btn is-small is-primary" onClick={() => toggleConnection(device)}>{t('Connect')}</button>}
+                    <div className="tsl-wide-buttons">
+                      {device.connected
+                        ? <button className="tsl-btn" onClick={() => toggleConnection(device)}>{t('Disconnect')}</button>
+                        : <button className="tsl-btn is-primary" onClick={() => toggleConnection(device)}>{t('Connect')}</button>}
+                      <button className="tsl-btn" onClick={() => { bridge()?.forgetBluetooth(device.address); setTimeout(read, 1000); }}>
+                        {t('Forget Device')}
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -93,7 +100,9 @@ const AndroidBluetoothPanel: React.FC = () => {
           {/* Apparaten in de buurt */}
           <div className="tsl-section">
             <div className="tsl-title-row">
-              <span className="tsl-title">{t('Nearby Devices')}</span>
+              <span className="tsl-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {t('Nearby Devices')} {state.discovering && <span className="tsl-spinner" />}
+              </span>
               <button className="tsl-link" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
                 onClick={() => { bridge()?.startBluetoothScan(); setTimeout(read, 500); }}>
                 <RotateCw size={16} className={state.discovering ? 'spin-animation' : ''} /> {t('Refresh')}

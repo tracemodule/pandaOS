@@ -2,7 +2,7 @@
 // (PandaOS-toetsenbord), netwerk vergeten. Via de launcher (window.PandaAndroid, RadioConnectivity.kt), dus met
 // dezelfde wifi-driver als de schermen van de fabrikant.
 import React, { useEffect, useState } from 'react';
-import { Wifi, WifiOff, Lock, RotateCw, Check } from 'lucide-react';
+import { Wifi, WifiOff, Lock, RotateCw, Check, ChevronRight } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useT } from '../../i18n';
 
@@ -84,7 +84,7 @@ const AndroidWifiPanel: React.FC = () => {
       <label className="tsl-switch-row">
         {state.enabled ? <Wifi size={22} /> : <WifiOff size={22} />}
         <div className="tsl-switch-text" style={{ flex: 1 }}>
-          <span className="tsl-field-text">{t('Wi-Fi')}</span>
+          <span className="tsl-field-text">{t('Wi-Fi')}{state.enabled && state.connected && state.ssid ? ` · ${state.ssid}` : ''}</span>
           <small className="tsl-hint">
             {!state.enabled ? t('Off') : state.connected ? `${t('Connected to')} ${state.ssid || t('Wi-Fi network')}` : t('Not connected')}
           </small>
@@ -93,10 +93,20 @@ const AndroidWifiPanel: React.FC = () => {
           onChange={(e) => { bridge()?.setWifiEnabled(e.target.checked); setTimeout(read, 800); }} />
       </label>
 
+      {/* Verborgen netwerk: via het wifi-scherm van Android (daar kun je de naam zelf invullen) */}
+      {state.enabled && (
+        <button className="tsl-row-link" onClick={() => bridge()?.openWifiSettings?.()}>
+          {t('Add Hidden Wi-Fi Network')} <ChevronRight size={18} />
+        </button>
+      )}
+
       {state.enabled && (
         <div className="tsl-section">
           <div className="tsl-title-row">
-            <span className="tsl-title">{t('Networks')}</span>
+            {/* Zoals in de Tesla: 'Searching for Wi-Fi Networks' met draaiend rondje zolang er nog niets is */}
+            {networks.length === 0
+              ? <span className="tsl-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>{t('Searching for Wi-Fi Networks')} <span className="tsl-spinner" /></span>
+              : <span className="tsl-title">{t('Networks')}</span>}
             <button className="tsl-link" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
               onClick={() => { bridge()?.startWifiScan?.(); setTimeout(read, 1500); }}>
               <RotateCw size={16} /> {t('Refresh')}
@@ -105,9 +115,7 @@ const AndroidWifiPanel: React.FC = () => {
 
           {message && <small className="tsl-hint" style={{ color: 'var(--tsl-red)' }}>{message}</small>}
 
-          {networks.length === 0 ? (
-            <small className="tsl-hint">{t('Searching for networks…')}</small>
-          ) : (
+          {networks.length === 0 ? null : (
             <div className="tsl-list">
               {networks.map((network) => (
                 <React.Fragment key={network.ssid}>
