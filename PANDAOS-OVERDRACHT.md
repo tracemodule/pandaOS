@@ -253,7 +253,7 @@ de OpenStreetMap-tegels (CARTO vraagt sinds 2026 een API-sleutel); melding op de
 onderaan; `carState.seatbeltUnfastened`), te leren in Koppelen: gordel, mistlampen voor/achter. App Auto-info opent de
 CAN-app van de radio (`openCarInfoApp`, eerst com.can.activity).
 
-**Klaar voor 1.3.7 (nog niet uitgebracht)**: Instellingen in de stijl van de Tesla-video. Zoeken werkt (store/settingsIndex.ts, resultaten vervangen de pagina). Software: auto in eigen lak bovenaan (momentopname van het 3D-canvas, services/carSnapshot.ts), naam (`vehicleSettings.vehicleName`), venster Meer voertuiginformatie (profiel + radio, geen km-stand/VIN). Colouriser bij Voertuig > Lak (ring + vlak, Effen/Metallic/Mat = `paintFinish`, eigen kleuren `customPaints`). Wifi: naam in de kopregel, Verborgen netwerk (opent Android-wifi), Zoeken met draaiend rondje. Bluetooth: Gekoppelde apparaten als kaart met Verbreken/Apparaat vergeten. LAPTOP-ADB.md heeft een draaiboek (A-F) en tools/settings-diff.ps1.
+**Uitgebracht in 1.3.7**: Instellingen in de stijl van de Tesla-video. Zoeken werkt (store/settingsIndex.ts, resultaten vervangen de pagina). Software: auto in eigen lak bovenaan (momentopname van het 3D-canvas, services/carSnapshot.ts), naam (`vehicleSettings.vehicleName`), venster Meer voertuiginformatie (profiel + radio, geen km-stand/VIN). Colouriser bij Voertuig > Lak (ring + vlak, Effen/Metallic/Mat = `paintFinish`, eigen kleuren `customPaints`). Wifi: naam in de kopregel, Verborgen netwerk (opent Android-wifi), Zoeken met draaiend rondje. Bluetooth: Gekoppelde apparaten als kaart met Verbreken/Apparaat vergeten. LAPTOP-ADB.md heeft een draaiboek (A-F) en tools/settings-diff.ps1.
 
 ## Nog open
 
