@@ -246,6 +246,77 @@ class PandaBridge(
     private val admin get() = ComponentName(activity, PandaAdminReceiver::class.java)
     private val policy get() = activity.getSystemService(DevicePolicyManager::class.java)
 
+    // --- Radio-instellingen (Settings > Advanced > Radio-instellingen): zie RadioSystem ---
+    private val radioSystem by lazy { RadioSystem(activity) }
+
+    @JavascriptInterface
+    fun getRadioSystemState(): String = radioSystem.stateJson()
+
+    @JavascriptInterface
+    fun setRadioSystemBarHidden(hidden: Boolean): String = radioSystem.setSystemBarHidden(hidden)
+
+    @JavascriptInterface
+    fun setRadioVolumeBarHidden(hidden: Boolean): String = radioSystem.setVolumeBarHidden(hidden)
+
+    @JavascriptInterface
+    fun setRadioPanelLocked(locked: Boolean): String = radioSystem.setPanelLocked(locked)
+
+    @JavascriptInterface
+    fun setRadioCameraEnabled(enabled: Boolean): String = radioSystem.setRadioCameraEnabled(enabled)
+
+    @JavascriptInterface
+    fun resetRadioSystem(): String = radioSystem.reset()
+
+    // Datum en tijd (Settings > Display > Tijd)
+    @JavascriptInterface
+    fun getTimeState(): String = radioSystem.timeJson()
+
+    @JavascriptInterface
+    fun setAutoTime(on: Boolean): String = radioSystem.setAutoTime(on)
+
+    @JavascriptInterface
+    fun setSystemTimeZone(id: String): String = radioSystem.setTimeZone(id)
+
+    @JavascriptInterface
+    fun setAutoTimeZone(on: Boolean): String = radioSystem.setAutoTimeZone(on)
+
+    @JavascriptInterface
+    fun setSystemTime(millis: Double): String = radioSystem.setTime(millis.toLong())
+
+    // Taal van Android (Settings > Display > Taal)
+    @JavascriptInterface
+    fun getSystemLanguage(): String = radioSystem.languageJson()
+
+    @JavascriptInterface
+    fun setSystemLanguage(tag: String): String = radioSystem.setLanguage(tag)
+
+    @JavascriptInterface
+    fun openLanguageSettings() {
+        activity.runOnUiThread {
+            try { activity.startActivity(Intent(Settings.ACTION_LOCALE_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            catch (e: Exception) { DiagLog.add("error", "Taalinstellingen: ${e.message}") }
+        }
+    }
+
+    @JavascriptInterface
+    fun openDateSettings() {
+        activity.runOnUiThread {
+            try { activity.startActivity(Intent(Settings.ACTION_DATE_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            catch (e: Exception) { DiagLog.add("error", "Datuminstellingen: ${e.message}") }
+        }
+    }
+
+    // App-info van een app openen (bijv. de camera-app van de radio uitschakelen)
+    @JavascriptInterface
+    fun openAppDetails(packageName: String) {
+        activity.runOnUiThread {
+            try {
+                activity.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            } catch (e: Exception) { DiagLog.add("error", "App-info $packageName: ${e.message}") }
+        }
+    }
+
     // Is PandaOS apparaateigenaar? Alleen dan kan het Android-paneel uit (zie PandaAdminReceiver)
     @JavascriptInterface
     fun isDeviceOwner(): Boolean = policy?.isDeviceOwnerApp(activity.packageName) == true
@@ -334,6 +405,41 @@ class PandaBridge(
         return JSONArray(packages).toString()
     }
 
+    // Geïnstalleerde games voor Arcade: apps die Android als spel kent (categorie Game of de oude game-vlag)
+    // [{"package":"...","name":"..."}], gesorteerd op naam
+    @JavascriptInterface
+    fun getInstalledGames(): String {
+        val pm = activity.packageManager
+        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        val list = JSONArray()
+        pm.queryIntentActivities(intent, 0)
+            .map { it.activityInfo.applicationInfo }
+            .distinctBy { it.packageName }
+            .filter { info ->
+                @Suppress("DEPRECATION")
+                info.category == android.content.pm.ApplicationInfo.CATEGORY_GAME ||
+                    (info.flags and android.content.pm.ApplicationInfo.FLAG_IS_GAME) != 0
+            }
+            .map { it.packageName to it.loadLabel(pm).toString() }
+            .sortedBy { it.second.lowercase() }
+            .forEach { (pkg, name) -> list.put(JSONObject().put("package", pkg).put("name", name)) }
+        return list.toString()
+    }
+
+    // Play Store bij een zoekopdracht (Arcade: "Meer games")
+    @JavascriptInterface
+    fun openPlayStoreSearch(query: String) {
+        activity.runOnUiThread {
+            try {
+                activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://search?q=${Uri.encode(query)}&c=apps"))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            } catch (_: ActivityNotFoundException) {
+                activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/search?q=${Uri.encode(query)}&c=apps"))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }
+        }
+    }
+
     // Zelfde lijst met naam erbij, voor het app-menu en "Andere app" in Settings > Apps:
     // [{"package":"com.spotify.music","name":"Spotify"}, ...], gesorteerd op naam
     @JavascriptInterface
@@ -391,6 +497,21 @@ class PandaBridge(
         val intent = activity.packageManager.getLaunchIntentForPackage(packageName) ?: return false
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
         activity.runOnUiThread { activity.startActivity(intent) }
+        return true
+    }
+
+    // Zelfde als launchApp, maar de app schuift van onder naar boven in beeld (Theater)
+    @JavascriptInterface
+    fun launchAppSlideUp(packageName: String): Boolean {
+        val intent = activity.packageManager.getLaunchIntentForPackage(packageName) ?: return false
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+        val options = android.app.ActivityOptions.makeCustomAnimation(activity, R.anim.panda_slide_up, R.anim.panda_stay)
+        activity.runOnUiThread {
+            try { activity.startActivity(intent, options.toBundle()) } catch (_: Exception) { activity.startActivity(intent) }
+            // Sommige radio's negeren de opties bij een nieuwe taak; overridePendingTransition werkt daar wel
+            @Suppress("DEPRECATION")
+            activity.overridePendingTransition(R.anim.panda_slide_up, R.anim.panda_stay)
+        }
         return true
     }
 

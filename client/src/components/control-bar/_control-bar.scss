@@ -25,7 +25,14 @@
       justify-content: center;
 
       &:hover { color: $color-white; }
-      svg { width: 24px; height: 24px; }
+      // VW-logo links: schaalt mee met de dock-pictogrammen (--dock-scale, Settings > Display)
+      svg { width: calc(28px * var(--dock-scale, 1)); height: calc(28px * var(--dock-scale, 1)); }
+    }
+
+    // Pijltjes en volume-icoon rechts (en klimaat): ook mee met de dock-pictogrammen
+    .stepper svg, .volume-btn svg {
+      width: calc(24px * var(--dock-scale, 1));
+      height: calc(24px * var(--dock-scale, 1));
     }
 
     /* Temperatuur & Volume bediening */

@@ -41,10 +41,13 @@ const VehicleHero: React.FC = () => {
 
   const rows: [string, string][] = [
     ['Car', `${MY_VEHICLE.name} (${MY_VEHICLE.year})`],
+    ['Color', t(MY_VEHICLE.color)],
     ['Engine', t(MY_VEHICLE.engine)],
     ['Transmission', t(MY_VEHICLE.transmission)],
     ['Fuel', `${t(MY_VEHICLE.fuel)} · ${MY_VEHICLE.tank} l`],
     ['Tyres', MY_VEHICLE.tyres],
+    ['Engine oil', `${MY_VEHICLE.oil} · ${t(MY_VEHICLE.oilInterval)}`],
+    ['Service', t(MY_VEHICLE.service)],
     ['CAN protocol', MY_VEHICLE.canProtocol],
     ['PandaOS', PANDA_CONFIG.VERSION],
     ...(device.model ? [

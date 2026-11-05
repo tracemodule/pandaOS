@@ -25,18 +25,21 @@ const hsvToHex = (h: number, s: number, v: number) => {
   return '#' + [f(5), f(3), f(1)].map((c) => c.toString(16).padStart(2, '0')).join('');
 };
 
-const Colouriser: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+// target 'rims': zelfde kiezer voor de velgkleur (zonder lakafwerking)
+const Colouriser: React.FC<{ onClose: () => void; target?: 'paint' | 'rims' }> = ({ onClose, target = 'paint' }) => {
   const t = useT();
   const vehicle = useUIStore((s) => s.vehicleSettings);
   const update = useUIStore((s) => s.updateVehicleSetting);
-  const [hsv, setHsv] = useState(() => hexToHsv(vehicle.paintColor));
+  const colorKey = target === 'rims' ? 'rimColor' : 'paintColor';
+  const customKey = target === 'rims' ? 'customRims' : 'customPaints';
+  const [hsv, setHsv] = useState(() => hexToHsv(vehicle[colorKey]));
   const ring = useRef<HTMLDivElement>(null);
   const square = useRef<HTMLDivElement>(null);
-  const custom = vehicle.customPaints ?? [];
+  const custom = vehicle[customKey] ?? [];
 
   const apply = (next: { h: number; s: number; v: number }) => {
     setHsv(next);
-    update('paintColor', hsvToHex(next.h, next.s, next.v));
+    update(colorKey, hsvToHex(next.h, next.s, next.v));
   };
 
   // Slepen op de ring of in het vlak (aanraken en muis via pointer events)
@@ -63,7 +66,7 @@ const Colouriser: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
   const saveCustom = () => {
     if (custom.some((c) => c.toLowerCase() === current.toLowerCase())) return;
-    update('customPaints', [current, ...custom].slice(0, MAX_CUSTOM));
+    update(customKey, [current, ...custom].slice(0, MAX_CUSTOM));
   };
 
   return (
@@ -83,6 +86,7 @@ const Colouriser: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           </div>
         </div>
 
+        {target === 'paint' && (
         <div className="tsl-section">
           <span className="tsl-title">{t('Paint Type')}</span>
           <div className="tsl-segmented">
@@ -92,6 +96,7 @@ const Colouriser: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             ))}
           </div>
         </div>
+        )}
 
         {/* Eigen kleuren: '+' bewaart de huidige kleur, tik op een vakje om hem terug te zetten */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

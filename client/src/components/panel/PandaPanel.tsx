@@ -15,6 +15,7 @@ interface PanelNotification { key: string; app: string; package: string; title: 
 
 const bridge = () => (window as any).PandaAndroid;
 const OPEN_DISTANCE = 40; // px omlaag vegen om te openen
+const EDGE_HEIGHT = 48; // bovenste strook (px) waar een veeg omlaag het paneel opent
 
 const formatTime = (time: number) => new Date(time).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
 
@@ -67,14 +68,49 @@ const PandaPanel: React.FC = () => {
     if (isAndroidLauncher()) bridge()?.setSystemPanelBlocked?.(enabled);
   }, [enabled]);
 
-  if (!enabled) return null;
+  // Veeg omlaag vanaf de bovenste 48 px, over de hele breedte. Geen onzichtbare laag erboven: een tik op
+  // P R N D, het slot of het profiel gaat gewoon door. Pas als de vinger echt omlaag sleept, opent het paneel
+  // (en de klik die daarna nog zou komen wordt tegengehouden).
+  useEffect(() => {
+    if (!enabled || open) return;
+    let start: { x: number; y: number } | null = null;
+    const swallowClick = (e: MouseEvent) => { e.stopPropagation(); e.preventDefault(); };
+    const down = (x: number, y: number) => { start = y <= EDGE_HEIGHT ? { x, y } : null; };
+    const move = (x: number, y: number) => {
+      if (!start) return;
+      const dy = y - start.y;
+      if (dy > OPEN_DISTANCE && dy > Math.abs(x - start.x)) {
+        start = null;
+        window.addEventListener('click', swallowClick, { capture: true, once: true });
+        setTimeout(() => window.removeEventListener('click', swallowClick, { capture: true }), 400);
+        setOpen(true);
+      }
+    };
+    // Aanraken via touch-gebeurtenissen: die lopen door, ook als de WebView de veeg als scrollen overneemt
+    // (dan stoppen de pointer-gebeurtenissen met pointercancel). Muis (laptop) via pointer-gebeurtenissen.
+    const onTouchStart = (e: TouchEvent) => down(e.touches[0].clientX, e.touches[0].clientY);
+    const onTouchMove = (e: TouchEvent) => move(e.touches[0].clientX, e.touches[0].clientY);
+    const onPointerDown = (e: PointerEvent) => { if (e.pointerType === 'mouse') down(e.clientX, e.clientY); };
+    const onPointerMove = (e: PointerEvent) => { if (e.pointerType === 'mouse') move(e.clientX, e.clientY); };
+    const onEnd = () => { start = null; };
+    const opts = { capture: true, passive: true };
+    window.addEventListener('touchstart', onTouchStart, opts);
+    window.addEventListener('touchmove', onTouchMove, opts);
+    window.addEventListener('touchend', onEnd, opts);
+    window.addEventListener('pointerdown', onPointerDown, true);
+    window.addEventListener('pointermove', onPointerMove, true);
+    window.addEventListener('pointerup', onEnd, true);
+    return () => {
+      window.removeEventListener('touchstart', onTouchStart, opts);
+      window.removeEventListener('touchmove', onTouchMove, opts);
+      window.removeEventListener('touchend', onEnd, opts);
+      window.removeEventListener('pointerdown', onPointerDown, true);
+      window.removeEventListener('pointermove', onPointerMove, true);
+      window.removeEventListener('pointerup', onEnd, true);
+    };
+  }, [enabled, open]);
 
-  // Brede strook bovenaan: omlaag vegen opent het paneel
-  const onStripDown = (e: React.PointerEvent) => { dragStart.current = e.clientY; e.currentTarget.setPointerCapture(e.pointerId); };
-  const onStripMove = (e: React.PointerEvent) => {
-    if (dragStart.current !== null && e.clientY - dragStart.current > OPEN_DISTANCE) { dragStart.current = null; setOpen(true); }
-  };
-  const onStripUp = () => { dragStart.current = null; };
+  if (!enabled) return null;
 
   // Omhoog vegen op het paneel sluit het
   const onPanelDown = (e: React.PointerEvent) => { dragStart.current = e.clientY; };
@@ -91,10 +127,6 @@ const PandaPanel: React.FC = () => {
 
   return (
     <>
-      {!open && (
-        <div className="panda-panel-strip" onPointerDown={onStripDown} onPointerMove={onStripMove} onPointerUp={onStripUp} onPointerCancel={onStripUp} />
-      )}
-
       {open && (
         <div className="panda-panel-backdrop" onClick={() => setOpen(false)}>
           <div className={`panda-panel tsl-ui ${isDarkMode ? 'dark-mode' : ''}`} onClick={(e) => e.stopPropagation()}

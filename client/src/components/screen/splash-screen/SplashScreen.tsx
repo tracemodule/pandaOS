@@ -16,6 +16,10 @@ import VolumeOverlayApp from '../../../store/apps/VolumeOverlayApp';
 import CarPlayApp from '../../../store/apps/CarPlayApp';
 import PhoneApp, { CallOverlay } from '../../../store/apps/PhoneApp';
 import CanMonitorApp from '../../../store/apps/CanMonitorApp';
+import TheaterApp from '../../../store/apps/TheaterApp';
+import ArcadeApp from '../../../store/apps/ArcadeApp';
+import ToyboxApp from '../../../store/apps/ToyboxApp';
+import DiagnosticsApp from '../../../store/apps/DiagnosticsApp';
 
 import { useUIStore, applyTextScale, textScaleFor, applyDockHeight } from '../../../store/uiStore';
 import { CustomCommands } from '../../../scripts/customcmdcommands';
@@ -34,13 +38,29 @@ const SplashScreen: React.FC = () => {
     isMenuOpen, isMusicOpen, activeWebApp, isQuickActionsOpen, closeAll,
     initSocketListeners, initSpotify, screenMode, gear, brakeApplied,
     displaySettings, isCarPlayOpen, isMapOpen, isPhoneOpen, appLinks, vehicleLightsOn, isCameraOpen,
-    isCanMonitorOpen, closeCanMonitor, vehicleSettings
+    isCanMonitorOpen, closeCanMonitor, vehicleSettings, isTheaterOpen, closeTheater, isArcadeOpen, closeArcade, isToyboxOpen, closeToybox, isDiagnosticsOpen, closeDiagnostics
   } = useUIStore();
   const t = useT();
   // Een andere app opent: de CAN-monitor gaat dicht (anders liggen ze over elkaar)
   useEffect(() => {
     if (isCanMonitorOpen && (isMenuOpen || isMusicOpen || isPhoneOpen || activeWebApp || isCarPlayOpen || isMapOpen)) closeCanMonitor();
   }, [isCanMonitorOpen, isMenuOpen, isMusicOpen, isPhoneOpen, activeWebApp, isCarPlayOpen, isMapOpen, closeCanMonitor]);
+  // Zelfde voor Theater
+  useEffect(() => {
+    if (isTheaterOpen && (isMenuOpen || isMusicOpen || isPhoneOpen || activeWebApp || isCarPlayOpen || isMapOpen || isCanMonitorOpen)) closeTheater();
+  }, [isTheaterOpen, isMenuOpen, isMusicOpen, isPhoneOpen, activeWebApp, isCarPlayOpen, isMapOpen, isCanMonitorOpen, closeTheater]);
+  // Zelfde voor Arcade
+  useEffect(() => {
+    if (isArcadeOpen && (isMenuOpen || isMusicOpen || isPhoneOpen || activeWebApp || isCarPlayOpen || isMapOpen || isCanMonitorOpen || isTheaterOpen)) closeArcade();
+  }, [isArcadeOpen, isMenuOpen, isMusicOpen, isPhoneOpen, activeWebApp, isCarPlayOpen, isMapOpen, isCanMonitorOpen, isTheaterOpen, closeArcade]);
+  // Zelfde voor Toybox
+  useEffect(() => {
+    if (isToyboxOpen && (isMenuOpen || isMusicOpen || isPhoneOpen || activeWebApp || isCarPlayOpen || isMapOpen || isCanMonitorOpen || isTheaterOpen || isArcadeOpen)) closeToybox();
+  }, [isToyboxOpen, isMenuOpen, isMusicOpen, isPhoneOpen, activeWebApp, isCarPlayOpen, isMapOpen, isCanMonitorOpen, isTheaterOpen, isArcadeOpen, closeToybox]);
+  // Zelfde voor Diagnose
+  useEffect(() => {
+    if (isDiagnosticsOpen && (isMenuOpen || isMusicOpen || isPhoneOpen || activeWebApp || isCarPlayOpen || isMapOpen || isCanMonitorOpen || isTheaterOpen || isArcadeOpen || isToyboxOpen)) closeDiagnostics();
+  }, [isDiagnosticsOpen, isMenuOpen, isMusicOpen, isPhoneOpen, activeWebApp, isCarPlayOpen, isMapOpen, isCanMonitorOpen, isTheaterOpen, isArcadeOpen, isToyboxOpen, closeDiagnostics]);
   // Android-app achter Nav (Google Maps/Waze); undefined = alleen de PandaOS-kaart
   const fullscreenNavApp = isMapOpen ? getLinkedAndroidPackage(appLinks, 'maps') : undefined;
 
@@ -72,6 +92,18 @@ const SplashScreen: React.FC = () => {
     return () => clearInterval(timer);
   }, [btConnectedAddress]);
 
+  // App-menu: direct tonen/weghalen, of omhoog schuiven en bij sluiten terug omlaag (Settings > Display)
+  const menuSlides = displaySettings?.appMenuAnimation === 'slide';
+  const [quickActionsShown, setQuickActionsShown] = useState(isQuickActionsOpen);
+  const [quickActionsClosing, setQuickActionsClosing] = useState(false);
+  useEffect(() => {
+    if (isQuickActionsOpen) { setQuickActionsClosing(false); setQuickActionsShown(true); return; }
+    if (!menuSlides) { setQuickActionsShown(false); return; }
+    setQuickActionsClosing(true);
+    const timer = setTimeout(() => { setQuickActionsShown(false); setQuickActionsClosing(false); }, 220);
+    return () => clearTimeout(timer);
+  }, [isQuickActionsOpen, menuSlides]);
+
   // Real-time klok
   useEffect(() => {
     const clockInterval = setInterval(() => setCurrentDate(new Date()), 1000);
@@ -81,7 +113,9 @@ const SplashScreen: React.FC = () => {
   const formattedTime = currentDate.toLocaleTimeString('en-US', {
     hour: 'numeric',
     minute: '2-digit',
-    hour12: displaySettings?.timeFormat === '12h'
+    hour12: displaySettings?.timeFormat === '12h',
+    // Gekozen tijdzone (Settings > Display), ook als Android zelf een andere zone heeft
+    ...(displaySettings?.timeZone ? { timeZone: displaySettings.timeZone } : {}),
   });
 
   // Buitentemperatuur van de auto (CAN-kastje/OBD2); onbekend = niet tonen
@@ -150,8 +184,8 @@ const SplashScreen: React.FC = () => {
   // --- TEKSTGROOTTE (Settings > Display): alle tekst schaalt mee via --text-scale ---
   useEffect(() => {
     applyTextScale(textScaleFor(displaySettings?.textSize, displaySettings?.textScale));
-    applyDockHeight(displaySettings?.dockHeight);
-  }, [displaySettings?.textSize, displaySettings?.textScale, displaySettings?.dockHeight]);
+    applyDockHeight(displaySettings?.dockHeight, displaySettings?.dockIconMode, displaySettings?.dockIconScale);
+  }, [displaySettings?.textSize, displaySettings?.textScale, displaySettings?.dockHeight, displaySettings?.dockIconMode, displaySettings?.dockIconScale]);
 
   // --- UI SPLIT LOGICA ---
   const isParked = brakeApplied || gear === 'P';
@@ -170,7 +204,7 @@ const SplashScreen: React.FC = () => {
       rightWidth = '70%';
   } else {
       // Settings, Music, Phone en Nav openen naast de auto; web-apps en CarPlay schermvullend.
-      if (isMenuOpen || isMusicOpen || isPhoneOpen || isMapOpen || isCanMonitorOpen) {
+      if (isMenuOpen || isMusicOpen || isPhoneOpen || isMapOpen || isCanMonitorOpen || isTheaterOpen || isArcadeOpen || isToyboxOpen || isDiagnosticsOpen) {
           leftWidth = '30%';
           rightWidth = '70%';
       } else if (activeWebApp || isCarPlayOpen) {
@@ -190,7 +224,7 @@ const SplashScreen: React.FC = () => {
 
   // --- HEADER BACKGROUND KLEUR LOGICA VOOR RECHTER SCHERM ---
   let rightHeaderBg = 'transparent';
-  if (isMenuOpen || isPhoneOpen || isCanMonitorOpen) rightHeaderBg = isDarkMode ? '#414141' : '#f0f0f0'; // gelijk aan Settings/Phone (Figma Menu Screens)
+  if (isMenuOpen || isPhoneOpen || isCanMonitorOpen || isTheaterOpen || isArcadeOpen || isToyboxOpen || isDiagnosticsOpen) rightHeaderBg = isDarkMode ? '#414141' : '#f0f0f0'; // gelijk aan Settings/Phone (Figma Menu Screens)
   else if (isMusicOpen) rightHeaderBg = isDarkMode ? '#1e1e1e' : '#f5f5f5'; // gelijk aan de achtergrond van MusicApp
   else if (activeWebApp || isCarPlayOpen || showCamera) rightHeaderBg = '#000000';
   // Boven de kaart: donker verloop met witte tekst (Figma "top nav with gradient"), leesbaar op een lichte kaart
@@ -326,7 +360,7 @@ const SplashScreen: React.FC = () => {
             {/* APPS WRAPPER: 50px offset om header vrij te houden */}
             {/* Zonder open app laat deze laag klikken door naar de kaart (anders werkt het Navi-zoekveld niet) */}
             <div ref={appsRef} style={{ position: 'absolute', top: '50px', left: 0, right: 0, bottom: 0, zIndex: 10,
-              pointerEvents: (isMenuOpen || isMusicOpen || isPhoneOpen || activeWebApp || isCarPlayOpen || showCamera || isCanMonitorOpen) ? 'auto' : 'none' }}>
+              pointerEvents: (isMenuOpen || isMusicOpen || isPhoneOpen || activeWebApp || isCarPlayOpen || showCamera || isCanMonitorOpen || isTheaterOpen || isArcadeOpen || isToyboxOpen || isDiagnosticsOpen) ? 'auto' : 'none' }}>
               {showCamera ? (
                  <RearCamera /> // automatisch in R, of via het Camera-pictogram
               ) : (
@@ -337,6 +371,10 @@ const SplashScreen: React.FC = () => {
                    <CarPlayApp />
                    <PhoneApp />
                    <CanMonitorApp />
+                   <TheaterApp />
+                   <ArcadeApp />
+                   <ToyboxApp />
+                   <DiagnosticsApp />
                  </>
               )}
             </div>
@@ -356,8 +394,8 @@ const SplashScreen: React.FC = () => {
 
       <AudioSettings />
 
-      {isQuickActionsOpen && (
-        <div className="quick-actions-wrapper" onClick={closeAll}>
+      {quickActionsShown && (
+        <div className={`quick-actions-wrapper ${menuSlides ? (quickActionsClosing ? 'qa-slide-out' : 'qa-slide-in') : ''}`} onClick={closeAll}>
           <div onClick={(e) => e.stopPropagation()}>
             <QuickActionsApp />
           </div>

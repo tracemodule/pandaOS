@@ -115,8 +115,8 @@ export const LINKABLE_APPS: LinkableApp[] = [
       { id: 'youtube-android', name: 'YouTube', package: 'com.google.android.youtube' },
       { id: 'youtube-music', name: 'YouTube Music', package: 'com.google.android.apps.youtube.music' },
     ] },
-  { id: 'netflix', name: 'Theater', icon: '/app-icons/netflix.svg', preferAndroid: true, androidOnly: true, allowOther: true,
-    storePackage: 'com.netflix.mediaclient', options: [
+  // Theater: de PandaOS-pagina met videoapps (TheaterApp.tsx); één app direct koppelen kan ook
+  { id: 'netflix', name: 'Theater', icon: '/app-icons/netflix.svg', allowOther: true, options: [
       { id: 'netflix-android', name: 'Netflix', package: 'com.netflix.mediaclient' },
     ] },
   // Energy (tankpictogram): brandstofprijzen en tankstations
@@ -146,9 +146,12 @@ export const LINKABLE_APPS: LinkableApp[] = [
     hideWhenMissing: true, options: [
       { id: 'tunein-android', name: 'TuneIn', package: 'tunein.player' },
     ] },
-  // Toybox: spelletjes via Google Play Games
-  { id: 'toybox', name: 'Toybox', icon: '/app-icons/toybox.svg', preferAndroid: true, androidOnly: true,
-    hideWhenMissing: true, allowOther: true, options: [
+  // Diagnose: logboek en Probleem melden (DiagnosticsApp.tsx)
+  { id: 'diagnostics', name: 'Diagnostics', icon: '/app-icons/diagnostics.svg', options: [] },
+  // Arcade: de PandaOS-pagina met alle games op de radio (ArcadeApp.tsx)
+  { id: 'arcade', name: 'Arcade', icon: '/app-icons/arcade.svg', allowOther: true, options: [] },
+  // Toybox: de PandaOS-speeltjes (ToyboxApp.tsx); een Android-app koppelen kan ook
+  { id: 'toybox', name: 'Toybox', icon: '/app-icons/toybox.svg', allowOther: true, options: [
       { id: 'play-games', name: 'Google Play Games', package: 'com.google.android.play.games' },
     ] },
 
@@ -165,7 +168,7 @@ export const LINKABLE_APPS: LinkableApp[] = [
     { id: 'google-phone', name: 'Google Phone', package: 'com.google.android.dialer' },
   ] },
   { id: 'camera', name: 'Camera', icon: '/app-icons/camera.svg', options: [] }, // achteruitrijcamera
-  { id: 'dashcam', name: 'Dashcam', icon: '/app-icons/dashcam.svg', allowOther: true, options: [] },
+  { id: 'dashcam', name: 'Rear camera', icon: '/app-icons/dashcam.svg', allowOther: true, options: [] },
   // Bluetooth: de Bluetooth-tab van PandaOS, of de Bluetooth-app van de radio (telefoon verbinden, muziek, bellen)
   { id: 'bluetooth', name: 'Bluetooth', icon: '/app-icons/bluetooth.svg', allowOther: true,
     detect: /bluetooth|bt ?music|bt ?phone|btmusic|btphone/i, options: [] },

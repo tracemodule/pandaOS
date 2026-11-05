@@ -20,7 +20,7 @@ const ControlBar: React.FC = () => {
   const {
     toggleMenu, toggleQuickActions, isAppEditMode,
     pinnedApps, recentApps, unpinApp, screenMode, addRecentApp,
-    openWebApp, toggleMusic, openSettingsTab, toggleCarPlay, // <--- Hier toegevoegd!
+    openWebApp, toggleMusic, isTheaterOpen, openTheater, closeTheater, isArcadeOpen, openArcade, closeArcade, isToyboxOpen, openToybox, closeToybox, isDiagnosticsOpen, openDiagnostics, closeDiagnostics, openSettingsTab, toggleCarPlay, // <--- Hier toegevoegd!
     isPhoneOpen, openPhone, closePhone, openCanMonitor, isMapOpen, openMap, closeAll,
     volume, stepVolume, toggleVolume, isVolumeOpen, vehicleLightsOn, appLinks
   } = useUIStore();
@@ -62,7 +62,10 @@ const ControlBar: React.FC = () => {
 
     if (id === 'spotify') openWebApp('spotify');
     else if (id === 'youtube') openWebApp('youtube');
-    else if (id === 'netflix') openWebApp('netflix');
+    else if (id === 'netflix') isTheaterOpen ? closeTheater() : openTheater();
+    else if (id === 'arcade') isArcadeOpen ? closeArcade() : openArcade();
+    else if (id === 'toybox') isToyboxOpen ? closeToybox() : openToybox();
+    else if (id === 'diagnostics') isDiagnosticsOpen ? closeDiagnostics() : openDiagnostics();
     else if (id === 'music') toggleMusic();
     else if (id === 'settings') openSettingsTab('Display');
     else if (id === 'bluetooth') openSettingsTab('Bluetooth');
@@ -131,7 +134,7 @@ const ControlBar: React.FC = () => {
                 key={id} 
                 className="dock-app" 
                 data-drop="pinned" data-index={index}
-                style={{ position: 'relative', width: 36, height: 36, cursor: isAppEditMode ? 'grab' : 'pointer',
+                style={{ position: 'relative', width: 'calc(36px * var(--dock-scale, 1))', height: 'calc(36px * var(--dock-scale, 1))', cursor: isAppEditMode ? 'grab' : 'pointer',
                   opacity: drag?.id === id ? 0.3 : isNotInstalled(id) ? 0.4 : 1, touchAction: isAppEditMode ? 'none' : 'auto',
                   // plek waar de app terechtkomt
                   boxShadow: drag?.over === `pinned:${index}` ? '-6px 0 0 -3px #3e6ae1' : 'none' }}
@@ -160,7 +163,7 @@ const ControlBar: React.FC = () => {
         </div>
 
         {/* Separator */}
-        <div style={{ width: '1px', height: '24px', background: isDarkMode ? '#444' : '#ccc', margin: '0 5px' }}></div>
+        <div style={{ width: '1px', height: 'calc(24px * var(--dock-scale, 1))', background: isDarkMode ? '#444' : '#ccc', margin: '0 5px' }}></div>
 
         {/* Recent Apps */}
         <div style={{ display: 'flex', gap: '10px', opacity: isAppEditMode ? 0.7 : 1 }}>
@@ -168,7 +171,7 @@ const ControlBar: React.FC = () => {
               <div 
                 key={id} 
                 className="dock-app" 
-                style={{ width: 36, height: 36, cursor: isAppEditMode ? 'grab' : 'pointer', opacity: isNotInstalled(id) ? 0.4 : 1, touchAction: isAppEditMode ? 'none' : 'auto' }}
+                style={{ width: 'calc(36px * var(--dock-scale, 1))', height: 'calc(36px * var(--dock-scale, 1))', cursor: isAppEditMode ? 'grab' : 'pointer', opacity: isNotInstalled(id) ? 0.4 : 1, touchAction: isAppEditMode ? 'none' : 'auto' }}
                 onClick={() => handleDockAppClick(id)}
                 onPointerDown={(e) => { if (isAppEditMode) pressApp(e, { id, icon: getAppIconUrl(id), longPress: false }); }}
               >

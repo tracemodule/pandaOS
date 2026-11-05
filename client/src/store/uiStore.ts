@@ -65,17 +65,22 @@ export const applyTextScale = (scale: number) =>
   document.documentElement.style.setProperty('--text-scale', String(scale));
 // Hoogte van de dock (Settings > Display): CSS-variabele --dock-height, gebruikt door de dock en het toetsenbord
 export const DOCK_HEIGHT_DEFAULT = 64;
-export const applyDockHeight = (px: number | undefined) => {
+// Dock: hoogte van de balk en grootte van de pictogrammen (Settings > Display).
+// iconMode 'follow': pictogrammen groeien mee met de balk (niet onder 85%); 'fixed': vaste grootte.
+// iconScale (70-150 %) komt daar bovenop. Een pictogram (klikvlak 40 px) wordt nooit hoger dan de balk.
+export const applyDockHeight = (px: number | undefined, iconMode: 'follow' | 'fixed' = 'follow', iconScale = 100) => {
   const height = px ?? DOCK_HEIGHT_DEFAULT;
   document.documentElement.style.setProperty('--dock-height', `${height}px`);
-  // Pictogrammen schalen mee, maar niet onder 85% (blijven goed aan te tikken)
-  document.documentElement.style.setProperty('--dock-scale', String(Math.max(0.85, height / DOCK_HEIGHT_DEFAULT)));
+  const base = iconMode === 'follow' ? Math.max(0.85, height / DOCK_HEIGHT_DEFAULT) : 1;
+  const scale = Math.min(base * (iconScale / 100), (height - 4) / 40);
+  document.documentElement.style.setProperty('--dock-scale', String(scale));
 };
 
 export interface DisplaySettings {
   textSize: 'Standard' | 'Large' | 'Custom'; // Custom = handmatig met de schuifbalk (textScale)
   textScale?: number; // 0.85 - 1.4, alleen bij Custom
   timeFormat: '12h' | '24h';
+  timeZone?: string; // bijv. 'Europe/Amsterdam'; leeg = die van Android
   energyDisplay: 'Percentage' | 'Distance';
   distance: 'Kilometers' | 'Miles';
   temperature: 'C' | 'F';
@@ -88,6 +93,9 @@ export interface DisplaySettings {
   nightFilter: boolean; // warmere kleuren als het donker is (minder blauw licht)
   language: 'en' | 'nl'; // taal van de interface (zie src/i18n.ts)
   dockHeight?: number; // hoogte van de zwarte balk onderin (dock), 48-96 px; standaard 64
+  dockIconMode?: 'follow' | 'fixed'; // pictogrammen groeien mee met de dock, of vaste grootte
+  dockIconScale?: number; // grootte van de dock-pictogrammen, 70-150 %; standaard 100
+  appMenuAnimation?: 'instant' | 'slide'; // app-menu (raster in de dock): direct tonen of omhoog schuiven
 }
 
 // Snelheidswaarschuwing (Settings > Safety). Snelheid via GPS; de maximumsnelheid van de weg uit kaartgegevens.
@@ -157,7 +165,7 @@ export interface LightsSettings {
 // Uiterlijk van de 3D-auto. Voorruit en voorportierramen zijn altijd licht (wettelijk), alleen de achterste ramen krijgen tint.
 export type WindowTint = 'None' | 'Light' | 'Medium' | 'Dark' | 'Limo';
 // Uitlaat op het 3D-model: 1 of 2 links/rechts, aan beide kanten, of 2 in het midden
-export type ExhaustLayout = 'left1' | 'left2' | 'right1' | 'right2' | 'both1' | 'both2' | 'center2';
+export type ExhaustLayout = 'left1' | 'left2' | 'right1' | 'right2' | 'both1' | 'both2' | 'center2' | 'none';
 export interface VehicleSettings {
   model: string; // id uit VEHICLE_MODELS (configuration/vehicleModels.ts)
   // Bepaalt P R N D of P R D in de versnellingsweergave. 'Detect' = wat de auto zelf doorgeeft (CAN/OBD2, carState)
@@ -181,6 +189,9 @@ export interface VehicleSettings {
   // Colouriser (Settings > Vehicle > Paint): lakafwerking en zelf gemaakte kleuren. Metallic = het model zoals het is.
   paintFinish?: 'Solid' | 'Metallic' | 'Matte';
   customPaints?: string[];
+  customRims?: string[]; // eigen velgkleuren uit de Kleurenkiezer
+  colorNames?: Record<string, string>; // namen van eigen kleuren (hex in kleine letters -> naam)
+  rainbowFloor?: boolean; // Toybox: regenboog onder de 3D-auto
   // Naam van de auto (Settings > Software, "Name Your Vehicle"); leeg = de modelnaam
   vehicleName?: string;
 }
@@ -383,6 +394,22 @@ interface UIState {
   isCanMonitorOpen: boolean;
   openCanMonitor: () => void;
   closeCanMonitor: () => void;
+  // Theater (half scherm): videoapps zoals Netflix, YouTube en Twitch
+  isTheaterOpen: boolean;
+  openTheater: () => void;
+  closeTheater: () => void;
+  // Arcade (half scherm): de games op de radio
+  isArcadeOpen: boolean;
+  openArcade: () => void;
+  closeArcade: () => void;
+  // Toybox (half scherm): speeltjes
+  isToyboxOpen: boolean;
+  openToybox: () => void;
+  closeToybox: () => void;
+  // Diagnose (half scherm): logboek en Probleem melden
+  isDiagnosticsOpen: boolean;
+  openDiagnostics: () => void;
+  closeDiagnostics: () => void;
   closeCamera: () => void;
   openMap: () => void;
 
@@ -1154,6 +1181,10 @@ export const useUIStore = create<UIState>()(persist((set, get) => ({
     isCameraOpen: false,
     isPhoneOpen: false,
     isCanMonitorOpen: false,
+    isTheaterOpen: false,
+    isArcadeOpen: false,
+    isToyboxOpen: false,
+    isDiagnosticsOpen: false,
     activeWebApp: null,
     isAppEditMode: false
   }),
@@ -1168,6 +1199,50 @@ export const useUIStore = create<UIState>()(persist((set, get) => ({
     });
   },
   closeCanMonitor: () => set({ isCanMonitorOpen: false }),
+
+  // Theater (half scherm, naast de auto): tegels van videoapps; geïnstalleerd = openen, anders de Play Store
+  isTheaterOpen: false,
+  openTheater: () => {
+    get().addRecentApp('netflix');
+    set({
+      isTheaterOpen: true, isArcadeOpen: false, isToyboxOpen: false, isDiagnosticsOpen: false, isCanMonitorOpen: false, isMenuOpen: false, isMusicOpen: false, isPhoneOpen: false, isMapOpen: false,
+      activeWebApp: null, isCarPlayOpen: false, isCameraOpen: false, isQuickActionsOpen: false,
+    });
+  },
+  closeTheater: () => set({ isTheaterOpen: false }),
+
+  // Arcade (half scherm, naast de auto): uitgelicht spel bovenaan, rij met alle geïnstalleerde games eronder
+  isArcadeOpen: false,
+  openArcade: () => {
+    get().addRecentApp('arcade');
+    set({
+      isArcadeOpen: true, isTheaterOpen: false, isToyboxOpen: false, isDiagnosticsOpen: false, isCanMonitorOpen: false, isMenuOpen: false, isMusicOpen: false, isPhoneOpen: false,
+      isMapOpen: false, activeWebApp: null, isCarPlayOpen: false, isCameraOpen: false, isQuickActionsOpen: false,
+    });
+  },
+  closeArcade: () => set({ isArcadeOpen: false }),
+
+  // Toybox (half scherm, naast de auto): speeltjes zoals Regenboogvloer, Tekenblok en Haardvuur
+  isToyboxOpen: false,
+  openToybox: () => {
+    get().addRecentApp('toybox');
+    set({
+      isToyboxOpen: true, isArcadeOpen: false, isDiagnosticsOpen: false, isTheaterOpen: false, isCanMonitorOpen: false, isMenuOpen: false, isMusicOpen: false,
+      isPhoneOpen: false, isMapOpen: false, activeWebApp: null, isCarPlayOpen: false, isCameraOpen: false, isQuickActionsOpen: false,
+    });
+  },
+  closeToybox: () => set({ isToyboxOpen: false }),
+
+  // Diagnose (half scherm, naast de auto): logboek van PandaOS en Probleem melden
+  isDiagnosticsOpen: false,
+  openDiagnostics: () => {
+    get().addRecentApp('diagnostics');
+    set({
+      isDiagnosticsOpen: true, isToyboxOpen: false, isArcadeOpen: false, isTheaterOpen: false, isCanMonitorOpen: false, isMenuOpen: false,
+      isMusicOpen: false, isPhoneOpen: false, isMapOpen: false, activeWebApp: null, isCarPlayOpen: false, isCameraOpen: false, isQuickActionsOpen: false,
+    });
+  },
+  closeDiagnostics: () => set({ isDiagnosticsOpen: false }),
 }), {
   name: 'pandaos-settings',
   version: 2,

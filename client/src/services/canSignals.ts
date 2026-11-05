@@ -13,31 +13,34 @@ export interface CanFunction {
   kind: 'switch' | 'value'; // switch: aan/uit leren; value: een getal uit de regel
   hint: string; // wat je in de auto doet tijdens het leren
   unit?: string;
+  // Komt alleen via een werkend CAN-kastje. Op de radio van 5-11-2026 meldt het kastje "Protocol niet verbonden";
+  // achteruit, stadslicht en het radiovolume komen wel binnen (losse draden / de radio zelf).
+  canOnly?: boolean;
 }
 
 export const CAN_FUNCTIONS: CanFunction[] = [
   { id: 'reverse', label: 'Reverse', group: 'Drive', kind: 'switch', hint: 'Shift into reverse (on) or out of reverse (off).' },
-  { id: 'handbrake', label: 'Handbrake', group: 'Drive', kind: 'switch', hint: 'Pull the handbrake (on) or release it (off).' },
-  { id: 'door_fl', label: 'Front left door', group: 'Doors', kind: 'switch', hint: 'Open (on) or close (off) the front left door.' },
-  { id: 'door_fr', label: 'Front right door', group: 'Doors', kind: 'switch', hint: 'Open (on) or close (off) the front right door.' },
-  { id: 'door_rl', label: 'Rear left door', group: 'Doors', kind: 'switch', hint: 'Open (on) or close (off) the rear left door.' },
-  { id: 'door_rr', label: 'Rear right door', group: 'Doors', kind: 'switch', hint: 'Open (on) or close (off) the rear right door.' },
-  { id: 'trunk', label: 'Tailgate', group: 'Doors', kind: 'switch', hint: 'Open (on) or close (off) the tailgate.' },
+  { id: 'handbrake', label: 'Handbrake', group: 'Drive', kind: 'switch', hint: 'Pull the handbrake (on) or release it (off).', canOnly: true },
+  { id: 'door_fl', label: 'Front left door', group: 'Doors', kind: 'switch', hint: 'Open (on) or close (off) the front left door.', canOnly: true },
+  { id: 'door_fr', label: 'Front right door', group: 'Doors', kind: 'switch', hint: 'Open (on) or close (off) the front right door.', canOnly: true },
+  { id: 'door_rl', label: 'Rear left door', group: 'Doors', kind: 'switch', hint: 'Open (on) or close (off) the rear left door.', canOnly: true },
+  { id: 'door_rr', label: 'Rear right door', group: 'Doors', kind: 'switch', hint: 'Open (on) or close (off) the rear right door.', canOnly: true },
+  { id: 'trunk', label: 'Tailgate', group: 'Doors', kind: 'switch', hint: 'Open (on) or close (off) the tailgate.', canOnly: true },
   { id: 'parking', label: 'Parking lights', group: 'Lights', kind: 'switch', hint: 'Turn the light switch to parking lights (on) or off (off).' },
-  { id: 'low', label: 'Low beam', group: 'Lights', kind: 'switch', hint: 'Turn the light switch to low beam (on) or off (off).' },
-  { id: 'high', label: 'High beam', group: 'Lights', kind: 'switch', hint: 'High beam on (on) or off (off).' },
-  { id: 'blinker_left', label: 'Left indicator', group: 'Lights', kind: 'switch', hint: 'Left indicator on (on) or off (off).' },
-  { id: 'blinker_right', label: 'Right indicator', group: 'Lights', kind: 'switch', hint: 'Right indicator on (on) or off (off).' },
-  { id: 'hazard', label: 'Hazard lights', group: 'Lights', kind: 'switch', hint: 'Hazard lights on (on) or off (off).' },
-  { id: 'fog_front', label: 'Front fog lights', group: 'Lights', kind: 'switch', hint: 'Front fog lights on (on) or off (off).' },
-  { id: 'fog_rear', label: 'Rear fog light', group: 'Lights', kind: 'switch', hint: 'Rear fog light on (on) or off (off).' },
-  { id: 'seatbelt', label: 'Seatbelt warning', group: 'Drive', kind: 'switch', hint: 'Unfasten the driver seatbelt (on) or fasten it (off).' },
-  { id: 'speed', label: 'Speed', group: 'Values', kind: 'value', unit: 'km/h', hint: 'Drive a short distance so the speed changes.' },
-  { id: 'fuel', label: 'Fuel level', group: 'Values', kind: 'value', unit: '%', hint: 'The fuel level line usually comes by itself; wait a moment.' },
-  { id: 'outside_temp', label: 'Outside temperature', group: 'Values', kind: 'value', unit: '°C', hint: 'The temperature line usually comes by itself; wait a moment.' },
+  { id: 'low', label: 'Low beam', group: 'Lights', kind: 'switch', hint: 'Turn the light switch to low beam (on) or off (off).', canOnly: true },
+  { id: 'high', label: 'High beam', group: 'Lights', kind: 'switch', hint: 'High beam on (on) or off (off).', canOnly: true },
+  { id: 'blinker_left', label: 'Left indicator', group: 'Lights', kind: 'switch', hint: 'Left indicator on (on) or off (off).', canOnly: true },
+  { id: 'blinker_right', label: 'Right indicator', group: 'Lights', kind: 'switch', hint: 'Right indicator on (on) or off (off).', canOnly: true },
+  { id: 'hazard', label: 'Hazard lights', group: 'Lights', kind: 'switch', hint: 'Hazard lights on (on) or off (off).', canOnly: true },
+  { id: 'fog_front', label: 'Front fog lights', group: 'Lights', kind: 'switch', hint: 'Front fog lights on (on) or off (off).', canOnly: true },
+  { id: 'fog_rear', label: 'Rear fog light', group: 'Lights', kind: 'switch', hint: 'Rear fog light on (on) or off (off).', canOnly: true },
+  { id: 'seatbelt', label: 'Seatbelt warning', group: 'Drive', kind: 'switch', hint: 'Unfasten the driver seatbelt (on) or fasten it (off).', canOnly: true },
+  { id: 'speed', label: 'Speed', group: 'Values', kind: 'value', unit: 'km/h', hint: 'Drive a short distance so the speed changes.', canOnly: true },
+  { id: 'fuel', label: 'Fuel level', group: 'Values', kind: 'value', unit: '%', hint: 'The fuel level line usually comes by itself; wait a moment.', canOnly: true },
+  { id: 'outside_temp', label: 'Outside temperature', group: 'Values', kind: 'value', unit: '°C', hint: 'The temperature line usually comes by itself; wait a moment.', canOnly: true },
   // Volume van de radio zelf (VOL-knoppen gaan buiten Android om naar de audiochip; log bijv. 'setvolume881 to 12')
   { id: 'radio_volume', label: 'Radio volume', group: 'Values', kind: 'value', unit: '0-40', hint: 'Press VOL+ and VOL- on the radio a few times.' },
-  { id: 'range', label: 'Range', group: 'Values', kind: 'value', unit: 'km', hint: 'The range line usually comes by itself; wait a moment.' },
+  { id: 'range', label: 'Range', group: 'Values', kind: 'value', unit: 'km', hint: 'The range line usually comes by itself; wait a moment.', canOnly: true },
 ];
 
 const bridge = () => (window as any).PandaAndroid;

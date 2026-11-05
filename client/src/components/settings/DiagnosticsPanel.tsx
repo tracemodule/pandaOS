@@ -9,7 +9,7 @@ type NativeEntry = { time: number; level: string; message: string };
 
 const LEVEL_COLOR: Record<string, string> = { error: 'var(--tsl-red)', warn: '#e0a100', info: 'var(--tsl-muted)' };
 
-const DiagnosticsPanel: React.FC = () => {
+const DiagnosticsPanel: React.FC<{ hideTitle?: boolean }> = ({ hideTitle }) => {
   const t = useT();
   const web = useSyncExternalStore(subscribeDiag, getDiagEntries);
   const [native, setNative] = useState<NativeEntry[]>([]);
@@ -31,7 +31,7 @@ const DiagnosticsPanel: React.FC = () => {
 
   return (
     <div className="tsl-section">
-      <span className="tsl-title">{t('Diagnostics')}</span>
+      {!hideTitle && <span className="tsl-title">{t('Diagnostics')}</span>}
       <small className="tsl-hint">
         {t('PandaOS keeps a log of errors and events. Send it when something goes wrong.')}
       </small>

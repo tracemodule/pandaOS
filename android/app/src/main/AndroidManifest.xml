@@ -27,6 +27,10 @@
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <!-- Schermhelderheid voor het hele apparaat (Settings > Display); de gebruiker geeft dit apart toe -->
     <uses-permission android:name="android.permission.WRITE_SETTINGS" tools:ignore="ProtectedPermissions" />
+    <!-- Radio-instellingen (systeembalk, volumebalk): alleen na `adb shell pm grant nl.pandaos.launcher android.permission.WRITE_SECURE_SETTINGS` -->
+    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" tools:ignore="ProtectedPermissions" />
+    <!-- Taal van Android vanuit PandaOS: alleen na `adb shell pm grant nl.pandaos.launcher android.permission.CHANGE_CONFIGURATION` -->
+    <uses-permission android:name="android.permission.CHANGE_CONFIGURATION" tools:ignore="ProtectedPermissions" />
 
     <!-- Nodig om vanaf Android 11 de geïnstalleerde (startbare) apps te zien: getInstalledApps() -->
     <queries>

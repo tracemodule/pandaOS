@@ -1,7 +1,7 @@
 // Software-update (Settings > Software): huidige versie, controleren op GitHub, downloaden en installeren.
 // Bij het opstarten kijkt PandaOS zelf ook (zie checkForUpdatesAtStartup), met een melding als er iets nieuws is.
 import React, { useEffect, useState } from 'react';
-import { RotateCw, Download, CheckCircle2 } from 'lucide-react';
+import { RotateCw, Download, CheckCircle2, Timer, X, Check } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { currentVersion, fetchLatestRelease, isNewer, canInstallUpdates, installUpdate, type ReleaseInfo } from '../../services/updates';
 import { useT } from '../../i18n';
@@ -13,6 +13,7 @@ const SoftwareUpdatePanel: React.FC = () => {
   const { appSettings, updateAppSetting } = useUIStore();
   const [release, setRelease] = useState<ReleaseInfo | null | undefined>(undefined); // undefined = nog niet gekeken
   const [status, setStatus] = useState<Status>({ state: 'idle' });
+  const [autoOpen, setAutoOpen] = useState(false); // venster: automatisch controleren aan/uit
   const version = currentVersion();
   const hasUpdate = !!release && isNewer(release.version, version);
 
@@ -46,6 +47,7 @@ const SoftwareUpdatePanel: React.FC = () => {
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, []);
 
+  const autoCheck = appSettings.autoUpdateCheck ?? true;
   const busy = status.state === 'checking' || status.state === 'downloading' || status.state === 'installing';
 
   return (
@@ -67,6 +69,10 @@ const SoftwareUpdatePanel: React.FC = () => {
           </div>
           <button className="tsl-btn is-small" disabled={busy} onClick={check}>
             <RotateCw size={16} className={status.state === 'checking' ? 'spin-animation' : ''} /> {t('Check')}
+          </button>
+          {/* Automatisch controleren: knop naast Controleren, keuze in een venster */}
+          <button className="tsl-btn is-small" onClick={() => setAutoOpen(true)}>
+            <Timer size={16} /> {t('Automatically')}: {t(autoCheck ? 'On' : 'Off')}
           </button>
         </div>
       </div>
@@ -91,14 +97,24 @@ const SoftwareUpdatePanel: React.FC = () => {
       {status.state === 'installing' && <small className="tsl-hint">{t('Installing… PandaOS restarts by itself.')}</small>}
       {status.state === 'error' && <small className="tsl-hint" style={{ color: 'var(--tsl-red)' }}>{status.message}</small>}
 
-      <label className="tsl-switch-row">
-        <div className="tsl-switch-text" style={{ flex: 1 }}>
-          <span className="tsl-field-text">{t('Check automatically')}</span>
-          <small className="tsl-hint">{t('Shows a notification at startup when a new version is available.')}</small>
+      {autoOpen && (
+        <div className="tsl-modal-backdrop" onClick={() => setAutoOpen(false)}>
+          <div className="tsl-modal" style={{ width: 440 }} onClick={(e) => e.stopPropagation()}>
+            <button className="tsl-modal-close" aria-label={t('Close')} onClick={() => setAutoOpen(false)}><X size={20} /></button>
+            <span className="tsl-modal-title">{t('Check automatically')}</span>
+            <small className="tsl-hint" style={{ textAlign: 'center' }}>{t('Shows a notification at startup when a new version is available.')}</small>
+            <div className="tsl-list">
+              {([true, false] as const).map((on) => (
+                <div key={String(on)} className={`tsl-list-row ${autoCheck === on ? 'is-active' : ''}`} style={{ cursor: 'pointer' }}
+                  onClick={() => { updateAppSetting('autoUpdateCheck', on); setAutoOpen(false); }}>
+                  <span className="tsl-field-text" style={{ flex: 1 }}>{t(on ? 'On' : 'Off')}</span>
+                  {autoCheck === on && <Check size={20} />}
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
-        <input type="checkbox" className="tsl-toggle" checked={appSettings.autoUpdateCheck ?? true}
-          onChange={(e) => updateAppSetting('autoUpdateCheck', e.target.checked)} />
-      </label>
+      )}
     </div>
   );
 };

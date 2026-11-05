@@ -1,0 +1,251 @@
+// Theater (TheaterApp.tsx) en Arcade: paneel met tegels in de kleuren van licht/donker (tsl-ui), schuift bij openen
+// van rechts naar links in beeld
+.theater-app {
+  user-select: none;
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 18px 24px;
+  box-sizing: border-box;
+  background: var(--tsl-bg);
+  color: var(--tsl-text);
+  overflow-y: auto;
+  // Eigen kleuren voor tegels; donker hieronder
+  --th-tile: var(--tsl-white);
+  --th-tile-active: var(--tsl-gray-200);
+  --th-tile-missing: var(--tsl-gray-200);
+  --th-hero: linear-gradient(135deg, var(--tsl-white), var(--tsl-gray-200));
+
+  &.dark-mode {
+    --th-tile: rgba(255, 255, 255, 0.07);
+    --th-tile-active: rgba(255, 255, 255, 0.14);
+    --th-tile-missing: rgba(255, 255, 255, 0.03);
+    --th-hero: linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.03));
+  }
+  animation: theater-slide-in 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+// Van rechts naar links in beeld (zoals de video)
+@keyframes theater-slide-in {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+.theater-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.theater-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: calc(22px * var(--text-scale, 1));
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.theater-close {
+  display: flex;
+  padding: 8px;
+  border: none;
+  border-radius: 50%;
+  background: var(--tsl-btn-secondary);
+  color: var(--tsl-btn-secondary-text);
+  cursor: pointer;
+}
+
+.theater-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+.theater-tile {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  aspect-ratio: 16 / 7;
+  border: none;
+  border-radius: 10px;
+  background: var(--th-tile);
+  cursor: pointer;
+  transition: transform 0.12s ease, background 0.12s ease;
+
+  img { width: 34px; height: 34px; border-radius: 8px; }
+
+  &:active { transform: scale(0.96); background: var(--th-tile-active); }
+
+  &.is-missing { background: var(--th-tile-missing); }
+  &.is-missing .theater-name { opacity: 0.55; }
+}
+
+.theater-name {
+  font-size: calc(19px * var(--text-scale, 1));
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.theater-get {
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--tsl-muted);
+  font-size: calc(11px * var(--text-scale, 1));
+}
+
+// --- Arcade (ArcadeApp.tsx): zelfde paneel, met een uitgelicht spel en een rij tegels ---
+.arcade-hero {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 24px;
+  border-radius: 12px;
+  background: var(--th-hero);
+
+  img { width: 112px; height: 112px; border-radius: 22px; }
+}
+
+.arcade-hero-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.arcade-hero-name {
+  font-size: calc(26px * var(--text-scale, 1));
+  font-weight: 700;
+}
+
+.arcade-play {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 22px;
+  border: none;
+  border-radius: 8px;
+  background: #3e6ae1;
+  color: #fff;
+  font-size: calc(15px * var(--text-scale, 1));
+  font-weight: 600;
+  cursor: pointer;
+
+  &:active { background: #2f57c4; }
+}
+
+.arcade-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 40px 0;
+  color: var(--tsl-muted);
+  font-size: calc(16px * var(--text-scale, 1));
+}
+
+.arcade-row {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+
+.arcade-tile {
+  flex: 0 0 120px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 8px;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  background: var(--th-tile);
+  color: var(--tsl-text);
+  cursor: pointer;
+  font-size: calc(13px * var(--text-scale, 1));
+  user-select: none;
+
+  img { width: 64px; height: 64px; border-radius: 14px; }
+  span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  &.is-selected { border-color: #3e6ae1; }
+  &.is-more { justify-content: center; color: var(--tsl-muted); }
+  &:active { transform: scale(0.96); }
+}
+
+// --- Toybox (ToyboxApp.tsx): speeltje bovenaan met opties en voorbeeld, rij speeltjes eronder ---
+.toy-hero {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 20px;
+  padding: 20px;
+  border-radius: 12px;
+  background: var(--th-hero);
+}
+
+.toy-hero-text {
+  flex: 0 0 240px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.toy-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 14px;
+  color: #fff;
+}
+
+.toy-sketch {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  canvas { flex: 1; width: 100%; border-radius: 10px; background: #fff; }
+}
+
+.toy-sketch-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toy-swatch {
+  width: 28px;
+  height: 28px;
+  border: 2px solid var(--tsl-border);
+  border-radius: 50%;
+  cursor: pointer;
+
+  &.is-active { outline: 3px solid #3e6ae1; outline-offset: 1px; }
+}
+
+.toy-fire {
+  position: relative;
+  flex: 1;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #140802;
+  cursor: pointer;
+
+  canvas { width: 100%; height: 100%; display: block; }
+  small { position: absolute; right: 10px; bottom: 8px; color: rgba(255, 255, 255, 0.6); }
+}

@@ -255,6 +255,36 @@ CAN-app van de radio (`openCarInfoApp`, eerst com.can.activity).
 
 **Uitgebracht in 1.3.7**: Instellingen in de stijl van de Tesla-video. Zoeken werkt (store/settingsIndex.ts, resultaten vervangen de pagina). Software: auto in eigen lak bovenaan (momentopname van het 3D-canvas, services/carSnapshot.ts), naam (`vehicleSettings.vehicleName`), venster Meer voertuiginformatie (profiel + radio, geen km-stand/VIN). Colouriser bij Voertuig > Lak (ring + vlak, Effen/Metallic/Mat = `paintFinish`, eigen kleuren `customPaints`). Wifi: naam in de kopregel, Verborgen netwerk (opent Android-wifi), Zoeken met draaiend rondje. Bluetooth: Gekoppelde apparaten als kaart met Verbreken/Apparaat vergeten. LAPTOP-ADB.md heeft een draaiboek (A-F) en tools/settings-diff.ps1.
 
+**Uitgebracht in 1.3.8** (na het radio-onderzoek van 5-11-2026; de lijst staat in TODO-VOLGENDE-VERSIE.md):
+- Achteruitrijcamera (RearCamera.tsx): camera 8 eerst, camera's die niet openen worden overgeslagen. Er is een venster
+  "Camera kiezen" met Zoeken. Klikken in het camerascherm sluit de camera niet meer. Dashcam heet nu Achteruitrijcamera.
+- Veegstrook voor het paneel: 48 px over de hele breedte via touch-events op window. Er ligt geen laag meer over de bovenbalk.
+- Geavanceerd → Radio-instellingen (RadioSystem.kt, na `pm grant WRITE_SECURE_SETTINGS`):
+  - systeembalk (`policy_control`);
+  - volumebalk (overscan via IWindowManager, alleen Android 9);
+  - paneel op slot;
+  - status van hd2cam.
+- Nieuwe apps, als half paneel naast de auto (van rechts in beeld, licht/donker):
+  - Theater (video-apps; staat de app er niet op, dan opent de Play Store);
+  - Arcade (geïnstalleerde games);
+  - Toybox (Regenboogvloer, Scheetkussen, Tekenblok, Haardvuur, Spuiterij);
+  - Diagnose (eigen app, stond eerst onder Software).
+  Een app openen vanuit Theater/Arcade schuift hem van onder in beeld (launchAppSlideUp).
+- Instellingen in de tegels van de Figma-kit (IconTiles.tsx):
+  - Voertuig: lak met Groen en Kleurenkiezer; velgen met een eigen Kleurenkiezer; eigen kleuren lang indrukken om
+    ze te hernoemen of te verwijderen; uitlaat met Geen en in chroom; Ja/Nee bij Grafische kwaliteit.
+  - Geavanceerd: Hulpmiddelen en CAN-kastje als tegels. Mijn auto staat nu bij Software → Meer voertuiginformatie.
+- Software opgeschoond: Over als tabel, Automatisch controleren als knop met venster.
+- Scherm:
+  - Taal als knop met venster, ook voor Android (`pm grant CHANGE_CONFIGURATION`).
+  - Tijd en tijdzone automatisch/handmatig. Een tijdzone of tijd zetten werkt alleen als apparaateigenaar;
+    anders toont PandaOS zelf de gekozen zone.
+  - Nachtfilter Uit/Aan.
+  - App-menu direct of omhoog schuiven.
+  - Dock-pictogrammen meegroeien of vast, met een eigen grootte; alle iconen in de dock schalen mee.
+- Schermreinigingsmodus over het hele scherm (portal).
+- Koppelen in de CAN-monitor: wat alleen via een werkend CAN-kastje komt, is ingeklapt.
+
 ## Nog open
 
 **Klaar voor 1.3.1 (nog niet uitgebracht: David wil er eerst nog dingen bij, 4 november 2026)**: app Ontwikkelaarsopties

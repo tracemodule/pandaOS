@@ -1,19 +1,23 @@
 // src/components/apps/SettingsApp.tsx
 import React, { useEffect, useRef, useState } from 'react';
-import { MY_VEHICLE, MY_VEHICLE_SETTINGS } from '../vehicleProfile';
+import { createPortal } from 'react-dom';
+import { MY_VEHICLE_SETTINGS } from '../vehicleProfile';
 import { useUIStore, type WindowTint, type ExhaustLayout, type CanBox, type CanProtocol, applyTextScale, textScaleFor } from '../../store/uiStore';
 import { getEffectiveTheme, PANDA_CONFIG } from '../../settings';
 import NavTree from '../../../src/components/settings/control-bar/navtree';
-import { Smartphone, RotateCw, Signal, Search, Sun, Palette } from 'lucide-react';
+import { Smartphone, RotateCw, Signal, Search, Sun, Palette, Lightbulb, Zap, Video, X, Trash2, CarFront, Activity, Cpu, Radio as RadioIcon } from 'lucide-react';
 import AndroidWifiPanel from '../../components/settings/AndroidWifiPanel';
 import SoftwareUpdatePanel from '../../components/settings/SoftwareUpdatePanel';
-import DiagnosticsPanel from '../../components/settings/DiagnosticsPanel';
 import WebViewPanel from '../../components/settings/WebViewPanel';
 import HomeScreenPanel from '../../components/settings/HomeScreenPanel';
 import AndroidBluetoothPanel from '../../components/settings/AndroidBluetoothPanel';
 import TeslaSlider from '../../components/settings/TeslaSlider';
 import Colouriser from '../../components/settings/Colouriser';
 import VehicleHero from '../../components/settings/VehicleHero';
+import RadioSystemPanel from '../../components/settings/RadioSystemPanel';
+import DateTimePanel from '../../components/settings/DateTimePanel';
+import LanguagePanel from '../../components/settings/LanguagePanel';
+import IconTiles, { type IconTile, ColorDot, TintIcon, ExhaustIcon, ManualIcon } from '../../components/settings/IconTiles';
 import { SETTINGS_INDEX } from '../settingsIndex';
 import { useT } from '../../i18n';
 import { LINKABLE_APPS, getAppLink, getChoices, useInstalledApps, isAndroidLauncher, otherAppTarget, getAndroidAppIcon, getLaunchAction,
@@ -25,7 +29,7 @@ import { getVehicleModel } from '../../components/screen/splash-screen/configura
 // Uitlaatopstellingen voor Settings > Vehicle (3D-model)
 const EXHAUST_OPTIONS: [ExhaustLayout, string][] = [
   ['left1', '1 left'], ['left2', '2 left'], ['right1', '1 right'],
-  ['right2', '2 right'], ['both1', '1 left + 1 right'], ['both2', '2 left + 2 right'], ['center2', '2 in the middle'],
+  ['right2', '2 right'], ['both1', '1 left + 1 right'], ['both2', '2 left + 2 right'], ['center2', '2 in the middle'], ['none', 'None'],
 ];
 
 // CAN-bus (Settings > Vehicle): merk/type van het CAN-kastje en het voertuigprotocol
@@ -46,12 +50,12 @@ const PAINT_COLORS = [
   { name: 'Grey', hex: '#4a4f55' },
   { name: 'Blue', hex: '#1f3fbf' },
   { name: 'Red', hex: '#b3121b' },
+  { name: 'Green', hex: '#1e5f3a' },
 ];
 const RIM_COLORS = [
   { name: 'Black', hex: '#1a1a1a' },
   { name: 'Gunmetal', hex: '#4a4d50' },
   { name: 'Silver', hex: '#b8bcc0' },
-  { name: 'Bronze', hex: '#8c6a3f' },
   { name: 'White', hex: '#e8e8e8' },
 ];
 
@@ -192,7 +196,11 @@ const SettingsApp: React.FC = () => {
 
   // --- Instellingen zoeken: het zoekveld gebruikt het PandaOS-toetsenbord; resultaten vervangen de pagina ---
   const [searching, setSearching] = useState(false);
-  const [colouriserOpen, setColouriserOpen] = useState(false);
+  const [colouriserOpen, setColouriserOpen] = useState<false | 'paint' | 'rims'>(false);
+  const [confirmGraphics, setConfirmGraphics] = useState<'High' | 'Low' | null>(null); // Voertuig > Grafische kwaliteit: Ja/Nee
+  const [editColor, setEditColor] = useState<{ hex: string; list: 'customPaints' | 'customRims' } | null>(null); // eigen kleur: naam/verwijderen
+  const [confirmApplyCar, setConfirmApplyCar] = useState(false); // Geavanceerd > Instellingen van mijn auto: Ja/Nee
+  const [radioSettingsOpen, setRadioSettingsOpen] = useState(false); // Geavanceerd > Radio-instellingen
   useEffect(() => { setSearching(false); }, [activeTab, isMenuOpen]);
   const query = searching ? keyboardValue.trim().toLowerCase() : '';
   const searchResults = query.length >= 2
@@ -204,17 +212,6 @@ const SettingsApp: React.FC = () => {
   const openResult = (tab: string) => { setSearching(false); closeKeyboard(); setActiveTab(tab); };
 
   // Rij ronde kleurvakjes (lak / velgen); het actieve vakje krijgt een blauwe ring (stijl: _tesla-ui.scss)
-  const renderSwatches = (colors: { name: string; hex: string }[], current: string, onPick: (hex: string) => void) => (
-    <div className="tsl-swatches">
-      {colors.map(({ name, hex }) => (
-        <button key={hex} className={`tsl-swatch ${current.toLowerCase() === hex.toLowerCase() ? 'is-active' : ''}`} onClick={() => onPick(hex)}>
-          <span className="tsl-swatch-color" style={{ backgroundColor: hex }} />
-          {name}
-        </button>
-      ))}
-    </div>
-  );
-
   // Figma "Toggles"/tabs: kader met rand, actief vak wit (licht) of grijs (donker). Vanaf 4 opties volle breedte.
   const renderToggleGroup = (settingKey: any, options: any[], updateFn: Function, currentValue: any, customClick?: Function) => (
     <div className={`tsl-segmented ${options.length > 3 ? 'is-wide' : ''}`}>
@@ -292,151 +289,139 @@ const SettingsApp: React.FC = () => {
             <div style={{ display: searchResults ? 'none' : undefined }}>
             
             {/* --- VEHICLE TAB: uiterlijk van de 3D-auto --- */}
-            {activeTab === 'Vehicle' && (
-              <div className="settings-list" style={{ display: 'flex', flexDirection: 'column', gap: '35px' }}>
-                 {/* Automaat, handgeschakeld, of automatisch herkennen: wat de auto doorgeeft (CAN-kastje/OBD2) */}
+            {activeTab === 'Vehicle' && (() => {
+              // Keuzetegels zoals Figma Controls (IconTiles): icoon in het midden, tekst eronder; geen tussenlijnen
+              const paint = vehicleSettings.paintColor;
+              // Vaste kleuren, dan de Kleurenkiezer, dan je eigen bewaarde kleuren
+              const colorTile = ({ name, hex }: { name: string; hex: string }): IconTile => ({ id: hex.toLowerCase(), label: t(name), icon: <ColorDot color={hex} /> });
+              // Eigen kleur: eigen naam (of "Eigen kleur"); lang indrukken = hernoemen of verwijderen. Standaardkleuren niet.
+              const ownTile = (hex: string, list: 'customPaints' | 'customRims'): IconTile => ({
+                id: hex.toLowerCase(), icon: <ColorDot color={hex} />,
+                label: vehicleSettings.colorNames?.[hex.toLowerCase()] || t('Own colour'),
+                onLongPress: () => { setEditColor({ hex: hex.toLowerCase(), list }); openKeyboard(vehicleSettings.colorNames?.[hex.toLowerCase()] ?? ''); },
+              });
+              const paintTiles: IconTile[] = [
+                ...PAINT_COLORS.map(colorTile),
+                { id: 'colouriser', label: t('Colouriser'), icon: <Palette size={24} />, onClick: () => setColouriserOpen('paint') },
+                ...(vehicleSettings.customPaints ?? []).map((hex) => ownTile(hex, 'customPaints')),
+              ];
+              const rimTiles: IconTile[] = [
+                ...RIM_COLORS.map(colorTile),
+                { id: 'colouriser', label: t('Colouriser'), icon: <Palette size={24} />, onClick: () => setColouriserOpen('rims') },
+                ...(vehicleSettings.customRims ?? []).map((hex) => ownTile(hex, 'customRims')),
+              ];
+              const EXHAUST_PIPES: Record<string, number[]> = {
+                left1: [9], left2: [8, 14], right1: [35], right2: [30, 36], both1: [9, 35], both2: [8, 14, 30, 36], center2: [19, 25],
+              };
+              return (
+              <div className="settings-list" style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
                  <div className="tsl-section">
                    <span className="tsl-title">{t('Transmission')}</span>
-                   {renderToggleGroup('transmission', ['Automatic', 'Manual', 'Detect'], () => {}, vehicleSettings.transmission,
-                     (opt: 'Automatic' | 'Manual' | 'Detect') => updateVehicleSetting('transmission', opt))}
-                   <small className="tsl-hint">
-                     {vehicleSettings.transmission === 'Detect'
-                       ? (carState.detectedTransmission
-                           ? `${t('The car reports:')} ${t(carState.detectedTransmission)}.`
-                           : t('No data from the car yet: shows P, R, N and D.'))
-                       : vehicleSettings.transmission === 'Manual'
-                         ? t('Shows P, R and D. The gear (1–6) needs OBD2.')
-                         : t('Shows P, R, N and D.')}
-                   </small>
+                   <IconTiles value={vehicleSettings.transmission} onChange={(id) => updateVehicleSetting('transmission', id as any)} tiles={[
+                     { id: 'Automatic', label: t('Automatic'), icon: <ManualIcon /> },
+                     { id: 'Manual', label: t('Manual'), icon: <ManualIcon /> },
+                     { id: 'Detect', label: t('Detect'), icon: <ManualIcon /> },
+                   ]} />
                  </div>
-                 <hr className="tsl-divider" />
                  <div className="tsl-section">
                    <span className="tsl-title">{t('Paint')}</span>
-                   {renderSwatches([...PAINT_COLORS, ...(vehicleSettings.customPaints ?? []).map((hex) => ({ name: t('Own colour'), hex }))],
-                     vehicleSettings.paintColor, (hex) => updateVehicleSetting('paintColor', hex))}
-                   {/* Colouriser zoals in de Tesla: elke kleur, met Solid / Metallic / Matte */}
-                   <button className="tsl-btn" style={{ alignSelf: 'flex-start' }} onClick={() => setColouriserOpen(true)}>
-                     <Palette size={18} /> {t('Colouriser')}
-                   </button>
+                   <IconTiles tiles={paintTiles} value={paint.toLowerCase()} columns={4}
+                     onChange={(hex) => updateVehicleSetting('paintColor', hex)} />
                  </div>
                  <div className="tsl-section">
                    <span className="tsl-title">{t('Wheels')}</span>
-                   {renderSwatches(RIM_COLORS, vehicleSettings.rimColor, (hex) => updateVehicleSetting('rimColor', hex))}
+                   <IconTiles value={vehicleSettings.rimColor.toLowerCase()} onChange={(hex) => updateVehicleSetting('rimColor', hex)} tiles={rimTiles} />
                  </div>
-                 <hr className="tsl-divider" />
                  <div className="tsl-section">
                    <span className="tsl-title">{t('Window Tint')}</span>
-                   {renderToggleGroup('windowTint', ['None', 'Light', 'Medium', 'Dark', 'Limo'], () => {}, vehicleSettings.windowTint,
-                     (opt: WindowTint) => updateVehicleSetting('windowTint', opt))}
-                   <small className="tsl-hint">{t('Rear doors and tailgate only. Windshield and front side windows always stay clear.')}</small>
+                   <IconTiles value={vehicleSettings.windowTint} onChange={(id) => updateVehicleSetting('windowTint', id as WindowTint)}
+                     tiles={(['None', 'Light', 'Medium', 'Dark', 'Limo'] as const).map((id, level) => ({ id, label: t(id), icon: <TintIcon level={level} /> }))} />
                  </div>
-                 <hr className="tsl-divider" />
-                 {/* Koplampen, spiegels en grill op het 3D-model, zoals bij je eigen auto */}
-                 {([
-                   ['headlightType', 'Headlights', [['halogen', 'Halogen'], ['xenon', 'Xenon']], 'halogen'],
-                   ['mirrors', 'Mirrors', [['body', 'Body color'], ['black', 'Black'], ['carbon', 'Carbon']], 'body'],
-                   ['grille', 'Grille', [['standard', 'Standard'], ['black', 'Gloss black'], ['chrome', 'Chrome'], ['body', 'Body color'], ['carbon', 'Carbon']], 'standard'],
-                 ] as const).map(([key, title, options, fallback]) => (
-                   <div key={key} className="tsl-section">
-                     <span className="tsl-title">{t(title)}</span>
-                     <div className={`tsl-segmented ${options.length > 3 ? 'is-wide' : ''}`}>
-                       {options.map(([id, label]) => (
-                         <button key={id} className={(vehicleSettings[key] ?? fallback) === id ? 'is-active' : ''}
-                           onClick={() => updateVehicleSetting(key, id as never)}>{t(label)}</button>
-                       ))}
-                     </div>
-                   </div>
-                 ))}
+                 <div className="tsl-section">
+                   <span className="tsl-title">{t('Headlights')}</span>
+                   <IconTiles value={vehicleSettings.headlightType ?? 'halogen'} onChange={(id) => updateVehicleSetting('headlightType', id as never)} tiles={[
+                     { id: 'halogen', label: t('Halogen'), icon: <Lightbulb size={26} /> },
+                     { id: 'xenon', label: t('Xenon'), icon: <Lightbulb size={26} /> },
+                   ]} />
+                 </div>
+                 <div className="tsl-section">
+                   <span className="tsl-title">{t('Mirrors')}</span>
+                   <IconTiles value={vehicleSettings.mirrors ?? 'body'} onChange={(id) => updateVehicleSetting('mirrors', id as never)} tiles={[
+                     { id: 'body', label: t('Body color'), icon: <ColorDot color={paint} /> },
+                     { id: 'black', label: t('Black'), icon: <ColorDot color="#111111" /> },
+                     { id: 'carbon', label: t('Carbon'), icon: <ColorDot color="#111" pattern="carbon" /> },
+                   ]} />
+                 </div>
+                 <div className="tsl-section">
+                   <span className="tsl-title">{t('Grille')}</span>
+                   <IconTiles value={vehicleSettings.grille ?? 'standard'} onChange={(id) => updateVehicleSetting('grille', id as never)} tiles={[
+                     { id: 'standard', label: t('Standard'), icon: <ColorDot color="#3a3d40" /> },
+                     { id: 'black', label: t('Gloss black'), icon: <ColorDot color="#050505" /> },
+                     { id: 'chrome', label: t('Chrome'), icon: <ColorDot color="#ccc" pattern="chrome" /> },
+                     { id: 'body', label: t('Body color'), icon: <ColorDot color={paint} /> },
+                     { id: 'carbon', label: t('Carbon'), icon: <ColorDot color="#111" pattern="carbon" /> },
+                   ]} />
+                 </div>
+                 <div className="tsl-section">
+                   <span className="tsl-title">{t('Exhaust')}</span>
+                   <IconTiles value={vehicleSettings.exhaust ?? 'left1'} columns={4} onChange={(id) => updateVehicleSetting('exhaust', id as ExhaustLayout)}
+                     tiles={EXHAUST_OPTIONS.map(([id, label]) => ({ id, label: t(label), icon: <ExhaustIcon pipes={EXHAUST_PIPES[id] ?? []} /> }))} />
+                 </div>
                  {/* Achteruitcamera: die van de radio of die van PandaOS (alleen zinvol als de radio de camera vrijgeeft) */}
                  <div className="tsl-section">
                    <span className="tsl-title">{t('Reverse camera')}</span>
-                   <div className="tsl-segmented">
-                     {(['radio', 'pandaos'] as const).map((c) => (
-                       <button key={c} className={(vehicleSettings.reverseCamera ?? (isAndroidLauncher() ? 'radio' : 'pandaos')) === c ? 'is-active' : ''}
-                         onClick={() => updateVehicleSetting('reverseCamera', c)}>{t(c === 'radio' ? 'Of the radio' : 'Of PandaOS')}</button>
-                     ))}
-                   </div>
-                   <small className="tsl-hint">{t('Of the radio: the camera app of the radio shows the image, PandaOS shows R. Of PandaOS: PandaOS shows the image itself (only works if the radio releases the camera).')}</small>
+                   <IconTiles value={vehicleSettings.reverseCamera ?? (isAndroidLauncher() ? 'radio' : 'pandaos')}
+                     onChange={(id) => updateVehicleSetting('reverseCamera', id as 'radio' | 'pandaos')} tiles={[
+                       { id: 'radio', label: t('Of the radio'), icon: <Video size={26} /> },
+                       { id: 'pandaos', label: t('Of PandaOS'), icon: <Video size={26} /> },
+                     ]} />
                  </div>
-                 {/* Grafische kwaliteit van het 3D-model: Laag = geen schaduwen en minder pixels, sneller op de radio */}
+                 {/* Grafische kwaliteit van het 3D-model: Snel = geen schaduwen en minder pixels */}
                  <div className="tsl-section">
                    <span className="tsl-title">{t('Graphics')}</span>
-                   <div className="tsl-segmented">
-                     {(['High', 'Low'] as const).map((q) => (
-                       <button key={q} className={(vehicleSettings.graphics ?? 'High') === q ? 'is-active' : ''}
-                         onClick={() => updateVehicleSetting('graphics', q)}>{t(q === 'High' ? 'High quality' : 'Fast (no shadows)')}</button>
-                     ))}
-                   </div>
-                   <small className="tsl-hint">{t('Fast: no shadows and fewer pixels for the 3D car. Use this when PandaOS feels slow.')}</small>
-                 </div>
-                 {/* Uitlaat op het 3D-model, zoals bij je eigen auto */}
-                 <div className="tsl-section">
-                   <span className="tsl-title">{t('Exhaust')}</span>
-                   <div className="tsl-segmented is-wide" style={{ flexWrap: 'wrap', height: 'auto' }}>
-                     {EXHAUST_OPTIONS.map(([id, label]) => (
-                       <button key={id} style={{ flex: '1 0 30%', minHeight: 42 }}
-                         className={(vehicleSettings.exhaust ?? 'left1') === id ? 'is-active' : ''}
-                         onClick={() => updateVehicleSetting('exhaust', id)}>{t(label)}</button>
-                     ))}
-                   </div>
+                   {/* Wisselen vraagt eerst om bevestiging (venster met Ja / Nee) */}
+                   <IconTiles value={vehicleSettings.graphics ?? 'High'} onChange={(id) => {
+                     if (id !== (vehicleSettings.graphics ?? 'High')) setConfirmGraphics(id as 'High' | 'Low');
+                   }} tiles={[
+                     { id: 'High', label: t('High quality'), icon: <Zap size={26} /> },
+                     { id: 'Low', label: t('Fast (no shadows)'), icon: <Zap size={26} /> },
+                   ]} />
                  </div>
               </div>
-            )}
+              );
+            })()}
 
             {/* --- GEAVANCEERD: je eigen auto en de CAN-bus --- */}
             {activeTab === 'Advanced' && (
-              <div className="settings-list" style={{ display: 'flex', flexDirection: 'column', gap: '35px' }}>
-                 {/* Mijn auto: PandaOS staat standaard op deze auto ingesteld (vehicleProfile.ts) */}
+              <div className="settings-list" style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
+                 {/* Snelle acties als tegels (Figma Controls): icoon in het midden, tekst eronder */}
                  <div className="tsl-section">
-                   <span className="tsl-title">{t('My car')}</span>
-                   <div className="tsl-list">
-                     {([
-                       ['Car', `${MY_VEHICLE.name} (${MY_VEHICLE.year})`],
-                       ['Color', t(MY_VEHICLE.color)],
-                       ['Engine', t(MY_VEHICLE.engine)],
-                       ['Fuel', `${t(MY_VEHICLE.fuel)} · ${MY_VEHICLE.tank} l`],
-                       ['Transmission', t(MY_VEHICLE.transmission)],
-                       ['Tyres', MY_VEHICLE.tyres],
-                       ['Engine oil', `${MY_VEHICLE.oil} · ${t(MY_VEHICLE.oilInterval)}`],
-                       ['Service', t(MY_VEHICLE.service)],
-                       ['CAN protocol', MY_VEHICLE.canProtocol],
-                     ] as [string, string][]).map(([label, value]) => (
-                       <div key={label} className="tsl-list-row">
-                         <span className="tsl-field-text" style={{ flex: 1 }}>{t(label)}</span>
-                         <span className="tsl-hint">{value}</span>
-                       </div>
-                     ))}
-                   </div>
-                   <button className="tsl-btn" style={{ alignSelf: 'flex-start' }}
-                     onClick={() => Object.entries(MY_VEHICLE_SETTINGS).forEach(([key, value]) => updateVehicleSetting(key as any, value as never))}>
-                     {t('Apply settings of my car')}
-                   </button>
-                   <small className="tsl-hint">{t('Resets transmission, CAN bus, headlights, mirrors, grille, exhaust and paint to match this car.')}</small>
+                   <span className="tsl-title">{t('Tools')}</span>
+                   <IconTiles tiles={[
+                     { id: 'apply', label: t('Apply settings of my car'), icon: <CarFront size={26} />, onClick: () => setConfirmApplyCar(true) },
+                     { id: 'can', label: t('CAN monitor'), icon: <Activity size={26} />, onClick: openCanMonitor },
+                     ...(isAndroidLauncher() ? [{ id: 'radio', label: t('Radio settings'), icon: <RadioIcon size={26} />, onClick: () => setRadioSettingsOpen(true) }] : []),
+                   ]} />
                  </div>
-                 <hr className="tsl-divider" />
-                 {/* CAN-bus: twee verbindingen. Kastje <-> radio (merk/type) en auto <-> kastje (voertuigprotocol).
-                     Moet overeenkomen met wat in de fabrieksinstellingen van de radio staat. */}
+                 {/* CAN-bus: kastje <-> radio (merk/type) en auto <-> kastje (voertuigprotocol); gelijk aan de fabrieksinstellingen */}
                  <div className="tsl-section">
-                   <span className="tsl-title">{t('CAN bus')}</span>
-                   <span className="tsl-field-text">{t('CAN box (box ↔ radio)')}</span>
-                   <div className="tsl-segmented is-wide" style={{ flexWrap: 'wrap', height: 'auto' }}>
-                     {CAN_BOXES.map(([id, label]) => (
-                       <button key={id} style={{ flex: '1 0 24%', minHeight: 42 }}
-                         className={(vehicleSettings.canbox ?? 'radio') === id ? 'is-active' : ''}
-                         onClick={() => updateVehicleSetting('canbox', id)}>{t(label)}</button>
-                     ))}
-                   </div>
-                   <span className="tsl-field-text">{t('Vehicle protocol (car ↔ box)')}</span>
-                   <div className="tsl-segmented is-wide" style={{ flexWrap: 'wrap', height: 'auto' }}>
+                   <span className="tsl-title">{t('CAN box (box ↔ radio)')}</span>
+                   <IconTiles value={vehicleSettings.canbox ?? 'radio'} columns={4} onChange={(id) => updateVehicleSetting('canbox', id as CanBox)}
+                     tiles={CAN_BOXES.map(([id, label]) => ({ id, label: t(label), icon: id === 'radio' ? <RadioIcon size={24} /> : <Cpu size={24} /> }))} />
+                 </div>
+                 <div className="tsl-section">
+                   <span className="tsl-title">{t('Vehicle protocol (car ↔ box)')}</span>
+                   {/* Zelfde breedte als de tegels erboven (max. 640 px) */}
+                   <div className="tsl-segmented is-wide" style={{ flexWrap: 'wrap', height: 'auto', maxWidth: 640 }}>
                      {CAN_PROTOCOLS.map(([id, label]) => (
                        <button key={id} style={{ flex: '1 0 45%', minHeight: 42 }}
                          className={(vehicleSettings.canProtocol ?? 'vw-pq35') === id ? 'is-active' : ''}
                          onClick={() => updateVehicleSetting('canProtocol', id)}>{t(label)}</button>
                      ))}
                    </div>
-                   <small className="tsl-hint">{t('Choose the same CAN box and protocol as in the factory settings of the radio (code 1234). Not sure? Leave it on "Same as radio" and use the CAN monitor to find out.')}</small>
-                   <button className="tsl-btn" style={{ alignSelf: 'flex-start' }} onClick={openCanMonitor}>{t('Open CAN monitor')}</button>
                  </div>
+                 {/* Radio: systeembalk, volumebalk en camera-app van de radio (eerder alleen via de laptop) */}
+                 <RadioSystemPanel open={radioSettingsOpen} onClose={() => setRadioSettingsOpen(false)} />
               </div>
             )}
 
@@ -444,14 +429,14 @@ const SettingsApp: React.FC = () => {
             {activeTab === 'Display' && (
               <div className="settings-list" style={{ display: 'flex', flexDirection: 'column', gap: '35px' }}>
                  {/* Taal: de namen staan altijd in hun eigen taal, zodat je ze ook herkent als de verkeerde taal aan staat */}
+                 <LanguagePanel />
+                 {/* Tijd en tijdzone direct onder Taal */}
                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                   <label className="tsl-title">{t('Language')}</label>
-                   <div className="tsl-segmented">
-                     {([['nl', 'Nederlands'], ['en', 'English']] as const).map(([id, name]) => (
-                       <button key={id} className={displaySettings.language === id ? 'is-active' : ''}
-                         onClick={() => updateDisplaySetting('language', id)}>{name}</button>
-                     ))}
-                   </div>
+                   <label className="tsl-title">{t('Time')}</label>
+                   {renderToggleGroup('timeFormat', ['12 Hour', '24 Hour'], updateDisplaySetting, displaySettings?.timeFormat === '12h' ? '12 Hour' : '24 Hour',
+                     (opt: string) => updateDisplaySetting('timeFormat', opt === '12 Hour' ? '12h' : '24h'))}
+                   {/* Tijd en tijdzone van de radio (Android) */}
+                   <DateTimePanel />
                  </div>
 
                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -463,15 +448,17 @@ const SettingsApp: React.FC = () => {
                    )}
                  </div>
 
-                 {/* Figma Display: schakelaar voor warmere kleuren 's nachts */}
-                 <label className="tsl-switch-row">
-                   <input type="checkbox" className="tsl-toggle" checked={!!displaySettings?.nightFilter}
-                     onChange={(e) => updateDisplaySetting('nightFilter', e.target.checked)} />
-                   <div className="tsl-switch-text">
-                     <span className="tsl-field-text">{t('Night Filter')}</span>
-                     <small className="tsl-hint">{t('Automatically adjust to warmer colors at night')}</small>
+                 {/* Nachtfilter: warmere kleuren 's nachts; keuzeknoppen Uit / Aan (geen schuifschakelaar) */}
+                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                   <label className="tsl-title">{t('Night Filter')}</label>
+                   <div className="tsl-segmented">
+                     {([false, true] as const).map((on) => (
+                       <button key={String(on)} className={!!displaySettings?.nightFilter === on ? 'is-active' : ''}
+                         onClick={() => updateDisplaySetting('nightFilter', on)}>{t(on ? 'On' : 'Off')}</button>
+                     ))}
                    </div>
-                 </label>
+                   <small className="tsl-hint">{t('Automatically adjust to warmer colors at night')}</small>
+                 </div>
 
                  {/* Figma Display: Brightness-regel met Auto-knop. Auto = aparte dag- en nachthelderheid, die wisselt
                      met Weergave (licht/donker): stadslicht/dimlicht aan = nacht, anders de klok. */}
@@ -561,10 +548,35 @@ const SettingsApp: React.FC = () => {
                      <button className="tsl-btn" onClick={() => updateDisplaySetting('dockHeight', 64)}>{t('Default')}</button>
                    </div>
                  </div>
+                 {/* App-menu (raster in de dock): direct verschijnen/verdwijnen of omhoog schuiven */}
                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                   <label className="tsl-title">{t('Time')}</label>
-                   {renderToggleGroup('timeFormat', ['12 Hour', '24 Hour'], updateDisplaySetting, displaySettings?.timeFormat === '12h' ? '12 Hour' : '24 Hour',
-                     (opt: string) => updateDisplaySetting('timeFormat', opt === '12 Hour' ? '12h' : '24h'))}
+                   <label className="tsl-title">{t('App menu')}</label>
+                   <div className="tsl-segmented">
+                     {(['instant', 'slide'] as const).map((mode) => (
+                       <button key={mode} className={(displaySettings?.appMenuAnimation ?? 'instant') === mode ? 'is-active' : ''}
+                         onClick={() => updateDisplaySetting('appMenuAnimation', mode)}>{t(mode === 'instant' ? 'Show directly' : 'Slide up')}</button>
+                     ))}
+                   </div>
+                 </div>
+                 {/* Grootte van de dock-pictogrammen: meegroeien met de dock of vast, plus eigen grootte */}
+                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                   <label className="tsl-title">{t('Dock icons')}</label>
+                   <div className="tsl-segmented">
+                     {(['follow', 'fixed'] as const).map((mode) => (
+                       <button key={mode} className={(displaySettings?.dockIconMode ?? 'follow') === mode ? 'is-active' : ''}
+                         onClick={() => updateDisplaySetting('dockIconMode', mode)}>{t(mode === 'follow' ? 'Grow with dock' : 'Fixed size')}</button>
+                     ))}
+                   </div>
+                   <div className="tsl-slider-row">
+                     <TeslaSlider
+                       value={displaySettings?.dockIconScale ?? 100} min={70} max={150} step={5}
+                       format={(v) => `${v}%`}
+                       iconLeft={<span style={{ width: 10, height: 10, background: 'currentColor', borderRadius: 3 }} />}
+                       iconRight={<span style={{ width: 18, height: 18, background: 'currentColor', borderRadius: 4 }} />}
+                       onChange={(v) => updateDisplaySetting('dockIconScale', v)}
+                     />
+                     <button className="tsl-btn" onClick={() => updateDisplaySetting('dockIconScale', 100)}>{t('Default')}</button>
+                   </div>
                  </div>
                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                    <label className="tsl-title">{t('Energy Display')}</label>
@@ -855,46 +867,29 @@ const SettingsApp: React.FC = () => {
 
             {/* --- SOFTWARE TAB --- */}
             {activeTab === 'Software' && (
-              <div className="settings-list" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              <div className="settings-list" style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
                  {/* De auto in zijn eigen kleur, naam en voertuiginformatie (zoals Tesla) */}
                  <VehicleHero />
-                 <hr className="tsl-divider" />
 
-                 {/* PandaOS-info en makers */}
-                 <div className="tsl-section">
-                   <span className="tsl-title" style={{ fontSize: 'calc(24px * var(--text-scale, 1))' }}>PandaOS</span>
-                   <span className="tsl-field-text">{t('Version')} {PANDA_CONFIG.VERSION}</span>
-                   <span className="tsl-field-text">{t('Made by David Cotino')}</span>
-                 </div>
-
-                 <hr className="tsl-divider" />
-
-                 {/* Software-update via GitHub Releases */}
+                 {/* Software-update via GitHub Releases (toont ook de huidige versie) */}
                  <SoftwareUpdatePanel />
 
-                 <hr className="tsl-divider" />
-
                  {/* WebView van de radio: versie en bijwerken (alleen op de radio) */}
-                 {isAndroidLauncher() && <><WebViewPanel /><hr className="tsl-divider" /></>}
+                 {isAndroidLauncher() && <WebViewPanel />}
 
-                 {/* Diagnose: logboek en Probleem melden */}
-                 <DiagnosticsPanel />
-
-                 <hr className="tsl-divider" />
-
+                 {/* Over: compacte tabel van twee kolommen (zoals Meer voertuiginformatie). Diagnose is een eigen app. */}
                  <div className="tsl-section">
                    <span className="tsl-title">{t('About')}</span>
-                   <div className="tsl-list">
+                   <div className="tsl-info-table">
                      {[
+                       ['PandaOS', `${t('Version')} ${PANDA_CONFIG.VERSION}`],
+                       ['Made by', 'David Cotino'],
                        ['Platform', /Android/i.test(navigator.userAgent) ? 'Android' : /Linux/i.test(navigator.userAgent) ? 'Linux (Raspberry Pi)' : 'Windows'],
                        ['Screen', `${window.screen.width} × ${window.screen.height}`],
                        ['Map data', 'PDOK / Kadaster, OpenStreetMap'],
                        ['Routing', 'OSRM (OpenStreetMap)'],
                      ].map(([label, value]) => (
-                       <div key={label} className="tsl-list-row">
-                         <span className="tsl-field-text" style={{ flex: 1 }}>{t(label)}</span>
-                         <span className="tsl-hint">{value}</span>
-                       </div>
+                       <React.Fragment key={label}><span>{t(label)}</span><span>{value}</span></React.Fragment>
                      ))}
                    </div>
                  </div>
@@ -1064,7 +1059,7 @@ const SettingsApp: React.FC = () => {
               </div>
             )}
 
-            {!['Vehicle', 'Bluetooth', 'Display', 'Safety', 'Navigation', 'Wi-Fi', 'Software', 'Maintenance'].includes(activeTab) && (
+            {!['Vehicle', 'Advanced', 'Bluetooth', 'Display', 'Safety', 'Navigation', 'Wi-Fi', 'Software', 'Maintenance', 'Trips', 'Apps'].includes(activeTab) && (
               <>
                 <div className="settings-section-title" style={{ fontSize: 'calc(11px * var(--text-scale, 1))', textTransform: 'uppercase', color: 'var(--tsl-muted)', fontWeight: 'bold', marginBottom: '16px' }}>HIGHLIGHTED FEATURES</div>
                 <div className="settings-row" style={{ padding: '20px 0', borderBottom: `1px solid var(--tsl-border)` }}>
@@ -1080,16 +1075,93 @@ const SettingsApp: React.FC = () => {
       </div>
 
       {/* Colouriser (Vehicle > Paint): eigen kleur en lakafwerking */}
-      {colouriserOpen && <Colouriser onClose={() => setColouriserOpen(false)} />}
+      {colouriserOpen && <Colouriser target={colouriserOpen} onClose={() => setColouriserOpen(false)} />}
+
+      {/* Eigen kleur (lang ingedrukt): naam geven of verwijderen */}
+      {editColor && (() => {
+        const close = () => { setEditColor(null); closeKeyboard(); };
+        const names = vehicleSettings.colorNames ?? {};
+        const save = () => {
+          const name = keyboardValue.trim().slice(0, 20);
+          const next = { ...names };
+          if (name) next[editColor.hex] = name; else delete next[editColor.hex];
+          updateVehicleSetting('colorNames', next);
+          close();
+        };
+        const remove = () => {
+          updateVehicleSetting(editColor.list, (vehicleSettings[editColor.list] ?? []).filter((h) => h.toLowerCase() !== editColor.hex));
+          const next = { ...names }; delete next[editColor.hex];
+          updateVehicleSetting('colorNames', next);
+          close();
+        };
+        return (
+          <div className="tsl-modal-backdrop" onClick={close}>
+            <div className="tsl-modal" style={{ width: 440 }} onClick={(e) => e.stopPropagation()}>
+              <button className="tsl-modal-close" aria-label={t('Close')} onClick={close}><X size={20} /></button>
+              <span className="tsl-modal-title">{t('Own colour')}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <ColorDot color={editColor.hex} />
+                <input readOnly className="tsl-input" value={keyboardValue} placeholder={t('Name')}
+                  onFocus={() => openKeyboard(keyboardValue)}
+                  style={{ flex: 1, height: 40, padding: '0 12px', border: '1px solid var(--tsl-border)', borderRadius: 4,
+                    background: 'transparent', color: 'var(--tsl-text)', fontSize: 'calc(16px * var(--text-scale, 1))' }} />
+              </div>
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+                <button className="tsl-btn" onClick={remove}><Trash2 size={18} /> {t('Remove')}</button>
+                <button className="tsl-btn is-primary" onClick={save}>{t('Save')}</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Bevestigen: instellingen van mijn auto toepassen (overschrijft lak, versnellingsbak enz.) */}
+      {confirmApplyCar && (
+        <div className="tsl-modal-backdrop" onClick={() => setConfirmApplyCar(false)}>
+          <div className="tsl-modal" style={{ width: 440 }} onClick={(e) => e.stopPropagation()}>
+            <button className="tsl-modal-close" aria-label={t('Close')} onClick={() => setConfirmApplyCar(false)}><X size={20} /></button>
+            <span className="tsl-modal-title">{t('Apply settings of my car')}</span>
+            <span className="tsl-field-text" style={{ textAlign: 'center' }}>
+              {t('Resets transmission, CAN bus, headlights, mirrors, grille, exhaust and paint to match this car.')}
+            </span>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+              <button className="tsl-btn" onClick={() => setConfirmApplyCar(false)}>{t('No')}</button>
+              <button className="tsl-btn is-primary" onClick={() => {
+                Object.entries(MY_VEHICLE_SETTINGS).forEach(([key, value]) => updateVehicleSetting(key as any, value as never));
+                setConfirmApplyCar(false);
+              }}>{t('Yes')}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bevestigen: grafische kwaliteit wisselen */}
+      {confirmGraphics && (
+        <div className="tsl-modal-backdrop" onClick={() => setConfirmGraphics(null)}>
+          <div className="tsl-modal" style={{ width: 420 }} onClick={(e) => e.stopPropagation()}>
+            <button className="tsl-modal-close" aria-label={t('Close')} onClick={() => setConfirmGraphics(null)}><X size={20} /></button>
+            <span className="tsl-modal-title">{t('Graphics')}</span>
+            <span className="tsl-field-text" style={{ textAlign: 'center' }}>
+              {t(confirmGraphics === 'High' ? 'Switch to high quality? The 3D car gets shadows and more detail.' : 'Switch to fast? The 3D car loses its shadows, so PandaOS runs smoother.')}
+            </span>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+              <button className="tsl-btn" onClick={() => setConfirmGraphics(null)}>{t('No')}</button>
+              <button className="tsl-btn is-primary" onClick={() => { updateVehicleSetting('graphics', confirmGraphics); setConfirmGraphics(null); }}>{t('Yes')}</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* --- SCREEN CLEAN MODE: zwart scherm dat aanraking negeert; dubbeltik stopt eerder --- */}
-      {cleanModeUntil && (
-        <div onDoubleClick={() => setCleanModeUntil(null)} onPointerDown={(e) => e.stopPropagation()}
-          style={{ position: 'fixed', inset: 0, zIndex: 5000, backgroundColor: '#000', color: '#757575',
+      {/* Via een portal op <body>: anders blijft het binnen het instellingenvak (de app-laag heeft een transform) */}
+      {cleanModeUntil && createPortal(
+        <div onDoubleClick={() => setCleanModeUntil(null)} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}
+          style={{ position: 'fixed', inset: 0, zIndex: 100000, backgroundColor: '#000', color: '#757575',
             display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px', userSelect: 'none' }}>
           <span style={{ fontSize: 'calc(18px * var(--text-scale, 1))', fontWeight: 600 }}>{t('Screen Clean Mode')}</span>
           <span style={{ fontSize: 'calc(14px * var(--text-scale, 1))' }}>{cleanModeSecondsLeft} s · dubbeltik om te stoppen</span>
-        </div>
+        </div>,
+        document.body,
       )}
 
     </div>

@@ -243,6 +243,9 @@ const CarModel = ({ model, carRot, brakeApplied, gear, carState, vehicle }: { mo
     if (!parent) return null;
     const template = new THREE.Group();
     parts.forEach((p) => template.add(p)); // uit de scene halen; de varianten zijn kopieën
+    // Uitlaat in chroom (het model gaf hem een witte kleur)
+    const chrome = new THREE.MeshStandardMaterial({ color: '#d6dadf', metalness: 1, roughness: 0.18 });
+    template.traverse((o: any) => { if (o.isMesh) o.material = chrome; });
     const box = new THREE.Box3();
     template.traverse((o: any) => { if (o.isMesh) { o.geometry.computeBoundingBox(); box.union(o.geometry.boundingBox); } });
     const root = new THREE.Group();
@@ -261,7 +264,7 @@ const CarModel = ({ model, carRot, brakeApplied, gear, carState, vehicle }: { mo
     // Elke plek: kant (1 = zoals het origineel, -1 = gespiegeld naar de andere kant) en verschuiving naar het midden
     const side = (s: number, n: number) => Array.from({ length: n }, (_, i) => ({ s, inward: i * gap }));
     const layout = vehicle.exhaust ?? 'left1';
-    const spots = layout === 'left1' ? side(1, 1) : layout === 'left2' ? side(1, 2)
+    const spots = layout === 'none' ? [] : layout === 'left1' ? side(1, 1) : layout === 'left2' ? side(1, 2)
       : layout === 'right1' ? side(-1, 1) : layout === 'right2' ? side(-1, 2)
       : layout === 'both1' ? [...side(1, 1), ...side(-1, 1)] : layout === 'both2' ? [...side(1, 2), ...side(-1, 2)]
       : [{ s: 1, inward: Math.abs(x) - gap / 2 }, { s: -1, inward: Math.abs(x) - gap / 2 }]; // center2
@@ -427,6 +430,39 @@ const SnapshotBridge: React.FC = () => {
 
 // --- HOOFD COMPONENT ---
 // widthFraction = breedte van dit paneel als deel van het scherm (1 = vol, 0.3 = Settings open), zie SplashScreen.
+// Toybox > Regenboogvloer: draaiende regenboogschijf onder de auto (vervaagt naar de rand)
+const RainbowFloor: React.FC = () => {
+  const ref = useRef<THREE.Mesh>(null);
+  const texture = useMemo(() => {
+    const size = 256;
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = size;
+    const c = canvas.getContext('2d')!;
+    const mid = size / 2;
+    for (let a = 0; a < 360; a += 2) { // regenboog in taartpunten (createConicGradient bestaat niet in elke WebView)
+      c.fillStyle = `hsl(${a}, 90%, 55%)`;
+      c.beginPath();
+      c.moveTo(mid, mid);
+      c.arc(mid, mid, mid, (a * Math.PI) / 180, ((a + 2.5) * Math.PI) / 180);
+      c.fill();
+    }
+    c.globalCompositeOperation = 'destination-in';
+    const fade = c.createRadialGradient(mid, mid, mid * 0.35, mid, mid, mid);
+    fade.addColorStop(0, 'rgba(0,0,0,0.85)');
+    fade.addColorStop(1, 'rgba(0,0,0,0)');
+    c.fillStyle = fade;
+    c.fillRect(0, 0, size, size);
+    return new THREE.CanvasTexture(canvas);
+  }, []);
+  useFrame((_, delta) => { if (ref.current) ref.current.rotation.z += delta * 0.4; });
+  return (
+    <mesh ref={ref} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.005, 0]}>
+      <circleGeometry args={[3.2, 64]} />
+      <meshBasicMaterial map={texture} transparent depthWrite={false} />
+    </mesh>
+  );
+};
+
 const SidebarPane: React.FC<{ widthFraction?: number }> = ({ widthFraction = 1 }) => {
   const { 
     btDevices, btConnectedAddress, gear, speed, brakeApplied, screenMode, vehicleLightsOn, displaySettings, vehicleSettings,
@@ -655,6 +691,8 @@ const SidebarPane: React.FC<{ widthFraction?: number }> = ({ widthFraction = 1 }
                 carState={carState}
                 vehicle={vehicleSettings}
               />
+
+              {vehicleSettings.rainbowFloor && <RainbowFloor />}
 
               {/* Vaste schaduw op de "vloer" (Y=0); niet bij snelle weergave. frames={60}: de auto staat stil, dus na het
                   laden niet elk beeldje opnieuw berekenen (scheelt veel rekenwerk) */}

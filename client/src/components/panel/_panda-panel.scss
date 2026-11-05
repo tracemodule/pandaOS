@@ -1,16 +1,5 @@
 // PandaOS-paneel (veeg omlaag), zie PandaPanel.tsx. Kleuren uit de Tesla UI Kit-variabelen (_tesla-ui.scss).
 
-// Onzichtbare strook bovenaan om het paneel open te vegen
-.panda-panel-strip {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 22px;
-  z-index: 4000;
-  touch-action: none;
-}
-
 .panda-panel-backdrop {
   position: fixed;
   inset: 0;

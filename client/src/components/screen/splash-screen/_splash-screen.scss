@@ -161,3 +161,15 @@
     }
   }
 }
+// App-menu dat omhoog schuift vanaf de dock (Settings > Display > App-menu: Omhoog schuiven)
+.quick-actions-wrapper.qa-slide-in > div { animation: qa-slide-up 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
+.quick-actions-wrapper.qa-slide-out { pointer-events: none; }
+.quick-actions-wrapper.qa-slide-out > div { animation: qa-slide-down 0.22s ease-in forwards; }
+@keyframes qa-slide-up {
+  from { transform: translateY(70vh); }
+  to { transform: translateY(0); }
+}
+@keyframes qa-slide-down {
+  from { transform: translateY(0); }
+  to { transform: translateY(70vh); }
+}

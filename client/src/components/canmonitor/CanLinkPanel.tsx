@@ -2,7 +2,7 @@
 // PandaOS, door het in de auto te leren: "Leer aan" → deur openen → uit de nieuwe regels de juiste kiezen.
 // De koppelingen staan op de radio (CanLinks.kt) en werken daarna altijd, ook met de CAN-monitor dicht.
 import React, { useEffect, useRef, useState } from 'react';
-import { GraduationCap, Trash2, Check, RotateCcw, X } from 'lucide-react';
+import { GraduationCap, Trash2, Check, RotateCcw, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { CAN_FUNCTIONS, getCanLinks, saveCanLinks, suggestMatch, type CanAction, type CanFunction, type CanLink } from '../../services/canSignals';
 import { useT } from '../../i18n';
 
@@ -23,6 +23,7 @@ const CanLinkPanel: React.FC<{ logAccess: boolean }> = ({ logAccess }) => {
   const t = useT();
   const [links, setLinks] = useState<CanLink[]>(() => getCanLinks());
   const [learning, setLearning] = useState<Learning | null>(null);
+  const [showCanOnly, setShowCanOnly] = useState(false); // signalen die alleen via een werkend CAN-kastje komen
   const timer = useRef<number | undefined>(undefined);
 
   useEffect(() => () => window.clearInterval(timer.current), []);
@@ -128,21 +129,12 @@ const CanLinkPanel: React.FC<{ logAccess: boolean }> = ({ logAccess }) => {
 
   // --- Overzicht: per functie de koppelingen en de knoppen om te leren ---
   const groups = ['Drive', 'Doors', 'Lights', 'Values'] as const;
-  return (
-    <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <small className="tsl-hint">
-        {t('Link signals of the radio to PandaOS: tap Learn, do it in the car and pick the new line. Links keep working when the CAN monitor is closed.')}
-      </small>
-      {!logAccess && (
-        <small className="tsl-hint" style={{ color: 'var(--tsl-red)' }}>
-          {t('Without log access only broadcasts can be linked. Allow it once via ADB:')} <code>adb shell pm grant nl.pandaos.launcher android.permission.READ_LOGS</code>
-        </small>
-      )}
-      {groups.map((group) => (
+  const renderGroups = (list: CanFunction[]) => (
+    groups.filter((group) => list.some((f) => f.group === group)).map((group) => (
         <div key={group} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <span className="tsl-title">{t(group === 'Drive' ? 'Driving' : group)}</span>
           <div className="tsl-list">
-            {CAN_FUNCTIONS.filter((f) => f.group === group).map((fn) => {
+            {list.filter((f) => f.group === group).map((fn) => {
               const own = links.filter((l) => l.func === fn.id);
               return (
                 <div key={fn.id} className={`tsl-list-row ${own.length ? 'is-active' : ''}`} style={{ alignItems: 'flex-start' }}>
@@ -173,7 +165,29 @@ const CanLinkPanel: React.FC<{ logAccess: boolean }> = ({ logAccess }) => {
             })}
           </div>
         </div>
-      ))}
+      ))
+  );
+  return (
+    <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <small className="tsl-hint">
+        {t('Link signals of the radio to PandaOS: tap Learn, do it in the car and pick the new line. Links keep working when the CAN monitor is closed.')}
+      </small>
+      {!logAccess && (
+        <small className="tsl-hint" style={{ color: 'var(--tsl-red)' }}>
+          {t('Without log access only broadcasts can be linked. Allow it once via ADB:')} <code>adb shell pm grant nl.pandaos.launcher android.permission.READ_LOGS</code>
+        </small>
+      )}
+      {/* Eerst wat nu binnenkomt; wat alleen via een werkend CAN-kastje kan, ingeklapt onderaan */}
+      {renderGroups(CAN_FUNCTIONS.filter((f) => !f.canOnly || links.some((l) => l.func === f.id)))}
+      <button className="tsl-btn" style={{ alignSelf: 'flex-start' }} onClick={() => setShowCanOnly(!showCanOnly)}>
+        {showCanOnly ? <ChevronUp size={16} /> : <ChevronDown size={16} />} {t('Only with a working CAN box')} ({CAN_FUNCTIONS.filter((f) => f.canOnly && !links.some((l) => l.func === f.id)).length})
+      </button>
+      {showCanOnly && (
+        <>
+          <small className="tsl-hint">{t('These signals only come through the CAN box. On this radio the CAN box reports "protocol not connected", so learning them does not work yet.')}</small>
+          {renderGroups(CAN_FUNCTIONS.filter((f) => f.canOnly && !links.some((l) => l.func === f.id)))}
+        </>
+      )}
     </div>
   );
 };

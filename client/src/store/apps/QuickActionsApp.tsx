@@ -16,12 +16,14 @@ const APP_SETTING_ROWS: { key: keyof AppSettings; title: string; options: { id: 
 
 // Volledige lijst van alle apps met correcte paden naar de SVG-iconen in /public/app-icons/
 const ALL_APPS = [
-  { id: 'dashcam', icon: '/app-icons/dashcam.svg', name: 'Dashcam', type: 'image' },
+  { id: 'dashcam', icon: '/app-icons/dashcam.svg', name: 'Rear camera', type: 'image' },
   { id: 'calendar', icon: '/app-icons/calendar.svg', name: 'Calendar', type: 'image' },
   { id: 'messages', icon: '/app-icons/messages.svg', name: 'Messages', type: 'image' },
   { id: 'zoom', icon: '/app-icons/zoom.svg', name: 'Zoom', type: 'image' },
   { id: 'netflix', icon: '/app-icons/netflix.svg', name: 'Theater', type: 'image' },
+  { id: 'arcade', icon: '/app-icons/arcade.svg', name: 'Arcade', type: 'image' },
   { id: 'toybox', icon: '/app-icons/toybox.svg', name: 'Toybox', type: 'image' },
+  { id: 'diagnostics', icon: '/app-icons/diagnostics.svg', name: 'Diagnostics', type: 'image' },
   { id: 'spotify', icon: '/app-icons/spotify.svg', name: 'Spotify', type: 'image' },
   { id: 'caraoke', icon: '/app-icons/caraoke.svg', name: 'Caraoke', type: 'image' },
   { id: 'tunein', icon: '/app-icons/tunein.svg', name: 'TuneIn', type: 'image' },
@@ -43,7 +45,7 @@ const ALL_APPS = [
 
 const QuickActionsApp: React.FC = () => {
   const { 
-    toggleMusic, openWebApp, isAppEditMode, setAppEditMode, 
+    toggleMusic, openWebApp, openTheater, openArcade, openToybox, openDiagnostics, isAppEditMode, setAppEditMode, 
     pinnedApps, pinApp, screenMode, addRecentApp, closeQuickActions,
     openSettingsTab, openMap, openCamera, openCarPlay, openPhone,
     appSettings, updateAppSetting, appLinks, openCanMonitor
@@ -124,8 +126,19 @@ const QuickActionsApp: React.FC = () => {
     switch (id) {
       case 'spotify':
       case 'youtube':
-      case 'netflix':
         openWebApp(id as any);
+        break;
+      case 'netflix':
+        openTheater();
+        break;
+      case 'arcade':
+        openArcade();
+        break;
+      case 'toybox':
+        openToybox();
+        break;
+      case 'diagnostics':
+        openDiagnostics();
         break;
       case 'music':
         toggleMusic();
@@ -318,7 +331,8 @@ const QuickActionsApp: React.FC = () => {
         ) : (<>
 
         {/* Bovenste rij: Climate knoppen */}
-        <div className="qa-row qa-climate" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+        {/* paddingRight: ruimte voor het tandwiel rechtsboven (anders overlapt het met Wipers) */}
+        <div className="qa-row qa-climate" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px', paddingRight: 28 }}>
           {['Front Defrost', 'Rear Defrost', 'Left Seat', 'Heated Steering', 'Climate', 'Wipers'].map(item => (
              <button key={item} style={{ background: 'none', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', color: isDarkMode ? '#ccc' : '#555', cursor: 'pointer' }}>
                <Wind size={28} style={{ pointerEvents: 'none' }} />

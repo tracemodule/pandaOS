@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#1f2430"/>
+  <!-- Arcade: joystick met knoppen (anders dan Toybox, dat een controller heeft) -->
+  <rect x="112" y="318" width="288" height="86" rx="22" fill="#3a4152"/>
+  <rect x="240" y="196" width="32" height="132" rx="16" fill="#cfd5e1"/>
+  <circle cx="256" cy="176" r="56" fill="#ed4e3b"/>
+  <circle cx="176" cy="361" r="20" fill="#f5a623"/>
+  <circle cx="336" cy="361" r="20" fill="#25cb55"/>
+</svg>
