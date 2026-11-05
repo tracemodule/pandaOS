@@ -630,3 +630,97 @@
   }
 }
 @keyframes tsl-spin { to { transform: rotate(360deg); } }
+
+// Ritten (TripsPanel.tsx)
+.trips-summary, .trip-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  > div {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: var(--tsl-gray-100, rgba(128, 128, 128, 0.1));
+  }
+}
+.trip-stats-grid { grid-template-columns: repeat(2, 1fr); width: 300px; align-content: start; }
+.trips-big { font-size: calc(18px * var(--text-scale, 1)); font-weight: 600; }
+.trip-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  padding: 12px 14px;
+  border: none;
+  border-radius: 10px;
+  background: rgba(128, 128, 128, 0.1);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  .trip-card-time { font-weight: 600; min-width: 120px; }
+  .trip-card-stats { display: flex; gap: 16px; flex: 1; opacity: 0.85;
+    span { display: flex; align-items: center; gap: 5px; } }
+  .trip-card-events { display: flex; gap: 8px;
+    span { display: flex; align-items: center; gap: 3px; font-weight: 600; }
+    .is-accel { color: #f5a623; }
+    .is-brake { color: #e04e3b; } }
+}
+.dark-mode .trips-summary > div, .dark-mode .trip-stats-grid > div, .dark-mode .trip-card { background: rgba(255, 255, 255, 0.07); }
+
+// Release notes / handleiding (ReleaseNotes.tsx): over de hele Instellingen-pagina
+.release-notes {
+  position: absolute;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  flex-direction: column;
+  background: var(--tsl-bg, #f4f4f4);
+  color: var(--tsl-text, #171a20);
+  .dark-mode & { background: #414141; color: #fff; }
+}
+.release-notes-head {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 14px 20px;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.25);
+  .release-notes-title { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+  nav { display: flex; gap: 18px; flex: 1; }
+  nav button { background: none; border: none; color: inherit; opacity: 0.6; font-size: calc(13px * var(--text-scale, 1)); cursor: pointer; padding: 4px 0; }
+  nav button.is-active { opacity: 1; font-weight: 600; }
+  .release-notes-close { background: none; border: none; color: inherit; cursor: pointer; display: flex; }
+}
+.release-notes-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 16px;
+  padding: 14px 20px;
+  aside { width: 260px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+  aside button { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: none; border-radius: 8px;
+    background: none; color: inherit; text-align: left; cursor: pointer; font-size: calc(13px * var(--text-scale, 1)); }
+  aside button.is-active { background: rgba(128, 128, 128, 0.2); font-weight: 600; }
+  .release-notes-version { font-size: calc(12px * var(--text-scale, 1)); opacity: 0.6; padding: 10px 12px 4px; }
+  article { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+  article h3 { margin: 0; font-size: calc(17px * var(--text-scale, 1)); }
+  article p { margin: 0; line-height: 1.5; opacity: 0.85; }
+  .release-notes-art { height: 150px; border-radius: 10px; display: flex; align-items: center; justify-content: center;
+    background: rgba(128, 128, 128, 0.15); color: #3e6ae1; }
+}
+
+// Kenteken in Instellingen > Voertuig: klein geel NL-plaatje met blauwe strook
+.tsl-plate-preview {
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
+  padding: 0 12px 0 30px;
+  border: 2px solid #111;
+  border-radius: 5px;
+  background: linear-gradient(90deg, #003399 0 20px, #f7c600 20px);
+  color: #111;
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: 1px;
+}

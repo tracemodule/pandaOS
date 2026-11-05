@@ -1,5 +1,6 @@
-import React, { useRef, useState } from 'react';
-import { X, Smartphone, Music2 } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { X, Smartphone, Music2, Radio, Bluetooth, Usb, Cable, ExternalLink } from 'lucide-react';
+import { getAudioFxState, getAudioSources, openRadioSoundSettings, type AudioSource } from '../../services/audioFx';
 import { useUIStore, type AudioSettingsState } from '../../store/uiStore';
 import { getEffectiveTheme } from '../../settings';
 import TeslaSlider from './TeslaSlider';
@@ -8,7 +9,9 @@ import './_audio-settings.scss';
 
 // Audio Settings zoals in de Tesla-auto: geopend vanuit Music (schuifregelaarknop), niet vanuit Settings.
 // Tabs: Tone (equalizer), Balance (balans/fade), Options (snelheidsvolume), Sources (muziekbron).
-// Op de Pi past PipeWire dit toe; op de radio regelt zijn eigen DSP het geluid.
+// Op de Pi past PipeWire dit toe. Op de radio: de equalizer via Android (services/audioFx.ts, AudioFx.kt);
+// balans/fader kan Android 9 niet, daarvoor opent PandaOS de geluidsapp van de radio. Bronnen = apps van de radio.
+// De Audio-app (app-menu) opent dit scherm op Bronnen (gebeurtenis 'pandaos-audio-tab').
 
 type AudioTab = 'Tone' | 'Balance' | 'Options' | 'Sources';
 const TABS: AudioTab[] = ['Tone', 'Balance', 'Options', 'Sources'];
@@ -96,8 +99,28 @@ const AudioSettings: React.FC = () => {
   const [tab, setTab] = useState<AudioTab>('Tone');
   const t = useT();
   const isDarkMode = getEffectiveTheme(screenMode, vehicleLightsOn) === 'dark';
+  const onRadio = !!(window as any).PandaAndroid;
+  // Wat de radio kan (equalizer, geluidsapp) en welke bron-apps erop staan; opnieuw bij elk openen
+  const fx = useMemo(() => (isAudioSettingsOpen ? getAudioFxState() : null), [isAudioSettingsOpen]);
+  const radioSources = useMemo<AudioSource[]>(() => (isAudioSettingsOpen ? getAudioSources() : []), [isAudioSettingsOpen]);
+  useEffect(() => {
+    const onTab = (e: Event) => setTab(((e as CustomEvent).detail as AudioTab) ?? 'Tone');
+    window.addEventListener('pandaos-audio-tab', onTab);
+    return () => window.removeEventListener('pandaos-audio-tab', onTab);
+  }, []);
 
   if (!isAudioSettingsOpen) return null;
+  const radioSoundButton = fx?.radioSoundApp && (
+    <button className="tsl-btn is-small" style={{ alignSelf: 'flex-start' }} onClick={() => openRadioSoundSettings()}>
+      <ExternalLink size={16} /> {t('Radio sound settings')}
+    </button>
+  );
+  const SOURCE_ICONS: Record<AudioSource['kind'], React.ReactNode> = {
+    radio: <Radio size={22} />, bluetooth: <Bluetooth size={22} />, usb: <Usb size={22} />, avin: <Cable size={22} />, spotify: <Music2 size={22} />,
+  };
+  const SOURCE_LABELS: Record<AudioSource['kind'], string> = {
+    radio: 'FM / DAB radio', bluetooth: 'Bluetooth music', usb: 'USB', avin: 'AV-in', spotify: 'Spotify',
+  };
 
   return (
     <div className="audio-settings-backdrop" onClick={toggleAudioSettings}>
@@ -148,6 +171,10 @@ const AudioSettings: React.FC = () => {
 
                 <button className="tsl-link" style={{ alignSelf: 'flex-start' }}
                   onClick={() => EQ_BANDS.forEach(({ key }) => updateAudioSetting(key, 0))}>{t('Reset')}</button>
+                {onRadio && fx && !fx.eq && (
+                  <small className="tsl-hint">{t('This radio does not allow a system equalizer. Use the sound settings of the radio.')}</small>
+                )}
+                {onRadio && radioSoundButton}
               </div>
             )}
 
@@ -160,6 +187,8 @@ const AudioSettings: React.FC = () => {
                   <span className="tsl-hint">{t('Balance')}: {audioSettings.balance === 0 ? t('Center') : audioSettings.balance < 0 ? `L ${-audioSettings.balance}` : `R ${audioSettings.balance}`}</span>
                   <span className="tsl-hint">Fade: {audioSettings.fade === 0 ? t('Center') : audioSettings.fade < 0 ? `${t('Rear')} ${-audioSettings.fade}` : `${t('Front')} ${audioSettings.fade}`}</span>
                   <button className="tsl-btn is-small" onClick={() => { updateAudioSetting('balance', 0); updateAudioSetting('fade', 0); }}>{t('Center')}</button>
+                  {onRadio && <small className="tsl-hint">{t('Android cannot set balance and fader itself. Set them in the sound settings of the radio.')}</small>}
+                  {onRadio && radioSoundButton}
                 </div>
               </div>
             )}
@@ -181,6 +210,18 @@ const AudioSettings: React.FC = () => {
             {/* --- SOURCES: waar de muziek vandaan komt --- */}
             {tab === 'Sources' && (
               <div className="tsl-list">
+                {/* Bronnen van de radio: tik = de app van die bron openen */}
+                {radioSources.map((source) => (
+                  <div key={source.package} className="tsl-list-row">
+                    {SOURCE_ICONS[source.kind]}
+                    <div className="tsl-list-text">
+                      <span className="tsl-field-text">{t(SOURCE_LABELS[source.kind])}</span>
+                      <small className="tsl-hint">{source.name}</small>
+                    </div>
+                    <button className="tsl-btn is-small" onClick={() => { (window as any).PandaAndroid?.launchApp?.(source.package); toggleAudioSettings(); }}>{t('Open')}</button>
+                  </div>
+                ))}
+                {onRadio && radioSources.length === 0 && <small className="tsl-hint">{t('No radio source apps found.')}</small>}
                 {[
                   { id: 'local' as const, icon: <Smartphone size={22} />, name: 'Bluetooth', hint: btConnectedAddress ? 'Phone connected' : 'No phone connected' },
                   { id: 'spotify' as const, icon: <Music2 size={22} />, name: 'Spotify', hint: 'Spotify Web' },

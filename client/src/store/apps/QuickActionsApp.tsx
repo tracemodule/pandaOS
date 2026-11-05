@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useUIStore, type AppSettings } from '../../store/uiStore';
+import { useUIStore, openAudioApp, type AppSettings } from '../../store/uiStore';
 import { getEffectiveTheme } from '../../settings';
 import { useT } from '../../i18n';
 import { getLaunchAction, runLaunchAction, useInstalledApps, getAndroidAppIcon, getAndroidAppName, isAndroidAppVisible, launchAndroidPackage, androidAppKey, getPackagesBehindPandaOSIcons, isAndroidLauncher, type LaunchAction } from '../appLinks';
@@ -19,10 +19,12 @@ const ALL_APPS = [
   { id: 'dashcam', icon: '/app-icons/dashcam.svg', name: 'Rear camera', type: 'image' },
   { id: 'calendar', icon: '/app-icons/calendar.svg', name: 'Calendar', type: 'image' },
   { id: 'messages', icon: '/app-icons/messages.svg', name: 'Messages', type: 'image' },
+  { id: 'contacts', icon: '/app-icons/contacts.svg', name: 'Contacts', type: 'image' },
   { id: 'zoom', icon: '/app-icons/zoom.svg', name: 'Zoom', type: 'image' },
   { id: 'netflix', icon: '/app-icons/netflix.svg', name: 'Theater', type: 'image' },
   { id: 'arcade', icon: '/app-icons/arcade.svg', name: 'Arcade', type: 'image' },
   { id: 'toybox', icon: '/app-icons/toybox.svg', name: 'Toybox', type: 'image' },
+  { id: 'audio', icon: '/app-icons/audio.svg', name: 'Audio', type: 'image' },
   { id: 'diagnostics', icon: '/app-icons/diagnostics.svg', name: 'Diagnostics', type: 'image' },
   { id: 'spotify', icon: '/app-icons/spotify.svg', name: 'Spotify', type: 'image' },
   { id: 'caraoke', icon: '/app-icons/caraoke.svg', name: 'Caraoke', type: 'image' },
@@ -85,7 +87,10 @@ const QuickActionsApp: React.FC = () => {
   // Geïnstalleerde Android-apps (op de radio) en wat elk PandaOS-pictogram doet (Settings > Apps)
   const installedApps = useInstalledApps();
   const actions = new Map<string, LaunchAction>(ALL_APPS.map((app) => [app.id, getLaunchAction(appLinks, app.id, installedApps)]));
-  const visibleApps = ALL_APPS.filter((app) => actions.get(app.id)!.kind !== 'hidden' && (!['developer', 'carinfo'].includes(app.id) || isAndroidLauncher()));
+  // Standaardweergave (Software > Weergave): CAN-monitor niet in het app-menu
+  const standardMode = useUIStore((st) => st.displaySettings?.uiMode === 'standard');
+  const visibleApps = ALL_APPS.filter((app) => actions.get(app.id)!.kind !== 'hidden' && (!['developer', 'carinfo'].includes(app.id) || isAndroidLauncher())
+    && !(standardMode && app.id === 'canmonitor'));
   // Overige Android-apps: alles wat niet al achter een PandaOS-pictogram zit
   // (en ook geen alternatieven daarvan, bijv. Google Phone als Telefoon op PandaOS staat)
   const coveredPackages = getPackagesBehindPandaOSIcons(appLinks, installedApps);
@@ -136,6 +141,9 @@ const QuickActionsApp: React.FC = () => {
         break;
       case 'toybox':
         openToybox();
+        break;
+      case 'audio':
+        openAudioApp();
         break;
       case 'diagnostics':
         openDiagnostics();
@@ -270,17 +278,18 @@ const QuickActionsApp: React.FC = () => {
   return (
     <div style={{ position: 'relative' }} ref={overlayRef}>
       
-      {/* "Done" knop boven het venster in Edit Mode */}
-      {isAppEditMode && (
-         <div style={{ position: 'absolute', top: -60, left: '50%', transform: 'translateX(-50%)', zIndex: 100 }}>
-            <button 
-              onClick={(e) => { e.stopPropagation(); setAppEditMode(false); }}
-              style={{ background: '#222', color: '#fff', padding: '10px 30px', borderRadius: '25px', border: '1px solid #444', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 15px rgba(0,0,0,0.5)' }}
-            >
-              {t('Done')}
-            </button>
-         </div>
-      )}
+      {/* Boven het menu (zoals in de video, 10:56): "Customise" zet de bewerkmodus aan, "Done" weer uit (en toont
+          bovenin kort "Opgeslagen") */}
+      <div style={{ position: 'absolute', top: -46, left: '50%', transform: 'translateX(-50%)', zIndex: 100 }}>
+        <button className="qa-customise"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (isAppEditMode) { setAppEditMode(false); useUIStore.setState({ savedFlashAt: Date.now() }); }
+            else { setShowAppSettings(false); setAppEditMode(true); }
+          }}>
+          {isAppEditMode ? t('Done') : t('Customise')}
+        </button>
+      </div>
 
       <div
         className={`tsl-quick-actions-overlay tsl-ui${isDarkMode ? ' dark-mode' : ''}`}
@@ -297,7 +306,7 @@ const QuickActionsApp: React.FC = () => {
       >
         {isAppEditMode && (
           <div style={{ textAlign: 'center', marginBottom: '25px', color: '#888', fontSize: 'calc(14px * var(--text-scale, 1))', fontWeight: '500' }}>
-            {t('Drag icons to My Apps to customize')}
+            {t('Drag icons to My Apps to customise')}
           </div>
         )}
 

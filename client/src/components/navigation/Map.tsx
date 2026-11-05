@@ -1,10 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Search, Compass, Globe, List, MapPin, Zap,
-  CornerUpLeft, CornerUpRight, MoveUp, RotateCw,
-  Battery, MoreHorizontal, X
+  Search, CornerUpLeft, CornerUpRight, MoveUp, RotateCw, Battery, MoreHorizontal, X, Plus, Minus, Navigation2, MapPin
 } from 'lucide-react';
-import { MapContainer, TileLayer, Marker, useMap, Polyline } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, useMap, Polyline, CircleMarker } from 'react-leaflet';
 import L from 'leaflet';
 import { useUIStore } from '../../store/uiStore';
 import { getEffectiveTheme } from '../../settings';
@@ -12,6 +10,10 @@ import { useT } from '../../i18n';
 import 'leaflet/dist/leaflet.css';
 import './_map.scss';
 import { diag } from '../../services/diagnostics';
+import { PlacePickerModal } from './PlacePicker';
+import { getSpeedCameras } from '../../services/speedCameras';
+import MapPlaces from './MapPlaces';
+import { DEFAULT_MAPBOX_TOKEN, mapboxTiles, MAPBOX_ATTRIBUTION } from './mapbox';
 
 // --- PDOK (gratis, Kadaster): kaart en adreszoeker voor Nederland ---
 // BRT Achtergrondkaart, thema "grijs" (rustig, past bij de Tesla-stijl). Andere thema's: standaard, pastel, water.
@@ -66,12 +68,35 @@ const createCarIcon = (heading: number) => {
 const formatDistance = (meters: number) =>
   meters < 1000 ? `${Math.round(meters / 10) * 10} m` : `${(meters / 1000).toFixed(1)} km`;
 
-const formatArrival = (seconds: number) =>
-  new Date(Date.now() + seconds * 1000).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
+const formatArrival = (seconds: number, departAt?: number | null) =>
+  new Date((departAt ?? Date.now()) + seconds * 1000).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
+
+// Reistijd: "45 min" of "1 u 20 min"
+const formatDuration = (seconds: number) => {
+  const minutes = Math.max(1, Math.round(seconds / 60));
+  return minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} u ${minutes % 60} min`;
+};
 
 // --- Map Controller (TomTom Logica) ---
-const MapController = ({ position, isNavigating, is3D, recenterKey }: any) => {
+const MapController = ({ position, isNavigating, is3D, recenterKey, fitPoints, following, onUserMove, onMapTap }: any) => {
   const map = useMap();
+
+  // Zelf de kaart wegschuiven: niet meer de auto volgen (knop Centreren verschijnt); tik op de kaart = zoomknoppen
+  useEffect(() => {
+    const drag = () => onUserMove?.();
+    const tap = () => onMapTap?.();
+    map.on('dragstart', drag);
+    map.on('click', tap);
+    return () => { map.off('dragstart', drag); map.off('click', tap); };
+  }, [map, onUserMove, onMapTap]);
+
+  // Routevoorstel: uitzoomen zodat de auto en alle routes in beeld zijn (één keer per nieuwe route)
+  const fitKey = fitPoints ? `${fitPoints.length}:${fitPoints[0]}:${fitPoints[fitPoints.length - 1]}` : '';
+  useEffect(() => {
+    if (!fitPoints || fitPoints.length < 2 || isNavigating) return;
+    map.fitBounds(L.latLngBounds(fitPoints), { padding: [60, 60], animate: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fitKey, isNavigating, map]);
 
   // Leaflet meet zijn maat één keer. Het kaartpaneel groeit/krimpt mee met de split-view (0% → 70%),
   // dus bij elke maatverandering opnieuw meten; anders blijven delen van de kaart grijs.
@@ -82,6 +107,7 @@ const MapController = ({ position, isNavigating, is3D, recenterKey }: any) => {
   }, [map]);
 
   useEffect(() => {
+    if (!following) return;
     if (isNavigating) {
       map.setView(position, 18, { animate: true });
       // We gebruiken CSS classes op de map container voor het 3D effect
@@ -91,11 +117,13 @@ const MapController = ({ position, isNavigating, is3D, recenterKey }: any) => {
       } else {
         mapContainer.classList.remove('tomtom-view');
       }
+    } else if (!fitPoints) {
+      map.setView(position, Math.max(map.getZoom(), 15), { animate: true });
+      map.getContainer().classList.remove('tomtom-view');
     } else {
-      map.setView(position, 15, { animate: true });
       map.getContainer().classList.remove('tomtom-view');
     }
-  }, [position, isNavigating, is3D, map, recenterKey]);
+  }, [position, isNavigating, is3D, map, recenterKey, fitPoints, following]);
 
   return null;
 };
@@ -103,20 +131,48 @@ const MapController = ({ position, isNavigating, is3D, recenterKey }: any) => {
 const Map: React.FC = () => {
   const {
     openKeyboard, closeKeyboard, keyboardValue,
-    setKeyboardValue, isNavigating, setNavigating, screenMode, vehicleLightsOn
+    setKeyboardValue, isNavigating, setNavigating, screenMode, vehicleLightsOn, navigationSettings
   } = useUIStore();
   const isDarkMode = getEffectiveTheme(screenMode, vehicleLightsOn) === 'dark';
+  // Kaart: PandaOS (PDOK/OSM, standaard) of Mapbox (met eigen token uit Instellingen > Navigatie)
+  const [mapboxFailed, setMapboxFailed] = useState(false);
+  const mapboxToken = (navigationSettings.mapboxToken ?? '').trim() || DEFAULT_MAPBOX_TOKEN;
+  const useMapbox = navigationSettings.mapProvider === 'mapbox' && mapboxToken.startsWith('pk.') && !mapboxFailed;
+  // Token controleren met één tegel: ongeldig (401/403) = terug naar de PandaOS-kaart
+  useEffect(() => {
+    setMapboxFailed(false);
+    if (navigationSettings.mapProvider !== 'mapbox') return;
+    fetch(mapboxTiles(mapboxToken, false).replace('{z}/{x}/{y}', '1/1/1'))
+      .then((r) => { if (r.status === 401 || r.status === 403) { setMapboxFailed(true); diag('warn', 'Navigatie', `Mapbox-token geweigerd (${r.status})`); } })
+      .catch(() => { /* offline: tegels proberen het zelf */ });
+  }, [mapboxToken, navigationSettings.mapProvider]);
 
   // States
   const [position, setPosition] = useState<[number, number]>([52.3676, 4.9041]);
   const t = useT();
   const [heading, setHeading] = useState(0);
-  const [is3D, setIs3D] = useState(true);
+  const [is3D, setIs3D] = useState(false);
   const [recenterKey, setRecenterKey] = useState(0);
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [selectedDestination, setSelectedDestination] = useState<any>(null);
+  // Thuis/Werk instellen: het volgende gekozen zoekresultaat wordt die plek (in plaats van een route)
+  const [settingPlace, setSettingPlace] = useState<'home' | 'work' | null>(null);
+  const [placeModal, setPlaceModal] = useState<'home' | 'work' | null>(null); // pop-up adres instellen
+  // Vaste flitspalen (OpenStreetMap), bijgewerkt als er nieuwe zijn opgehaald
+  const [speedCameras, setSpeedCameras] = useState(getSpeedCameras());
+  useEffect(() => { const on = () => setSpeedCameras([...getSpeedCameras()]); window.addEventListener('pandaos-speed-cameras', on); return () => window.removeEventListener('pandaos-speed-cameras', on); }, []);
   const [routeData, setRouteData] = useState<any>(null);
+  // Alle routes van OSRM (de gekozen staat in routeData); tik op het tijdlabel = die route kiezen
+  const [routes, setRoutes] = useState<any[]>([]);
+  // Later vertrekken (drie puntjes): vertrektijd; aankomst = vertrek + reistijd
+  const [departAt, setDepartAt] = useState<number | null>(null);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [departPicker, setDepartPicker] = useState(false);
+  // Vrij rondkijken: volgt de auto tot je de kaart wegschuift; tik op de kaart = knoppen in/uitzoomen + Gereed
+  const [following, setFollowing] = useState(true);
+  const [zoomButtons, setZoomButtons] = useState(false);
+  const mapRef = React.useRef<L.Map | null>(null);
   const [isRoutePreview, setIsRoutePreview] = useState(false);
   // Kaarttegels: telt geladen en mislukte tegels; na herhaald mislukken de wereldkaart en een melding
   const [pdokFailed, setPdokFailed] = useState(false);
@@ -179,18 +235,18 @@ const Map: React.FC = () => {
       // Vermijd-opties uit Settings > Navigation; weigert de server ze, dan zonder opnieuw proberen
       const { avoidMotorways, avoidTolls, avoidFerries } = useUIStore.getState().navigationSettings;
       const exclude = [avoidMotorways && 'motorway', avoidTolls && 'toll', avoidFerries && 'ferry'].filter(Boolean).join(',');
-      const baseUrl = `https://router.project-osrm.org/route/v1/driving/${position[1]},${position[0]};${destLon},${destLat}?overview=full&geometries=geojson&steps=true`;
+      const baseUrl = `https://router.project-osrm.org/route/v1/driving/${position[1]},${position[0]};${destLon},${destLat}?overview=full&geometries=geojson&steps=true&alternatives=3`;
       let data = await (await fetch(exclude ? `${baseUrl}&exclude=${exclude}` : baseUrl)).json();
       if (exclude && data.code !== 'Ok') data = await (await fetch(baseUrl)).json();
       if (data.routes && data.routes[0]) {
-        const route = data.routes[0];
-        const coordinates = route.geometry.coordinates.map((c: any) => [c[1], c[0]]);
-        setRouteData({
+        const all = data.routes.map((route: any) => ({
           distance: route.distance,
           duration: route.duration,
-          geometry: coordinates,
-          steps: route.legs[0].steps
-        });
+          geometry: route.geometry.coordinates.map((c: any) => [c[1], c[0]]),
+          steps: route.legs[0].steps,
+        }));
+        setRoutes(all);
+        setRouteData(all[0]);
         setIsRoutePreview(true);
       }
     } catch (e) { console.error(e); }
@@ -207,6 +263,15 @@ const Map: React.FC = () => {
   };
 
   const handleSelectAddress = (address: any) => {
+    if (settingPlace) {
+      useUIStore.getState().updateNavigationSetting(settingPlace, { name: address.display_name, lat: address.lat, lon: address.lon });
+      setSettingPlace(null);
+      setKeyboardValue('');
+      setSearchResults([]);
+      setIsSearching(false);
+      closeKeyboard();
+      return;
+    }
     setSelectedDestination({ lat: address.lat, lon: address.lon, name: address.display_name });
     setKeyboardValue(address.display_name.split(',')[0]);
     setSearchResults([]);
@@ -215,7 +280,22 @@ const Map: React.FC = () => {
     calculateRoute(address.lat, address.lon);
   };
 
+  // Route naar Thuis/Werk (knoppen hieronder, of het kaartje Navigeren op het startscherm)
+  const goToPlace = (place: 'home' | 'work') => {
+    const saved = useUIStore.getState().navigationSettings[place];
+    if (!saved) { setPlaceModal(place); return; }
+    handleSelectAddress({ display_name: saved.name, lat: saved.lat, lon: saved.lon });
+  };
+  useEffect(() => {
+    const onPlace = (e: Event) => goToPlace((e as CustomEvent<'home' | 'work'>).detail);
+    window.addEventListener('pandaos-nav-place', onPlace);
+    return () => window.removeEventListener('pandaos-nav-place', onPlace);
+  });
+
   const clearSearch = () => {
+    setRoutes([]);
+    setDepartAt(null);
+    setMoreOpen(false);
     setIsRoutePreview(false);
     setNavigating(false);
     setKeyboardValue('');
@@ -230,11 +310,14 @@ const Map: React.FC = () => {
 
   return (
     // Klikken op de kaart en de kaarten erop mag Navi niet sluiten (SplashScreen sluit apps bij een klik op de kaart)
-    <div className={`tsl-map-container ${isDarkMode ? 'dark-mode' : ''} ${isNavigating && is3D ? 'is-3d-active' : ''}`}
+    <div className={`tsl-map-container ${isDarkMode ? 'dark-mode' : ''} ${is3D ? 'is-3d-active' : ''} ${useMapbox ? 'is-mapbox' : ''}`}
       onClick={(e) => e.stopPropagation()}>
       <div className="map-layer">
-        <MapContainer center={position} zoom={15} zoomControl={false} style={{ width: '100%', height: '100%' }}>
-          {useWorldMap
+        <MapContainer ref={mapRef} center={position} zoom={15} zoomControl={false} style={{ width: '100%', height: '100%' }}>
+          {useMapbox
+            ? <TileLayer key={`mapbox-${isDarkMode}`} url={mapboxTiles(mapboxToken, isDarkMode)} attribution={MAPBOX_ATTRIBUTION}
+                tileSize={512} zoomOffset={-1} maxZoom={20} maxNativeZoom={20} />
+            : useWorldMap
             ? <TileLayer key="world" url={WORLD_TILES} attribution={WORLD_ATTRIBUTION} maxZoom={19} maxNativeZoom={19} eventHandlers={tileEvents} />
             : <TileLayer key="pdok" url={PDOK_TILES} attribution={PDOK_ATTRIBUTION} maxZoom={19} maxNativeZoom={19} eventHandlers={tileEvents} />}
 
@@ -242,13 +325,31 @@ const Map: React.FC = () => {
           <Marker position={position} icon={createCarIcon(heading)} />
 
           {selectedDestination && <Marker position={[selectedDestination.lat, selectedDestination.lon]} />}
-          {routeData && <Polyline positions={routeData.geometry} color="#3e6ae1" weight={8} opacity={0.8} />}
+          {useUIStore.getState().safetySettings.speedCameraWarning !== false && speedCameras.map((c) => (
+            <CircleMarker key={c.id} center={[c.lat, c.lon]} radius={6}
+              pathOptions={{ color: '#ffffff', weight: 2, fillColor: c.kind === 'section' ? '#f5a623' : '#ed4e3b', fillOpacity: 1 }} />
+          ))}
+          {!isNavigating && routes.filter((r) => r !== routeData).map((r, i) => (
+            <Polyline key={`alt-${i}`} positions={r.geometry} color={isDarkMode ? '#8a8f98' : '#9aa0a8'} weight={7} opacity={0.75}
+              eventHandlers={{ click: () => setRouteData(r) }} />
+          ))}
+          {routeData && <Polyline positions={routeData.geometry} color="#3e6ae1" weight={8} opacity={0.9} />}
+          {!isNavigating && routes.map((r, i) => (
+            <Marker key={`label-${i}`} position={r.geometry[Math.floor(r.geometry.length / 2)]}
+              icon={L.divIcon({ className: '', iconSize: [0, 0],
+                html: `<div class="route-time-label ${r === routeData ? 'is-active' : ''}">${formatDuration(r.duration)}</div>` })}
+              eventHandlers={{ click: () => setRouteData(r) }} />
+          ))}
 
-          <MapController position={position} isNavigating={isNavigating} is3D={is3D} recenterKey={recenterKey} />
+          <MapPlaces />
+          <MapController position={position} isNavigating={isNavigating} is3D={is3D} recenterKey={recenterKey}
+            following={following} onUserMove={() => setFollowing(false)} onMapTap={() => setZoomButtons(true)}
+            fitPoints={isRoutePreview && routes.length > 0 ? [position, ...routes.flatMap((r) => r.geometry.filter((_: any, i: number) => i % 10 === 0))] : null} />
         </MapContainer>
       </div>
 
       {tileProblem && <div className="tsl-map-problem">{t(tileProblem)}</div>}
+      {placeModal && <PlacePickerModal place={placeModal} onClose={() => setPlaceModal(null)} />}
 
       {/* Linkerkolom (Figma: 16 px van links, 64 px van boven, onder de statusbalk) */}
       <div className="nav-left-column">
@@ -314,11 +415,12 @@ const Map: React.FC = () => {
         <div className="tsl-destination-summary">
           <div className="summary-top">
             <div className="summary-main">
-              <span className="arrival">{formatArrival(routeData.duration)}</span>
+              <span className="arrival">{formatArrival(routeData.duration, departAt)}</span>
               <span className="destination">{destinationName}</span>
             </div>
             <div className="summary-stats">
-              <span>{Math.round(routeData.duration / 60)} min · {formatDistance(routeData.distance)}</span>
+              <span>{formatDuration(routeData.duration)} · {formatDistance(routeData.distance)}</span>
+              {departAt && <span>{t('Departure')} {new Date(departAt).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}</span>}
               <span className="battery">90% <Battery size={16} /></span>
             </div>
           </div>
@@ -329,23 +431,58 @@ const Map: React.FC = () => {
               <button className="primary" onClick={() => { setNavigating(true); setIsRoutePreview(false); }}>{t('Start')}</button>
             )}
             <span className="divider" />
-            <button className="more" aria-label={t('More')}><MoreHorizontal size={20} /></button>
+            <button className="more" aria-label={t('More')} onClick={() => setMoreOpen(!moreOpen)}><MoreHorizontal size={20} /></button>
+          </div>
+          {moreOpen && (
+            <div className="summary-more-menu">
+              <button onClick={() => { setDepartPicker(true); setMoreOpen(false); }}>{t('Depart later')}</button>
+              {departAt && <button onClick={() => { setDepartAt(null); setMoreOpen(false); }}>{t('Depart now')}</button>}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Later vertrekken: vertrektijd kiezen (aankomst rekent mee) */}
+      {departPicker && (
+        <div className="tsl-modal-backdrop" onClick={() => setDepartPicker(false)}>
+          <div className={`tsl-modal tsl-ui ${isDarkMode ? 'dark-mode' : ''}`} style={{ width: 420 }} onClick={(e) => e.stopPropagation()}>
+            <span className="tsl-modal-title">{t('Depart later')}</span>
+            <div className="tsl-segmented is-wide" style={{ flexWrap: 'wrap', height: 'auto' }}>
+              {[15, 30, 60, 120].map((min) => (
+                <button key={min} style={{ flex: '1 0 22%', minHeight: 42 }}
+                  onClick={() => { setDepartAt(Date.now() + min * 60_000); setDepartPicker(false); }}>
+                  {min < 60 ? `+${min} min` : `+${min / 60} u`}
+                </button>
+              ))}
+            </div>
+            {routeData && <small className="tsl-hint">{t('Arrival is calculated from the departure time. Traffic is not included.')}</small>}
           </div>
         </div>
       )}
 
       {/* Rechterknoppen (Figma: los kompas, daaronder vier knoppen in één kaart; 56 breed) */}
       <div className="map-controls-right">
-        <button className="map-btn compass" onClick={() => setIs3D(!is3D)} aria-label="3D/2D">
-          <Compass size={24} style={{ transform: is3D ? 'rotateX(45deg)' : 'none', transition: '0.3s' }} />
+        {/* 2D / 3D: kantelt de kaart alsof je rijdt */}
+        <button className={`map-btn compass ${is3D ? 'is-active' : ''}`} onClick={() => setIs3D(!is3D)} aria-label="3D/2D">
+          <span className="map-btn-text">{is3D ? '3D' : '2D'}</span>
         </button>
-        <div className="map-btn-group">
-          <button className="map-btn" aria-label={t('Satellite')}><Globe size={22} /></button>
-          <button className="map-btn" aria-label={t('Route list')}><List size={22} /></button>
-          <button className="map-btn" onClick={() => setRecenterKey((k) => k + 1)} aria-label={t('Recenter')}><MapPin size={22} /></button>
-          <button className="map-btn" aria-label={t('Charging stations')}><Zap size={22} /></button>
-        </div>
       </div>
+
+      {/* Weggeschoven van je locatie: centreren */}
+      {!following && (
+        <button className="map-recenter" onClick={() => { setFollowing(true); setRecenterKey((k) => k + 1); }}>
+          <Navigation2 size={18} /> {t('Recenter')}
+        </button>
+      )}
+
+      {/* Na een tik op de kaart: inzoomen, uitzoomen en Gereed */}
+      {zoomButtons && (
+        <div className="map-zoom-controls">
+          <button className="map-btn" aria-label={t('Zoom in')} onClick={() => mapRef.current?.zoomIn()}><Plus size={22} /></button>
+          <button className="map-btn" aria-label={t('Zoom out')} onClick={() => mapRef.current?.zoomOut()}><Minus size={22} /></button>
+          <button className="map-zoom-done" onClick={() => setZoomButtons(false)}>{t('Done')}</button>
+        </div>
+      )}
     </div>
   );
 };

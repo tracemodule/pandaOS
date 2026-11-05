@@ -10,7 +10,7 @@ import org.json.JSONObject
 
 // Geavanceerde instellingen van de radio (Settings > Advanced > Radio-instellingen).
 // Wat eerder alleen via de laptop kon (BEVINDINGEN.md, 5-11-2026):
-//   - systeembalk van de radio verbergen: settings put global policy_control immersive.full=nl.pandaos.launcher
+//   - systeembalk van de radio verbergen (alle apps): settings put global policy_control immersive.full=*
 //   - volumebalk van de radio buiten beeld: wm overscan 0,-110,0,0
 //   - paneel van de radio op slot: jancar_sysui_panel_disable_touch (Jancar, nog niet getest)
 //   - camera-app van de radio (com.jancar.hd2cam): alleen tonen; uitzetten kan een gewone app niet
@@ -23,8 +23,33 @@ class RadioSystem(private val activity: Activity) {
     private val prefs get() = activity.getSharedPreferences("radio-system", Activity.MODE_PRIVATE)
 
     companion object {
+        // Vensters boven andere apps (TYPE_APPLICATION_OVERLAY) rekent Android 9 vanaf de overscan-rand (bijv. 110 px
+        // boven het scherm). Zoveel px moeten ze omlaag om op het zichtbare scherm te beginnen.
+        @Volatile private var measuredShift: Int? = null
+        // Wordt aangeroepen zodra de verschuiving gemeten is (PandaOverlay zet dan de veegstrook goed)
+        var onShiftMeasured: (() -> Unit)? = null
+        fun overlayShift(activity: Activity): Int = measuredShift ?: -(RadioSystem(activity).overscanTop() ?: 0).coerceAtMost(0)
+
+        // Na het plaatsen nameten waar het venster echt staat en het verschil corrigeren (de overscan is niet altijd
+        // uit te lezen); de gemeten verschuiving geldt daarna voor alle vensters boven andere apps
+        fun fixOverlayPosition(wm: android.view.WindowManager, view: android.view.View, params: android.view.WindowManager.LayoutParams, wantedY: Int) {
+            view.postDelayed({
+                if (!view.isAttachedToWindow) return@postDelayed
+                val loc = IntArray(2)
+                view.getLocationOnScreen(loc)
+                val error = wantedY - loc[1]
+                if (error != 0) {
+                    params.y += error
+                    try { wm.updateViewLayout(view, params) } catch (_: Exception) {}
+                }
+                val shift = params.y - wantedY
+                if (shift != measuredShift) { measuredShift = shift; onShiftMeasured?.invoke() }
+            }, 300) // pas na het plaatsen en opmeten van het venster
+        }
+
         const val POLICY_KEY = "policy_control"
-        const val HIDE_BARS = "immersive.full=nl.pandaos.launcher"
+        // Voor alle apps: ook boven Waze/Flitsmeister (half of volledig) geen Android-balk; het PandaOS-menu vervangt hem
+        const val HIDE_BARS = "immersive.full=*"
         const val PANEL_LOCK_KEY = "jancar_sysui_panel_disable_touch"
         const val RADIO_CAMERA = "com.jancar.hd2cam"
         const val VOLUME_BAR_OVERSCAN = -110 // px: haalt de systeembalk én de volumebalk van de radio uit beeld
@@ -49,7 +74,7 @@ class RadioSystem(private val activity: Activity) {
     }
 
     // Bovenrand (overscan) van het scherm uitlezen via de verborgen DisplayInfo; null = niet uit te lezen
-    private fun overscanTop(): Int? = try {
+    fun overscanTop(): Int? = try {
         val infoClass = Class.forName("android.view.DisplayInfo")
         val info = infoClass.getDeclaredConstructor().newInstance()
         val display = activity.windowManager.defaultDisplay
@@ -81,7 +106,7 @@ class RadioSystem(private val activity: Activity) {
         return JSONObject()
             .put("canWrite", canWrite())
             .put("deviceOwner", isOwner)
-            .put("systemBarHidden", policy?.contains("nl.pandaos.launcher") == true)
+            .put("systemBarHidden", policy?.let { it.contains("nl.pandaos.launcher") || it.contains("immersive.full=*") } == true)
             .put("policy", policy ?: JSONObject.NULL)
             .put("volumeBarHidden", if (top == null) JSONObject.NULL else top <= VOLUME_BAR_OVERSCAN)
             .put("overscanTop", top ?: JSONObject.NULL)

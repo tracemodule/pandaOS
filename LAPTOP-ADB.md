@@ -20,6 +20,31 @@ logs meelezen.
 
 ---
 
+## Snelle route vanaf PandaOS 1.3.9: alles met één hulpprogramma
+
+Vanaf 1.3.9 doet `tools/pandaos.mjs` het meeste werk uit dit document in één keer (nodig: **Node.js 22+** op de
+laptop en adb-verbinding uit stap 2). Zeg tegen Claude op de laptop: *"Lees LAPTOP-ADB.md en RADIOTEST.md, we testen
+1.3.9"*. Volgorde:
+
+1. Radio bijwerken naar **1.3.9** (PandaOS → Instellingen → Software).
+2. `node tools/pandaos.mjs setup` – alle rechten (`pm grant` voor WRITE_SECURE_SETTINGS, READ_LOGS,
+   CHANGE_CONFIGURATION, contacten, gesprekken, agenda, sms, locatie, camera, microfoon), `appops set …
+   SYSTEM_ALERT_WINDOW allow` (PandaOS-menu, volumebalk, knoppen half venster), vrije vensters
+   (`enable_freeform_support 1` + `force_resizable_activities 1`, daarna **één keer herstarten**) en meldingen-toegang.
+3. `node tools/pandaos.mjs doctor` – elke ✗ is iets dat nog niet klopt.
+4. `node tools/pandaos.mjs apks` – de APK's van Jancar (o.a. `com.jancar.audiosettings`, `com.jancar.services`) naar
+   `tools/radio-apks/` (niet in git). Neem ze mee naar huis: daarmee kunnen we balans/fader en klank van de radio zelf
+   besturen.
+5. `node tools/pandaos.mjs test` – testrondje met geslaagd/mislukt; zet alles daarna terug.
+6. Zelf nadoen of vasthouden: `sim …` / `sim … --hold` / `sim reset`, `can list` / `can <functie> on|off|waarde`,
+   `camera open|close`, `audio`, `audio eq …`, `volume 20`, `set <groep>.<naam> <waarde>`.
+7. Telefoon via Bluetooth verbinden en kijken met `bluetooth`, `media` en `sources` (alleen aantallen).
+8. Schermafbeeldingen met `shot naam` (naar `tools/radio-shots/`, niet in git; kan persoonlijke gegevens tonen).
+
+De oude stappen hieronder blijven gelden voor logs meelezen (stap 5) en de CAN-app onderzoeken (stap 6).
+
+---
+
 ## Draaiboek voor de laptop-sessie (PandaOS 1.3.6)
 
 Doel: de radio klaarmaken voor gebruik. Lampjes, gordel, deuren, snelheid en volume komen dan echt van de auto, en we

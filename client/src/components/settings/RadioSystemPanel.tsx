@@ -76,7 +76,7 @@ const RadioSystemPanel: React.FC<{ open: boolean; onClose: () => void }> = ({ op
             {state && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
                 <Switch title={t('Hide system bar of the radio')}
-                  hint={t('The bar at the top of the radio stays hidden while PandaOS is open.')}
+                  hint={t('The bar at the top of the radio stays hidden, also in other apps (Waze, CarPlay). Swipe down for the PandaOS menu.')}
                   checked={state.systemBarHidden} disabled={!state.canWrite}
                   onChange={(v) => run(() => bridge().setRadioSystemBarHidden(v))} />
                 <Switch title={t('Hide volume bar of the radio')}

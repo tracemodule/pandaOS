@@ -28,6 +28,52 @@ class MediaWatcher(private val context: Context, private val send: (String) -> U
     private var lastCoverKey: String? = null
     private var lastSent: String? = null
 
+    // Muziek zonder mediasessie: veel (radio-)apps, ook Bluetooth-muziek van de fabrikant, sturen het nummer als
+    // broadcast (zoals de oude Android-muziekspeler). Laatste nummer daaruit; gebruikt als er geen sessie is.
+    private var broadcastInfo: JSONObject? = null
+    private var broadcastAt = 0L
+    private val seenActions = HashSet<String>()
+    private val metaReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(ctx: Context, intent: android.content.Intent) {
+            val action = intent.action ?: return
+            val extras = intent.extras
+            if (seenActions.add(action)) DiagLog.add("info", "Muziekmelding: $action ${extras?.keySet()?.joinToString { "$it=${extras.get(it)}" } ?: ""}")
+            fun str(vararg keys: String) = keys.firstNotNullOfOrNull { k -> extras?.get(k)?.toString()?.takeIf { it.isNotBlank() } }
+            val title = str("track", "title", "name", "TRACK", "TITLE", "song") ?: return
+            val playing = extras?.get("playing") ?: extras?.get("isPlaying") ?: extras?.get("playstate")
+            broadcastInfo = JSONObject()
+                .put("title", title)
+                .put("artist", str("artist", "ARTIST", "singer") ?: "")
+                .put("app", str("package", "app") ?: action.substringBeforeLast('.'))
+                .put("isPlaying", playing?.toString()?.let { it == "true" || it == "1" || it == "3" } ?: true)
+                .put("position", (extras?.get("position") as? Number)?.toLong()?.div(1000) ?: 0)
+                .put("duration", ((extras?.get("duration") as? Number)?.toLong() ?: 0) / 1000)
+            broadcastAt = SystemClock.elapsedRealtime()
+            push()
+        }
+    }
+
+    init {
+        val filter = android.content.IntentFilter().apply {
+            listOf("com.android.music.metachanged", "com.android.music.playstatechanged", "com.android.music.queuechanged",
+                "com.spotify.music.metadatachanged", "com.spotify.music.playbackstatechanged",
+                "com.sec.android.app.music.metachanged", "com.htc.music.metachanged", "fm.last.android.metachanged",
+                "com.amazon.mp3.metachanged", "com.miui.player.metachanged", "com.real.IMP.metachanged",
+                "com.rdio.android.metachanged", "com.andrew.apollo.metachanged",
+                // Bluetooth-muziek (AVRCP) via de Bluetooth-dienst van Android
+                "android.bluetooth.avrcp-controller.profile.action.TRACK_EVENT",
+                "com.android.bluetooth.avrcp.action.TRACK_CHANGED",
+                // Jancar en andere fabrikanten (namen geraden; elke ontvangen melding komt in het logboek)
+                "com.jancar.bluetooth.music.metachanged", "com.jancar.btmusic.metachanged", "com.jancar.music.metachanged",
+                "com.jancar.action.BT_MUSIC_INFO", "com.jancar.bluetooth.action.MUSIC_INFO",
+            ).forEach { addAction(it) }
+        }
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= 33) context.registerReceiver(metaReceiver, filter, Context.RECEIVER_EXPORTED)
+            else context.registerReceiver(metaReceiver, filter)
+        } catch (_: Exception) {}
+    }
+
     private val sessionsListener = MediaSessionManager.OnActiveSessionsChangedListener { sessions ->
         pickController(sessions ?: emptyList())
     }
@@ -113,6 +159,12 @@ class MediaWatcher(private val context: Context, private val send: (String) -> U
         val title = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
             ?: metadata?.getString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE)
         if (c == null || metadata == null || title.isNullOrEmpty()) {
+            // Geen mediasessie: het laatste nummer uit een muziekmelding (minder dan 30 min oud)
+            val info = broadcastInfo
+            if (info != null && SystemClock.elapsedRealtime() - broadcastAt < 30 * 60_000) {
+                sendOnce("setNowPlaying($info)")
+                return
+            }
             sendOnce("setNowPlaying(null)")
             lastCoverKey = null
             return

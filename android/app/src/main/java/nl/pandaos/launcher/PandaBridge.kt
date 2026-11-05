@@ -22,6 +22,9 @@ import java.io.ByteArrayOutputStream
 // window.PandaAndroid in de webapp. De namen moeten gelijk blijven aan wat de webkant aanroept
 // (client/src/store/appLinks.ts en de Wi-Fi-tab in SettingsApp.tsx).
 // Let op: @JavascriptInterface-methodes draaien niet op de UI-thread; activiteiten starten gaat via runOnUiThread.
+// Hoogte van de grijze balk die Android 9 boven een los venster zet (freeform-titelbalk)
+private const val CAPTION_DP = 42
+
 class PandaBridge(
     private val activity: Activity,
     private val media: MediaWatcher,
@@ -500,6 +503,114 @@ class PandaBridge(
         return true
     }
 
+    // --- Half scherm (Nav, Energy): de Android-app in een venster rechts naast de auto ---
+    // Kan alleen met vensters in vrije vorm (freeform). Op Android 9 aan te zetten met WRITE_SECURE_SETTINGS
+    // (enable_freeform_support + force_resizable_activities), daarna één keer herstarten.
+    private fun freeformSupported(): Boolean =
+        activity.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_FREEFORM_WINDOW_MANAGEMENT) ||
+            android.provider.Settings.Global.getInt(activity.contentResolver, "enable_freeform_support", 0) == 1
+
+    @JavascriptInterface
+    fun getFreeformState(): String = org.json.JSONObject()
+        .put("supported", freeformSupported())
+        .put("setting", android.provider.Settings.Global.getInt(activity.contentResolver, "enable_freeform_support", 0) == 1)
+        .put("canEnable", activity.checkSelfPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS) == android.content.pm.PackageManager.PERMISSION_GRANTED)
+        .toString()
+
+    // Zet vensters in vrije vorm aan; werkt pas na een herstart van de radio
+    @JavascriptInterface
+    fun enableFreeform(): Boolean = try {
+        android.provider.Settings.Global.putInt(activity.contentResolver, "enable_freeform_support", 1)
+        android.provider.Settings.Global.putInt(activity.contentResolver, "force_resizable_activities", 1)
+        DiagLog.add("info", "Vensters in vrije vorm aangezet (na herstart actief)")
+        true
+    } catch (e: Exception) { DiagLog.add("error", "Vrije vorm aanzetten mislukt: ${e.message}"); false }
+
+    // Venstervorm meegeven in de startgegevens (zelfde sleutel die ActivityOptions intern gebruikt); werkt ook waar
+    // de verborgen setLaunchWindowingMode geblokkeerd is (Android 10+)
+    private fun withWindowingMode(options: android.app.ActivityOptions, mode: Int): android.os.Bundle =
+        options.toBundle().apply { putInt("android.activity.windowingMode", mode) }
+
+    // left/right/top/bottom in CSS-pixels van de webapp. "half" = in een venster geopend, "full" = gewoon (geen
+    // vrije vorm op dit apparaat), "fail" = app niet gevonden
+    @JavascriptInterface
+    fun launchAppHalf(packageName: String, left: Int, top: Int, right: Int, bottom: Int): String =
+        launchAppHalfColored(packageName, left, top, right, bottom, "")
+
+    // coverColor: achtergrondkleur van het rechterpaneel ("rgb(r, g, b)"), voor het vlak tijdens het openen
+    @JavascriptInterface
+    fun launchAppHalfColored(packageName: String, left: Int, top: Int, right: Int, bottom: Int, coverColor: String): String {
+        val intent = activity.packageManager.getLaunchIntentForPackage(packageName) ?: return "fail"
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+        if (!freeformSupported()) {
+            activity.runOnUiThread { activity.startActivity(intent) }
+            return "full"
+        }
+        val d = activity.resources.displayMetrics.density
+        // CSS-pixels zijn ten opzichte van de webapp; PandaOS vult het hele scherm (ook op Android 11+)
+        val origin = IntArray(2)
+        activity.findViewById<android.view.View>(android.R.id.content)?.getLocationOnScreen(origin)
+        // Android zet een venster nooit onder de statusbalk; anders schuift hij het venster omlaag (over de dock)
+        val statusId = activity.resources.getIdentifier("status_bar_height", "dimen", "android")
+        val statusBar = if (android.os.Build.VERSION.SDK_INT >= 29 && statusId > 0) activity.resources.getDimensionPixelSize(statusId) else 0
+        var bounds = android.graphics.Rect(origin[0] + (left * d).toInt(), maxOf(origin[1] + (top * d).toInt(), statusBar),
+            origin[0] + (right * d).toInt(), origin[1] + (bottom * d).toInt())
+        // Android 9 (radio): de grijze balk van Android boven het venster net boven het scherm laten vallen; de app
+        // begint dan direct bovenaan en PandaOS zet eigen, doorzichtige knoppen op de app (HalfAppControls)
+        val caption = if (android.os.Build.VERSION.SDK_INT < 29) (CAPTION_DP * d).toInt() else 0
+        if (caption > 0) bounds = android.graphics.Rect(bounds.left, bounds.top - caption, bounds.right, bounds.bottom)
+
+        // Een app die al in een venster draait, houdt zijn oude maat (Android laat PandaOS die niet aanpassen).
+        // Is de maat veranderd (andere dockhoogte) en staat de app op de achtergrond: eerst afsluiten, dan opnieuw.
+        val prefs = activity.getSharedPreferences("pandaos_half", Activity.MODE_PRIVATE)
+        val key = bounds.flattenToString()
+        if (prefs.getString(packageName, null).let { it != null && it != key }) {
+            // Android onthoudt de maat bij de taak: een nieuwe taak openen met de nieuwe maat
+            try { activity.getSystemService(android.app.ActivityManager::class.java)?.killBackgroundProcesses(packageName) } catch (_: Exception) {}
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
+            DiagLog.add("info", "Half venster $packageName: nieuwe maat $key, nieuwe taak")
+        }
+        prefs.edit().putString(packageName, key).apply()
+
+        // Geen animatie van Android zelf: PandaOS schuift eerst het rechterpaneel in (zoals Instellingen, 0,4 s),
+        // daarna verschijnt de app precies in dat paneel (de webapp wacht met deze aanroep)
+        intent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
+        val options = android.app.ActivityOptions.makeCustomAnimation(activity, 0, 0).setLaunchBounds(bounds)
+        val bundle = withWindowingMode(options, 5) // WINDOWING_MODE_FREEFORM
+        (activity as? MainActivity)?.halfAppOpen = true
+        val rgb = Regex("\\d+").findAll(coverColor).map { it.value.toInt() }.toList()
+        val color = if (rgb.size >= 3) android.graphics.Color.rgb(rgb[0], rgb[1], rgb[2]) else 0xFF161616.toInt()
+        activity.runOnUiThread {
+            (activity as? MainActivity)?.halfControls?.prepare(packageName, bounds.left, bounds.top + caption, bounds.right, bounds.bottom, color)
+            try { activity.startActivity(intent, bundle) } catch (e: Exception) {
+                DiagLog.add("error", "Half openen mislukt: ${e.message}"); activity.startActivity(intent)
+            }
+            @Suppress("DEPRECATION")
+            activity.overridePendingTransition(0, 0)
+        }
+        DiagLog.add("info", "Half geopend: $packageName $bounds")
+        return "half"
+    }
+
+    // Navigeren naar een plek (Thuis/Werk) in de gekozen navigatie-app: Waze via zijn eigen link, andere via geo:
+    @JavascriptInterface
+    fun navigateTo(lat: Double, lon: Double, packageName: String): Boolean {
+        val uri = if (packageName == "com.waze") Uri.parse("https://waze.com/ul?ll=$lat,$lon&navigate=yes")
+            else Uri.parse("geo:$lat,$lon?q=$lat,$lon")
+        val intent = Intent(Intent.ACTION_VIEW, uri).setPackage(packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (activity.packageManager.resolveActivity(intent, 0) == null) return false
+        activity.runOnUiThread { try { activity.startActivity(intent) } catch (_: Exception) {} }
+        return true
+    }
+
+    // Knop "Volledig scherm": dezelfde app over het hele scherm
+    @JavascriptInterface
+    fun launchAppFull(packageName: String): Boolean {
+        val main = activity as? MainActivity ?: return false
+        main.runOnUiThread { main.fullscreenHalfApp(packageName) }
+        return true
+    }
+
     // Zelfde als launchApp, maar de app schuift van onder naar boven in beeld (Theater)
     @JavascriptInterface
     fun launchAppSlideUp(packageName: String): Boolean {
@@ -620,6 +731,124 @@ class PandaBridge(
 
     @JavascriptInterface
     fun setSystemVolume(percent: Int) { (activity as? MainActivity)?.signals?.setVolumePercent(percent) }
+
+    // --- Overlay boven andere apps (PandaOverlay) ---
+    @JavascriptInterface
+    fun overlaySetMode(mode: String) { (activity as? MainActivity)?.let { a -> a.runOnUiThread { a.overlay.setMode(mode) } } }
+
+    @JavascriptInterface
+    fun openPandaOS(settingsTab: String?) {
+        (activity as? MainActivity)?.let { a -> a.runOnUiThread { a.bringToFront(settingsTab?.ifEmpty { null }) } }
+    }
+
+    @JavascriptInterface
+    fun canDrawOverlays(): Boolean = android.provider.Settings.canDrawOverlays(activity)
+
+    // --- Rechten (Instellingen > Rechten) ---
+    private val permissions by lazy { PermissionsCenter(activity) }
+
+    @JavascriptInterface
+    fun getPermissions(): String = permissions.stateJson()
+
+    @JavascriptInterface
+    fun requestPermission(id: String): Boolean {
+        var result = false
+        val done = java.util.concurrent.CountDownLatch(1)
+        activity.runOnUiThread { result = permissions.request(id); done.countDown() }
+        done.await(2, java.util.concurrent.TimeUnit.SECONDS)
+        return result
+    }
+
+    // --- Gegevens van de telefoon (Telefoon, Agenda, Berichten) ---
+    private val phoneData by lazy { PhoneData(activity) }
+
+    @JavascriptInterface
+    fun requestPhonePermissions() { activity.runOnUiThread { permissions.requestPhoneGroup() } }
+
+    @JavascriptInterface
+    fun getPhoneContacts(): String = phoneData.contactsJson()
+
+    // Met contacten van een Google-account op de radio (Instellingen > Bluetooth > Contacten)
+    @JavascriptInterface
+    fun getPhoneContactsWithGoogle(includeGoogle: Boolean): String = phoneData.contactsJson(includeGoogle)
+
+    @JavascriptInterface
+    fun getPhoneRecents(): String = phoneData.recentsJson()
+
+    @JavascriptInterface
+    fun getCalendarEvents(days: Int): String = phoneData.calendarJson(days)
+
+    @JavascriptInterface
+    fun getPhoneMessages(): String = phoneData.messagesJson()
+
+    @JavascriptInterface
+    fun deleteCall(number: String, time: Double): Boolean = phoneData.deleteCall(number, time.toLong())
+
+    @JavascriptInterface
+    fun addContact(name: String, number: String): Boolean = phoneData.addContact(name, number)
+
+    @JavascriptInterface
+    fun getPhoneDataSources(): String = phoneData.sourcesJson()
+
+    @JavascriptInterface
+    fun dialNumber(number: String): Boolean {
+        var ok = false
+        val done = java.util.concurrent.CountDownLatch(1)
+        activity.runOnUiThread { ok = phoneData.dial(number); done.countDown() }
+        done.await(2, java.util.concurrent.TimeUnit.SECONDS)
+        return ok
+    }
+
+    // De vier volumes van de radio zoals laatst in het logboek gezien: {"MASTER":12,"BLUETOOTH":19,...}
+    @JavascriptInterface
+    fun getRadioVolumes(): String = (activity as? MainActivity)?.signals?.radioVolumesJson() ?: "{}"
+
+    // De volumepagina van de radio zelf (Jancar) om een volume aan te passen; false = niet op deze radio
+    @JavascriptInterface
+    fun openRadioVolumeSettings(): Boolean {
+        val intent = Intent().setComponent(ComponentName("com.jancar.audiosettings", "com.jancar.audiosettings.ui.activity.VolumeActivity"))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        return try { activity.runOnUiThread { activity.startActivity(intent) }; activity.packageManager.resolveActivity(intent, 0) != null }
+        catch (_: Exception) { false }
+    }
+
+    // --- Klank en bronnen (AudioFx.kt) ---
+    private val audioFx by lazy { AudioFx(activity) }
+
+    // Zes waarden in dB als JSON-array: sub, bas, laag-midden, midden, hoog-midden, hoog
+    @JavascriptInterface
+    fun setAudioEq(json: String): Boolean = try {
+        val a = org.json.JSONArray(json)
+        audioFx.apply(DoubleArray(6) { if (it < a.length()) a.optDouble(it, 0.0) else 0.0 })
+    } catch (_: Exception) { false }
+
+    @JavascriptInterface
+    fun getAudioFxState(): String = audioFx.stateJson()
+
+    @JavascriptInterface
+    fun getAudioSources(): String = audioFx.sourcesJson()
+
+    // De geluidsapp van de radio (balans/fader, eigen equalizer)
+    @JavascriptInterface
+    fun openRadioSoundSettings(): Boolean {
+        val intent = audioFx.radioSoundIntent() ?: return false
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        return try { activity.runOnUiThread { activity.startActivity(intent) }; true } catch (_: Exception) { false }
+    }
+
+    @JavascriptInterface
+    fun hasRadioVolumeSettings(): Boolean = activity.packageManager.resolveActivity(
+        Intent().setComponent(ComponentName("com.jancar.audiosettings", "com.jancar.audiosettings.ui.activity.VolumeActivity")), 0) != null
+
+    // Meestervolume van de radio (0-40) als dat bekend is (logboek), anders -1
+    @JavascriptInterface
+    fun getMasterVolume(): Int = (activity as? MainActivity)?.signals?.masterVolume ?: -1
+
+    @JavascriptInterface
+    fun stepMasterVolume(delta: Int) { (activity as? MainActivity)?.let { a -> a.runOnUiThread { a.signals.stepMaster(delta) } } }
+
+    @JavascriptInterface
+    fun setMasterVolume(value: Int) { (activity as? MainActivity)?.let { a -> a.runOnUiThread { a.signals.setMaster(value) } } }
 
     // Achteruit zoals de launcher hem nu ziet (bij het opnieuw laden van de webapp)
     @JavascriptInterface

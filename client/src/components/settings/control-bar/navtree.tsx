@@ -3,7 +3,7 @@ import React from 'react';
 import { useUIStore } from '../../../store/uiStore';
 import { getEffectiveTheme } from '../../../settings';
 import { useT } from '../../../i18n';
-import { Car, Monitor, Map, ShieldCheck, Wrench, Info, Wifi, Bluetooth, LayoutGrid, SlidersHorizontal } from 'lucide-react';
+import { Car, Monitor, Map, ShieldCheck, Wrench, Info, Wifi, Bluetooth, LayoutGrid, SlidersHorizontal, KeyRound } from 'lucide-react';
 import './_navtree.scss';
 
 const NavTree: React.FC = () => {
@@ -26,6 +26,8 @@ const NavTree: React.FC = () => {
     { id: 'Safety', icon: <ShieldCheck />, label: 'Safety' },
     { id: 'Maintenance', icon: <Wrench />, label: 'Maintenance' },
     { id: 'Apps', icon: <LayoutGrid />, label: 'Apps' },
+    // Rechten: alle rechten van PandaOS, het startscherm, toetsenbord en paneel
+    { id: 'Permissions', icon: <KeyRound />, label: 'Permissions' },
     { id: 'Software', icon: <Info />, label: 'Software' },
     { id: 'Wi-Fi', icon: <Wifi />, label: 'Wi-Fi' },
     { id: 'Bluetooth', icon: <Bluetooth />, label: 'Bluetooth' },

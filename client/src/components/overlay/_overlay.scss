@@ -1,0 +1,13 @@
+// Overlay boven andere apps (OverlayApp.tsx): pagina zelf doorzichtig
+html.pandaos-overlay,
+html.pandaos-overlay body,
+html.pandaos-overlay #root {
+  background: transparent !important;
+  overflow: hidden;
+}
+
+// Volumebalk boven andere apps: de VolumeBar vult het venster (met 8 px rand voor de schaduw)
+.overlay-volume {
+  position: fixed;
+  inset: 8px;
+}

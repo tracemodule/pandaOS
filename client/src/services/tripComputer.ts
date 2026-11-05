@@ -3,12 +3,21 @@
 // zonder snelheid, dan blijven de tellers vrijwel stil.
 import { useUIStore } from '../store/uiStore';
 import { updateSpeedLimit } from './speedLimit';
+import { recordSample, restoreDrive, tickDriveLog } from './driveLog';
+import { updateSpeedCameras } from './speedCameras';
 
 const MIN_MOVING_KMH = 3; // langzamer telt als stilstaan (GPS schommelt ook als je stilstaat)
 const MAX_ACCURACY_M = 50; // onnauwkeurige metingen overslaan
 const MAX_GAP_S = 30; // na een lange onderbreking (tunnel, slaapstand) geen sprong in afstand
 
+const START_KMH = 7; // vanaf hier (twee keer achter elkaar) telt het als rijden
+const START_ACCURACY_M = 20; // rijden alleen starten bij een goede GPS-fix
+
 let watchId: number | null = null;
+let prevSpeedMs: number | null = null; // vorige gemeten snelheid (hard optrekken/remmen)
+let moving = false;
+let startCount = 0;
+let stopCount = 0;
 let last: { lat: number; lon: number; time: number } | null = null;
 
 // Afstand in meter tussen twee punten (haversine)
@@ -45,19 +54,43 @@ const handlePosition = (pos: GeolocationPosition) => {
   // Snelheid van de GPS zelf als die er is, anders berekend uit de verplaatsing
   const speedKmh = (speed ?? meters / seconds) * 3.6;
 
-  // Zet ook de versnelling: D bij rijden, P bij stilstand (R komt van het achteruit-signaal)
-  useUIStore.getState().setGpsSpeed(speedKmh >= MIN_MOVING_KMH ? Math.round(speedKmh) : 0);
-  if (speedKmh >= MIN_MOVING_KMH) {
+  // Stilstaan/rijden met speling: GPS schommelt bij stilstand soms tot ~5 km/h. Pas rijden als twee metingen achter
+  // elkaar boven START_KMH liggen (met een goede fix), pas stilstaan als twee metingen onder MIN_MOVING_KMH liggen.
+  if (!moving) {
+    const candidate = speedKmh >= START_KMH && accuracy <= START_ACCURACY_M;
+    startCount = candidate ? startCount + 1 : 0;
+    if (startCount >= 2) { moving = true; stopCount = 0; }
+  } else {
+    stopCount = speedKmh < MIN_MOVING_KMH ? stopCount + 1 : 0;
+    if (stopCount >= 2) { moving = false; startCount = 0; }
+  }
+
+  // Zet ook de versnelling: D bij rijden, P bij stilstand (R komt van het achteruit-signaal).
+  // Een dashboard wijst wettelijk altijd iets te hoog aan; met de correctie (Settings > Display) toont PandaOS
+  // hetzelfde als de teller van de auto.
+  const offset = useUIStore.getState().displaySettings?.speedometerOffset ?? 0;
+  useUIStore.getState().setGpsSpeed(moving ? Math.max(1, Math.round(speedKmh + offset)) : 0);
+  // Ritten: route en cijfers per rit (alleen met een redelijke fix)
+  recordSample(lat, lon, moving, speedKmh / 3.6, accuracy <= START_ACCURACY_M ? prevSpeedMs : null, seconds, moving ? meters : 0, now);
+  prevSpeedMs = accuracy <= START_ACCURACY_M ? speedKmh / 3.6 : null;
+
+  if (moving) {
     useUIStore.getState().addTripSample(meters, seconds, speedKmh);
     // Maximumsnelheid van de weg bijwerken (voor de snelheidswaarschuwing)
     // Rijrichting: van de GPS zelf, anders uit de verplaatsing (pas vanaf ~5 m, anders is het ruis)
     const course = heading !== null && Number.isFinite(heading) ? heading
       : meters >= 5 ? bearingBetween(previous.lat, previous.lon, lat, lon) : null;
     updateSpeedLimit(lat, lon, course);
+    updateSpeedCameras(lat, lon, course);
   }
 };
 
 export const startTripComputer = () => {
+  restoreDrive(); // rit van de vorige keer afsluiten (radio ging uit met de auto)
+  window.setInterval(tickDriveLog, 30_000);
+  // Testen/laptop: GPS-metingen nadoen (node tools/pandaos.mjs js "pandaTrips.feed(...)")
+  (window as any).pandaTrips = { feed: (lat: number, lon: number, speedMs: number, time: number, accuracy = 5) =>
+    handlePosition({ coords: { latitude: lat, longitude: lon, accuracy, speed: speedMs, heading: null }, timestamp: time } as any) };
   if (watchId !== null || !('geolocation' in navigator)) return;
   watchId = navigator.geolocation.watchPosition(handlePosition, (err) => console.warn('Ritcomputer GPS:', err.message), {
     enableHighAccuracy: true,

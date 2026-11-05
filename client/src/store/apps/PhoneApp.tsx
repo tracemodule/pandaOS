@@ -6,8 +6,9 @@ import React, { useEffect, useState } from 'react';
 import {
   Phone, PhoneIncoming, PhoneOutgoing, PhoneMissed, PhoneOff, Mic, MicOff, Grid3x3, Delete, X, Search
 } from 'lucide-react';
-import { useUIStore, type PhoneTab } from '../uiStore';
+import { useUIStore, type PhoneTab, type PhoneContact } from '../uiStore';
 import { getEffectiveTheme } from '../../settings';
+import { SwipeToDelete, ContactDetail, AddContactForm } from './PhoneParts';
 import { useT } from '../../i18n';
 import './_phone-app.scss';
 
@@ -106,10 +107,33 @@ const PhoneApp: React.FC = () => {
   const isDarkMode = useDarkMode();
   const [typedNumber, setTypedNumber] = useState('');
   const [isSearching, setIsSearching] = useState(false);
+  // Contacten: gegevens van een contact, of het formulier voor een nieuw contact
+  const [selectedContact, setSelectedContact] = useState<PhoneContact | null>(null);
+  const [addingContact, setAddingContact] = useState(false);
   const t = useT();
 
   // Zoeken stopt bij het wisselen van tab
   useEffect(() => setIsSearching(false), [phoneTab]);
+
+  // Op de radio: contacten en recente gesprekken uit Android (de telefoon deelt ze via Bluetooth). Bij het openen,
+  // na een nieuw recht en elke 30 s zolang Telefoon open is.
+  useEffect(() => {
+    const android = (window as any).PandaAndroid;
+    if (!isPhoneOpen || !android?.getPhoneContacts) return;
+    android.requestPhonePermissions?.();
+    const load = () => {
+      try {
+        const includeGoogle = !!useUIStore.getState().appSettings.contactsFromGoogle;
+        const contacts = JSON.parse((android.getPhoneContactsWithGoogle ? android.getPhoneContactsWithGoogle(includeGoogle) : android.getPhoneContacts()) || '[]');
+        const recents = JSON.parse(android.getPhoneRecents() || '[]');
+        useUIStore.setState({ phoneContacts: contacts, phoneRecents: recents });
+      } catch { /* geen gegevens */ }
+    };
+    load();
+    const timer = window.setInterval(load, 30000);
+    window.addEventListener('pandaos-permissions', load);
+    return () => { window.clearInterval(timer); window.removeEventListener('pandaos-permissions', load); };
+  }, [isPhoneOpen]);
 
   if (!isPhoneOpen) return null;
 
@@ -152,8 +176,13 @@ const PhoneApp: React.FC = () => {
               ) : (
                 <div className="tsl-list">
                   {phoneRecents.map((recent, i) => (
-                    // Tik op de regel = nummer in het toetsenblok; groene knop = meteen bellen
-                    <div key={i} className="tsl-list-row phone-row" onClick={() => setTypedNumber(recent.number)}>
+                    // Tik op de regel = nummer in het toetsenblok; groene knop = meteen bellen; naar links vegen = verwijderen
+                    <SwipeToDelete key={`${recent.number}-${recent.time}`} onClick={() => setTypedNumber(recent.number)}
+                      onDelete={() => {
+                        (window as any).PandaAndroid?.deleteCall?.(recent.number, recent.time);
+                        useUIStore.setState((st) => ({ phoneRecents: st.phoneRecents.filter((r) => !(r.number === recent.number && r.time === recent.time)) }));
+                      }}>
+                    <div className="tsl-list-row phone-row">
                       {recent.type === 'missed'
                         ? <PhoneMissed size={20} className="is-missed" />
                         : recent.type === 'outgoing' ? <PhoneOutgoing size={20} /> : <PhoneIncoming size={20} />}
@@ -162,16 +191,30 @@ const PhoneApp: React.FC = () => {
                         <small className="tsl-hint">{recent.number} · {formatRecentTime(recent.time)}</small>
                       </div>
                       <button className="tsl-btn is-small is-success" onClick={(e) => { e.stopPropagation(); dial(recent.number, recent.name); }} aria-label={t('Call')}>
-                        <Phone size={18} />
+                        <Phone size={18} color="#ffffff" />
                       </button>
                     </div>
+                    </SwipeToDelete>
                   ))}
                 </div>
               )
             )}
 
-            {listTab === 'Contacts' && (
+            {listTab === 'Contacts' && addingContact && (
+              <AddContactForm onDone={(saved) => {
+                setAddingContact(false);
+                if (saved) window.dispatchEvent(new Event('pandaos-permissions')); // lijst opnieuw inlezen
+              }} />
+            )}
+            {listTab === 'Contacts' && !addingContact && selectedContact && (
+              <ContactDetail contact={selectedContact} onBack={() => setSelectedContact(null)} />
+            )}
+            {listTab === 'Contacts' && !addingContact && !selectedContact && (
               <>
+                {(window as any).PandaAndroid?.addContact && (
+                  <button className="tsl-btn is-small" style={{ alignSelf: 'flex-start', marginBottom: 8 }}
+                    onClick={() => setAddingContact(true)}>+ {t('Add contact')}</button>
+                )}
                 <div className="phone-search">
                   <Search size={18} />
                   <input
@@ -185,14 +228,14 @@ const PhoneApp: React.FC = () => {
                 ) : (
                   <div className="tsl-list">
                     {visibleContacts.map((contact) => (
-                      <div key={contact.name} className="tsl-list-row phone-row" onClick={() => setTypedNumber(contact.numbers[0]?.number ?? '')}>
+                      <div key={contact.name} className="tsl-list-row phone-row" onClick={() => setSelectedContact(contact)}>
                         <div className="call-avatar">{initials(contact.name)}</div>
                         <div className="tsl-list-text">
                           <span className="tsl-field-text">{contact.name}</span>
                           <small className="tsl-hint">{contact.numbers.map((n) => `${t(n.label)} ${n.number}`).join(' · ')}</small>
                         </div>
                         <button className="tsl-btn is-small is-success" onClick={(e) => { e.stopPropagation(); dial(contact.numbers[0]?.number, contact.name); }} aria-label={t('Call')}>
-                          <Phone size={18} />
+                          <Phone size={18} color="#ffffff" />
                         </button>
                       </div>
                     ))}

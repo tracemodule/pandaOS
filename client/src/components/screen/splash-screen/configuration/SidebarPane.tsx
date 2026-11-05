@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, Suspense, useMemo } from 'react';
 import { Canvas, useThree, useFrame } from '@react-three/fiber';
-import { Fuel, DoorOpen } from 'lucide-react';
+import { Fuel, DoorOpen, Cctv } from 'lucide-react';
 import { useT } from '../../../../i18n';
 import { markCarReady } from '../../../../services/preload';
 import { useGLTF, PerspectiveCamera, Environment, ContactShadows, Center } from '@react-three/drei';
@@ -8,7 +8,8 @@ import { HDR_CITY, HDR_NIGHT } from './environmentFiles';
 import { registerCarCapture } from '../../../../services/carSnapshot';
 import * as THREE from 'three';
 import MusicBar from '../../../music/MusicBar';
-import { useUIStore, type WindowTint, type CarState, type DoorId, DOOR_LABELS } from '../../../../store/uiStore';
+import NavigateCard from '../../../navigation/NavigateCard';
+import { useUIStore, type WindowTint, type CarState, type DoorId, type NeonSettings, DOOR_LABELS } from '../../../../store/uiStore';
 import { getEffectiveTheme } from '../../../../../src/settings';
 import { getVehicleModel, type VehicleModel, type TrimRegion } from './vehicleModels';
 import './_sidebar-pane.scss';
@@ -50,7 +51,7 @@ const FitCamera = ({ position, halfLength }: { position: [number, number, number
 };
 
 // --- CAR MODEL COMPONENT ---
-const CarModel = ({ model, carRot, brakeApplied, gear, carState, vehicle }: { model: VehicleModel; carRot: [number, number, number]; brakeApplied: boolean; gear: string; carState: CarState; vehicle: any }) => {
+const CarModel = ({ model, carRot, baseYaw, brakeApplied, gear, carState, vehicle, children }: { model: VehicleModel; carRot: [number, number, number]; baseYaw: number; brakeApplied: boolean; gear: string; carState: CarState; vehicle: any; children?: React.ReactNode }) => {
   const { url, scale, paintMaterial, rimParts, frontGlass: frontGlassParts, rearGlass: rearGlassParts, strayParts, lightGlass, tailLightGlass, reverseLightGlass, headlightTypes, materialColors, lights, doors, exhaust, trim } = model;
   const { scene } = useGLTF(url) as any;
   const [blink, setBlink] = useState(false);
@@ -280,34 +281,42 @@ const CarModel = ({ model, carRot, brakeApplied, gear, carState, vehicle }: { mo
 
   // --- LAMPGLAS: koplampglas licht op met de lichten aan (sterker bij grootlicht), achterlichtglas rood (fel bij remmen) ---
   // De lampjes zelf zijn in dit model klein; zo is van een afstand goed te zien dat de lichten aan zijn.
+  // toneMapped uit: de kleurcorrectie van de weergave maakt fel rood anders oranje
   const tailGlass = useMemo(() => new THREE.MeshPhysicalMaterial({
-    color: '#3a0000', metalness: 0, roughness: 0.1, transparent: true, opacity: 0.55,
+    color: '#3a0000', metalness: 0, roughness: 0.1, transparent: true, opacity: 0.55, toneMapped: false,
   }), []);
   const reverseGlass = useMemo(() => new THREE.MeshPhysicalMaterial({
-    color: '#3a0000', metalness: 0, roughness: 0.1, transparent: true, opacity: 0.55,
+    color: '#3a0000', metalness: 0, roughness: 0.1, transparent: true, opacity: 0.55, toneMapped: false,
   }), []);
+  // Lampbinnenkant van de achterlichten: in het model een gedeelde textuur (viilights) die daar oranje uitvalt;
+  // een achterlicht is rood
+  const tailLamp = useMemo(() => new THREE.MeshStandardMaterial({ color: '#7a0000', metalness: 0.1, roughness: 0.35, toneMapped: false }), []);
   useEffect(() => {
     scene.traverse((child: any) => {
       if (!child.isMesh) return;
       const parentName = (child.parent?.name || '').toLowerCase();
       if (reverseLightGlass?.test(parentName)) child.material = reverseGlass;
       else if (tailLightGlass?.test(parentName)) child.material = tailGlass;
+      else if (/taillight_[lr](_high)?$|tailgate_a_light_[lr]$/.test(parentName)
+        && /viilights/i.test(child.material?.name || '')) child.material = tailLamp;
     });
-  }, [scene, tailLightGlass, reverseLightGlass, tailGlass, reverseGlass]);
+  }, [scene, tailLightGlass, reverseLightGlass, tailGlass, reverseGlass, tailLamp]);
   useEffect(() => {
     const front = carState.highBeam ? 1.4 : carState.lights === 'low' ? 0.9 : carState.lights === 'parking' ? 0.35 : 0;
     clearLightGlass.emissive = new THREE.Color(front > 0 ? '#eaf2ff' : '#000000');
     clearLightGlass.emissiveIntensity = front;
     clearLightGlass.opacity = front > 0 ? 0.55 : 0.15;
     const rear = brakeApplied ? 2.2 : lightsOn ? 0.8 : 0;
-    tailGlass.emissive = new THREE.Color(rear > 0 ? '#ff0a0a' : '#000000');
+    tailGlass.emissive = new THREE.Color(rear > 0 ? '#ff0000' : '#000000');
     tailGlass.emissiveIntensity = rear;
+    tailLamp.emissive = new THREE.Color(rear > 0 ? '#ff0000' : '#000000');
+    tailLamp.emissiveIntensity = rear;
     // Achteruitrijlicht: wit bij R; anders gloeit dit deel mee met de achterlichten
     const reversing = gear === 'R';
     reverseGlass.color.set(reversing ? '#ffffff' : '#3a0000');
     reverseGlass.emissive = new THREE.Color(reversing ? '#ffffff' : rear > 0 ? '#ff0a0a' : '#000000');
     reverseGlass.emissiveIntensity = reversing ? 1.6 : rear;
-  }, [clearLightGlass, tailGlass, reverseGlass, carState.lights, carState.highBeam, brakeApplied, lightsOn, gear]);
+  }, [clearLightGlass, tailGlass, reverseGlass, tailLamp, carState.lights, carState.highBeam, brakeApplied, lightsOn, gear]);
 
   // --- KOPLAMPUITVOERING: halogeen of xenon (headlightTypes in vehicleModels.ts) ---
   useEffect(() => {
@@ -402,10 +411,12 @@ const CarModel = ({ model, carRot, brakeApplied, gear, carState, vehicle }: { mo
   return (
     // <Center top> plaatst de wielen exact op Y=0, ongeacht de interne afmetingen van het .glb bestand!
     // De rotatie zit op een groep buiten <Center>, zodat de auto om zijn eigen midden draait (ook als je hem sleept).
-    <group rotation={carRot}>
+    // car-root + baseYaw: de momentopname voor Software draait de auto even terug naar de standaardstand
+    <group name="car-root" rotation={carRot} userData={{ baseYaw }}>
       <Center top>
         <primitive object={scene} scale={scale} />
       </Center>
+      {children}
     </group>
   );
 };
@@ -418,14 +429,234 @@ const SnapshotBridge: React.FC = () => {
       // Zonder de schaduw op de vloer (die wordt anders een lichte rechthoek in de afbeelding)
       const shadows = scene.getObjectByName('contact-shadows');
       if (shadows) shadows.visible = false;
+      // Altijd vanuit dezelfde hoek, ook als je de auto zelf hebt rondgedraaid (één beeld; daarna terug)
+      const root = scene.getObjectByName('car-root');
+      const yaw = root?.rotation.y;
+      if (root && typeof root.userData.baseYaw === 'number') root.rotation.y = root.userData.baseYaw;
       gl.render(scene, camera);
       const png = gl.domElement.toDataURL('image/png');
+      if (root && yaw !== undefined) root.rotation.y = yaw;
       if (shadows) shadows.visible = true;
+      gl.render(scene, camera);
       return png;
     });
     return () => registerCarCapture(null);
   }, [gl, scene, camera]);
   return null;
+};
+
+// Toybox > Neon: gloed op de vloer langs de gekozen kanten van de auto (draait mee met de auto).
+// Gloed-textuur: fel in het midden van de strook, zacht naar buiten. Additief, dus geen zwarte randen.
+const NEON_HALF_LENGTH = 2.0; // halve lengte van de Golf (scene-eenheden, na schaal), iets binnen de bumpers
+const NEON_HALF_WIDTH = 0.95;
+const NeonUnderglow: React.FC<{ neon: NeonSettings }> = ({ neon }) => {
+  const texture = useMemo(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 4; canvas.height = 128;
+    const c = canvas.getContext('2d')!;
+    const g = c.createLinearGradient(0, 0, 0, 128);
+    g.addColorStop(0, 'rgba(255,255,255,0)');
+    g.addColorStop(0.45, 'rgba(255,255,255,0.9)');
+    g.addColorStop(0.5, 'rgba(255,255,255,1)');
+    g.addColorStop(0.55, 'rgba(255,255,255,0.9)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = g; c.fillRect(0, 0, 4, 128);
+    return new THREE.CanvasTexture(canvas);
+  }, []);
+  const material = useMemo(() => new THREE.MeshBasicMaterial({
+    map: texture, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false,
+  }), [texture]);
+  useEffect(() => { material.color.set(neon.color); material.opacity = 1; }, [material, neon.color]);
+  useFrame(({ clock }) => {
+    const t = clock.getElapsedTime();
+    if (neon.effect === 'pulse') material.opacity = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(t * 3));
+    else if (neon.effect === 'rainbow') material.color.setHSL((t * 0.15) % 1, 1, 0.55);
+  });
+  const width = 0.9; // breedte van de gloed
+  const strips: { key: string; pos: [number, number, number]; size: [number, number]; rotZ: number }[] = [];
+  // Lengte van de auto langs Z, breedte langs X. Elke strook: [lengte, gloedbreedte], de gloed loopt dwars;
+  // stroken langs de zijkant een kwartslag gedraaid zodat ze in de lengte van de auto liggen.
+  if (neon.sides.left) strips.push({ key: 'l', pos: [NEON_HALF_WIDTH, 0.01, 0], size: [NEON_HALF_LENGTH * 2, width], rotZ: Math.PI / 2 });
+  if (neon.sides.right) strips.push({ key: 'r', pos: [-NEON_HALF_WIDTH, 0.01, 0], size: [NEON_HALF_LENGTH * 2, width], rotZ: Math.PI / 2 });
+  if (neon.sides.front) strips.push({ key: 'f', pos: [0, 0.01, NEON_HALF_LENGTH], size: [NEON_HALF_WIDTH * 2, width], rotZ: 0 });
+  if (neon.sides.rear) strips.push({ key: 'b', pos: [0, 0.01, -NEON_HALF_LENGTH], size: [NEON_HALF_WIDTH * 2, width], rotZ: 0 });
+  return (
+    <group name="neon">
+      {strips.map((st) => (
+        <mesh key={st.key} position={st.pos} rotation={[-Math.PI / 2, 0, st.rotZ]} material={material}>
+          <planeGeometry args={st.size} />
+        </mesh>
+      ))}
+    </group>
+  );
+};
+
+// Toybox > Minigun: het model (public/models/minigun.glb) op het midden van het dak. Het model heeft een eigen
+// maat; het wordt geschaald naar MINIGUN_LENGTH en met de lange kant in de lengte van de auto gelegd.
+const MINIGUN_LENGTH = 1.3; // scene-eenheden (de auto is ~5 lang)
+const ROOF_HEIGHT = 1.7; // bovenkant van het dak van de Golf (na schaal)
+const Minigun: React.FC = () => {
+  const { scene } = useGLTF('/models/minigun.glb') as any;
+  const object = useMemo(() => {
+    const clone = scene.clone(true);
+    const box = new THREE.Box3().setFromObject(clone);
+    const size = box.getSize(new THREE.Vector3());
+    const scale = MINIGUN_LENGTH / Math.max(size.x, size.y, size.z);
+    const center = box.getCenter(new THREE.Vector3());
+    // Onderkant op het dak, midden boven het midden van de auto
+    clone.position.set(-center.x * scale, -box.min.y * scale, -center.z * scale);
+    clone.scale.setScalar(scale);
+    // Kleur: lopen en ronde delen staalgrijs, de rest donker legergroen (het model heeft één kale grijze lak)
+    const steel = new THREE.MeshStandardMaterial({ color: '#3b3f45', metalness: 0.9, roughness: 0.35 });
+    const body = new THREE.MeshStandardMaterial({ color: '#3d4a2c', metalness: 0.4, roughness: 0.6 });
+    const dark = new THREE.MeshStandardMaterial({ color: '#1c1d1f', metalness: 0.6, roughness: 0.5 });
+    clone.traverse((o: any) => {
+      if (!o.isMesh) return;
+      const name = `${o.name} ${o.parent?.name ?? ''}`.toLowerCase();
+      o.material = /cylinder|tube|barrel/.test(name) ? steel : /plane/.test(name) ? dark : body;
+      o.castShadow = true;
+    });
+    const group = new THREE.Group();
+    group.name = 'minigun-root';
+    group.add(clone);
+    return group;
+  }, [scene]);
+  // Lange kant van het model ligt langs X; de auto ligt langs Z. Loop naar de voorkant, midden van het dak.
+  return <primitive object={object} position={[0, ROOF_HEIGHT, -0.25]} rotation={[0, Math.PI / 2, 0]} />;
+};
+
+// Kenteken (Instellingen > Voertuig): geel Nederlands kenteken voor en achter op de 3D-auto.
+// Getekend op een canvas (EU-strook met NL, zwarte rand, zwarte tekens); 52 × 11 cm, met de schaal van het model.
+const PLATE_W = 0.52 * 1.2;
+const PLATE_H = 0.11 * 1.2;
+const makePlateTexture = (text: string) => {
+  const w = 1040; const h = 220;
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const c = canvas.getContext('2d')!;
+  const r = 18;
+  const rounded = (x: number, y: number, ww: number, hh: number, rr: number) => {
+    c.beginPath();
+    c.moveTo(x + rr, y); c.lineTo(x + ww - rr, y); c.quadraticCurveTo(x + ww, y, x + ww, y + rr);
+    c.lineTo(x + ww, y + hh - rr); c.quadraticCurveTo(x + ww, y + hh, x + ww - rr, y + hh);
+    c.lineTo(x + rr, y + hh); c.quadraticCurveTo(x, y + hh, x, y + hh - rr);
+    c.lineTo(x, y + rr); c.quadraticCurveTo(x, y, x + rr, y); c.closePath();
+  };
+  c.fillStyle = '#111'; rounded(0, 0, w, h, r); c.fill();
+  c.fillStyle = '#f7c600'; rounded(8, 8, w - 16, h - 16, r - 6); c.fill();
+  // EU-strook met sterrenkring en NL
+  const strip = 112;
+  c.save(); rounded(8, 8, w - 16, h - 16, r - 6); c.clip();
+  c.fillStyle = '#003399'; c.fillRect(8, 8, strip, h - 16); c.restore();
+  c.fillStyle = '#ffcc00';
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    c.beginPath(); c.arc(8 + strip / 2 + Math.cos(a) * 30, 72 + Math.sin(a) * 30, 5, 0, Math.PI * 2); c.fill();
+  }
+  c.fillStyle = '#ffffff'; c.font = 'bold 56px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.fillText('NL', 8 + strip / 2, 165);
+  // Tekens: zo groot mogelijk binnen het gele deel
+  c.fillStyle = '#111';
+  let size = 170;
+  c.font = `bold ${size}px "Roboto Condensed", "Arial Narrow", sans-serif`;
+  const room = w - strip - 70;
+  while (c.measureText(text).width > room && size > 60) { size -= 6; c.font = `bold ${size}px "Roboto Condensed", "Arial Narrow", sans-serif`; }
+  c.fillText(text, strip + 8 + (w - strip - 16) / 2, h / 2 + 6);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.anisotropy = 4;
+  return texture;
+};
+// Plek van de platen uit het model zelf: de auto-groep even recht zetten, de omvang meten, de voorkant vinden aan
+// de koplampen (lowbeam) en dan met een straal van buitenaf het echte oppervlak van bumper en achterklep zoeken.
+// Alleen zichtbare delen van de auto tellen (het model heeft verborgen varianten van bumpers en koplampen).
+const REAR_PLATE_SHIFT_X = 0.03;
+type PlateSpots = { front: [number, number, number]; rear: [number, number, number]; frontDir: number; frontTilt: number };
+const isVisible = (o: THREE.Object3D, stop: THREE.Object3D) => {
+  for (let p: THREE.Object3D | null = o; p && p !== stop; p = p.parent) if (!p.visible) return false;
+  return true;
+};
+const findPlateSpots = (root: THREE.Object3D): PlateSpots | null => {
+  const car = root.getObjectByName('car-root');
+  if (!car) return null;
+  const saved = car.rotation.clone();
+  car.rotation.set(0, 0, 0);
+  car.updateMatrixWorld(true);
+  const inverse = car.matrixWorld.clone().invert();
+  const box = new THREE.Box3();
+  const meshes: THREE.Mesh[] = [];
+  let lampZ = 0; let lampCount = 0;
+  car.traverse((o: any) => {
+    if (!o.isMesh || !isVisible(o, car)) return;
+    const owner = o.parent?.name || '';
+    if (owner === 'license-plates' || owner === 'neon' || owner === 'minigun-root') return;
+    if (o.geometry && !o.geometry.boundingBox) o.geometry.computeBoundingBox();
+    const b = o.geometry?.boundingBox?.clone().applyMatrix4(o.matrixWorld).applyMatrix4(inverse);
+    if (!b) return;
+    meshes.push(o);
+    box.union(b);
+    if (/lowbeam/.test((o.material?.name || '').toLowerCase())) { lampZ += (b.min.z + b.max.z) / 2; lampCount++; }
+  });
+  if (box.isEmpty()) { car.rotation.copy(saved); car.updateMatrixWorld(true); return null; }
+  const frontDir = lampCount && lampZ / lampCount < (box.min.z + box.max.z) / 2 ? -1 : 1;
+  const height = box.max.y - box.min.y;
+  // Straal van buiten de auto naar binnen, midden over de breedte, op de hoogte van het kenteken
+  // Geeft de plek en de schuinte (om de X-as) van het oppervlak, zodat de plaat plat tegen de bumper ligt
+  const hit = (y: number, dir: number, fallbackZ: number): { pos: [number, number, number]; tilt: number } => {
+    const startLocal = new THREE.Vector3(0, box.min.y + y, dir > 0 ? box.max.z + 1 : box.min.z - 1);
+    const start = startLocal.clone().applyMatrix4(car.matrixWorld);
+    const toward = new THREE.Vector3(0, 0, -dir).transformDirection(car.matrixWorld);
+    const ray = new THREE.Raycaster(start, toward);
+    const first = ray.intersectObjects(meshes, false)[0];
+    const z = first ? first.point.clone().applyMatrix4(inverse).z : fallbackZ;
+    let tilt = 0;
+    if (first?.face) {
+      const n = first.face.normal.clone().transformDirection(first.object.matrixWorld).transformDirection(inverse);
+      // Hoek van het oppervlak t.o.v. verticaal; begrensd, zodat een rare driehoek de plaat niet plat legt
+      tilt = Math.max(-0.5, Math.min(0.5, Math.atan2(n.y, Math.abs(n.z)))) * (dir > 0 ? -1 : 1);
+    }
+    return { pos: [0, box.min.y + y, z + dir * 0.015], tilt }; // net voor het oppervlak
+  };
+  // Voor: op de gespoten bumper direct onder de grill (boven het zwarte deel); achter: laag, net boven de bumper
+  const front = hit(height * 0.33, frontDir, frontDir > 0 ? box.max.z : box.min.z);
+  const rear = hit(height * 0.33, -frontDir, frontDir > 0 ? box.min.z : box.max.z);
+  car.rotation.copy(saved);
+  car.updateMatrixWorld(true);
+  // Achter: iets verder naar buiten en iets opzij (in het model staat het midden van de achterklep niet op X = 0)
+  const rearPos: [number, number, number] = [REAR_PLATE_SHIFT_X, rear.pos[1], rear.pos[2] - frontDir * 0.012];
+  return { frontDir, front: front.pos, rear: rearPos, frontTilt: front.tilt };
+};
+
+const LicensePlates: React.FC<{ text: string }> = ({ text }) => {
+  const { scene } = useThree();
+  const [spots, setSpots] = useState<PlateSpots | null>(null);
+  // Na het laden van de auto meten (model komt via Suspense; een paar keer proberen)
+  useEffect(() => {
+    let tries = 0;
+    const timer = window.setInterval(() => {
+      const found = findPlateSpots(scene);
+      if (found || ++tries > 20) { setSpots(found); window.clearInterval(timer); }
+    }, 300);
+    return () => window.clearInterval(timer);
+  }, [scene]);
+  const materials = useMemo(() => {
+    const face = new THREE.MeshStandardMaterial({ map: makePlateTexture(text), roughness: 0.45, metalness: 0.1 });
+    const edge = new THREE.MeshStandardMaterial({ color: '#1a1a1a', roughness: 0.6 });
+    // Dun plaatje (box): voorkant = kenteken, achterkant en randen zwart
+    return [edge, edge, edge, edge, face, edge];
+  }, [text]);
+  useEffect(() => () => { materials[4].map?.dispose(); materials.forEach((m) => m.dispose()); }, [materials]);
+  if (!spots) return null;
+  return (
+    <group name="license-plates">
+      <mesh position={spots.front} rotation={[spots.frontTilt, spots.frontDir > 0 ? 0 : Math.PI, 0, 'YXZ']} material={materials}>
+        <boxGeometry args={[PLATE_W, PLATE_H, 0.012]} />
+      </mesh>
+      {/* Achter recht op (de achterklep is daar vlak); alleen voor volgt de schuinte van de bumper */}
+      <mesh position={spots.rear} rotation={[0, spots.frontDir > 0 ? Math.PI : 0, 0]} material={materials}>
+        <boxGeometry args={[PLATE_W, PLATE_H, 0.012]} />
+      </mesh>
+    </group>
+  );
 };
 
 // --- HOOFD COMPONENT ---
@@ -466,10 +697,13 @@ const RainbowFloor: React.FC = () => {
 const SidebarPane: React.FC<{ widthFraction?: number }> = ({ widthFraction = 1 }) => {
   const { 
     btDevices, btConnectedAddress, gear, speed, brakeApplied, screenMode, vehicleLightsOn, displaySettings, vehicleSettings,
-    carState, safetySettings, speedLimit
+    carState, safetySettings, speedLimit, toyCar
   } = useUIStore();
+  // Toybox > Voertuig: zolang het speeltje aan staat, toont het model de speelstand in plaats van de auto
+  const shownCarState: CarState = toyCar ? { ...carState, lights: toyCar.lights, highBeam: toyCar.highBeam, blinker: toyCar.blinker, doors: toyCar.doors } : carState;
   
   const isBluetoothConnected = btConnectedAddress !== null || btDevices.some(device => device.connected);
+  const currentTrackForBar = useUIStore((st) => st.currentTrack);
   
   const [isDarkMode, setIsDarkMode] = useState(getEffectiveTheme(screenMode) === 'dark');
 
@@ -498,6 +732,23 @@ const SidebarPane: React.FC<{ widthFraction?: number }> = ({ widthFraction = 1 }
       // Geen geluid mogelijk (bijv. nog geen interactie met de pagina): alleen de rode snelheid
     }
   }, [isSpeeding, safetySettings.chime]);
+  // Flitspaal: een korte dubbele piep bij de eerste waarschuwing (Settings > Safety)
+  const cameraAhead = useUIStore((st) => st.cameraAhead);
+  useEffect(() => {
+    if (!cameraAhead?.chime) return;
+    try {
+      const audio = new AudioContext();
+      [0, 0.25].forEach((at) => {
+        const tone = audio.createOscillator(); const gain = audio.createGain();
+        tone.frequency.value = 1180;
+        gain.gain.setValueAtTime(0.18, audio.currentTime + at);
+        gain.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + at + 0.18);
+        tone.connect(gain).connect(audio.destination);
+        tone.start(audio.currentTime + at); tone.stop(audio.currentTime + at + 0.18);
+      });
+      window.setTimeout(() => audio.close(), 800);
+    } catch { /* geen geluid */ }
+  }, [cameraAhead?.chime]);
   const isBigScreen = screenMode === 'visualizer';
 
   // --- AUTO DRAAIEN (alleen in Park) ---
@@ -639,6 +890,17 @@ const SidebarPane: React.FC<{ widthFraction?: number }> = ({ widthFraction = 1 }
           </div>
         )}
 
+        {/* Flitspaal vóór de auto (OpenStreetMap): afstand en de snelheid van de paal */}
+        {isDriving && cameraAhead && (
+          <div style={{ position: 'absolute', top: '185px', left: 0, right: 0, display: 'flex', justifyContent: 'center', zIndex: 12, pointerEvents: 'none' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 14px', borderRadius: '20px',
+              background: 'rgba(237, 78, 59, 0.14)', color: '#ed4e3b', fontWeight: 600, fontSize: 'calc(14px * var(--text-scale, 1))' }}>
+              <Cctv size={18} />
+              {t(cameraAhead.kind === 'section' ? 'Section control' : 'Speed camera')} · {cameraAhead.distance} m{cameraAhead.maxspeed ? ` · ${cameraAhead.maxspeed} km/h` : ''}
+            </div>
+          </div>
+        )}
+
         {/* Deur(en) open: rode aanduiding in het midden, onder de snelheid */}
         {openDoors.length > 0 && (
           <div style={{ position: 'absolute', top: isDriving ? '185px' : '70px', left: 0, right: 0, display: 'flex', justifyContent: 'center', zIndex: 11, pointerEvents: 'none' }}>
@@ -685,12 +947,16 @@ const SidebarPane: React.FC<{ widthFraction?: number }> = ({ widthFraction = 1 }
               <CarModel 
                 key={vehicleModel.id} // ander model = nieuwe component (schone materialen en state)
                 model={vehicleModel}
-                carRot={[carRotation[0], carRotation[1] + userYaw, carRotation[2]]}
-                brakeApplied={brakeApplied}
-                gear={gear}
-                carState={carState}
+                carRot={[carRotation[0], carRotation[1] + userYaw, carRotation[2]]} baseYaw={carRotation[1]}
+                brakeApplied={toyCar ? toyCar.brake : brakeApplied}
+                gear={toyCar ? (toyCar.reverse ? 'R' : 'P') : gear}
+                carState={shownCarState}
                 vehicle={vehicleSettings}
-              />
+              >
+                {vehicleSettings.neon?.on && <NeonUnderglow neon={vehicleSettings.neon} />}
+                {vehicleSettings.minigun && <Suspense fallback={null}><Minigun /></Suspense>}
+                {!vehicleSettings.licensePlateHidden && vehicleSettings.licensePlate?.trim() && <LicensePlates text={vehicleSettings.licensePlate.trim()} />}
+              </CarModel>
 
               {vehicleSettings.rainbowFloor && <RainbowFloor />}
 
@@ -711,7 +977,18 @@ const SidebarPane: React.FC<{ widthFraction?: number }> = ({ widthFraction = 1 }
       </div>
 
       {/* Music Bar: zwevende kaart over de auto (absoluut), zodat het 3D-canvas niet kleiner wordt en de auto niet verspringt */}
-      {isBluetoothConnected && (
+      {/* Muziekbalk. Auto over het hele scherm (Figma Mockups > Car status): onderaan in het midden, naast het kaartje
+          Navigeren. Met een pagina rechts open: ingeklapt linksonder bij de auto. Ook zonder Bluetooth-verbinding die
+          PandaOS ziet (Bluetooth-module van de radio): zodra er iets speelt. */}
+      {widthFraction >= 0.99 ? (
+        <div className="sidebar-home-cards" style={{ position: 'absolute', left: 0, right: 0, bottom: '15px', zIndex: 10,
+          display: 'flex', justifyContent: 'center', alignItems: 'stretch', gap: '12px', pointerEvents: 'none' }}>
+          {(isBluetoothConnected || !!currentTrackForBar) && (
+            <div style={{ width: 400, pointerEvents: 'auto' }}><MusicBar /></div>
+          )}
+          <div style={{ width: 260, pointerEvents: 'auto' }}><NavigateCard /></div>
+        </div>
+      ) : (isBluetoothConnected || !!currentTrackForBar) && (
         <div className="sidebar-music-container" style={{ position: 'absolute', left: '15px', right: '15px', bottom: '15px', zIndex: 10 }}>
           <MusicBar />
         </div>

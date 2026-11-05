@@ -115,17 +115,63 @@ $color-gray-800: #1f2937;
   }
 
   /* --- Dark Mode Variant --- */
+  // Donker: zelfde grijs als de andere PandaOS-panelen
   &.dark-mode {
-    background-color: $color-gray-800;
+    background-color: #414141;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
     
     .music-info .track-name { color: $color-white; }
     .music-info .artist-name { color: $color-gray-300; }
-    .music-controls { 
-      background-color: $color-black;
+    .music-controls {
+      background-color: #2b2b2b;
       button { color: $color-white; }
     }
     .progress-bar-container { background-color: $color-gray-600; }
     .progress-fill { background-color: $color-white; }
     .progress-fill::after { background-color: $color-white; }
+  }
+}
+// Kaartje Navigeren naast de muziekbalk (NavigateCard.tsx), zelfde uitstraling als de muziekbalk
+.tsl-navigate-card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  border-radius: 8px;
+  overflow: hidden;
+  background-color: $color-white;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  color: $color-black;
+
+  button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: none;
+    background: none;
+    color: inherit;
+    cursor: pointer;
+    font-size: calc(13px * var(--text-scale, 1));
+  }
+
+  // Zelfde verdeling als de muziekbalk: bovenste deel 72 px + 2 px (voortgangslijn), knoppenrij 48 px
+  .navigate-search {
+    flex: 0 0 74px;
+    padding: 0 16px;
+    color: $color-gray-500;
+  }
+
+  .navigate-places {
+    flex: 0 0 48px;
+    display: flex;
+    background-color: #f3f4f6;
+    button { flex: 1; justify-content: center; padding: 0; font-weight: 500; }
+  }
+
+  &.dark-mode {
+    background-color: #414141;
+    color: $color-white;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    .navigate-search { color: $color-gray-300; }
+    .navigate-places { background-color: #2b2b2b; }
   }
 }

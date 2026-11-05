@@ -37,6 +37,7 @@ class MainActivity : Activity() {
     lateinit var links: CanLinks // CAN-koppelingen: regel/broadcast van de radio -> functie in PandaOS
     private lateinit var updates: UpdateInstaller // software-updates uit GitHub Releases
     lateinit var signals: CarSignals // achteruit en volume van de radio zelf
+    lateinit var overlay: PandaOverlay // menu en volumecontainer van PandaOS boven andere apps
     private var pendingCameraRequest: PermissionRequest? = null // wacht op de Android-cameratoestemming
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -45,6 +46,19 @@ class MainActivity : Activity() {
         DiagLog.init(this) // diagnose: crashes en gebeurtenissen van de launcher
         if (webViewTooOld()) return // uitleg op het scherm in plaats van een zwart scherm
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // Android 11+: PandaOS altijd over het hele scherm, ook als de systeembalken verschijnen (bijv. als een app half
+        // naast PandaOS de focus heeft). De balken liggen dan doorzichtig over PandaOS heen; PandaOS krimpt niet en
+        // de dock blijft onderaan. (Op de radio, Android 9, verandert hier niets.)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            window.setDecorFitsSystemWindows(false)
+            @Suppress("DEPRECATION")
+            window.statusBarColor = android.graphics.Color.TRANSPARENT
+            @Suppress("DEPRECATION")
+            window.navigationBarColor = android.graphics.Color.TRANSPARENT
+            window.attributes = window.attributes.also {
+                it.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+            }
+        }
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG) // chrome://inspect op de laptop
 
         val assetLoader = WebViewAssetLoader.Builder()
@@ -52,6 +66,10 @@ class MainActivity : Activity() {
             .build()
 
         media = MediaWatcher(this) { call -> callWeb(call) }
+        // Muziek van andere apps en de telefoon volgen vraagt de meldingen-toegang; met WRITE_SECURE_SETTINGS zet
+        // PandaOS die zelf aan (anders via Instellingen > Rechten)
+        if (!media.hasAccess() && checkSelfPermission(Manifest.permission.WRITE_SECURE_SETTINGS) == PackageManager.PERMISSION_GRANTED)
+            PermissionsCenter(this).enableNotificationAccess()
         radio = RadioConnectivity(this) { call -> callWeb(call) }.also { it.start() }
         links = CanLinks(this) { call -> callWeb(call) }
         can = CanMonitor(this) { source, text -> links.check(source, text) }
@@ -67,13 +85,16 @@ class MainActivity : Activity() {
         // Nieuwe of verdwenen melding: het PandaOS-paneel werkt zijn lijst bij
         MediaListenerService.onChange = { runOnUiThread { callWeb("notificationsChanged()") } }
 
+        val pandaBridge = PandaBridge(this, media, radio, can, updates)
+        val startUrl = BuildConfig.DEV_URL.ifEmpty { "https://${WebViewAssetLoader.DEFAULT_DOMAIN}/index.html" }
+        overlay = PandaOverlay(this, assetLoader, pandaBridge, startUrl)
         webView = WebView(this).apply {
             setBackgroundColor(0xFF000000.toInt())
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true // localStorage: instellingen en app-koppelingen
             settings.mediaPlaybackRequiresUserGesture = false // piep van de snelheidswaarschuwing
             settings.setGeolocationEnabled(true)
-            addJavascriptInterface(PandaBridge(this@MainActivity, media, radio, can, updates), "PandaAndroid")
+            addJavascriptInterface(pandaBridge, "PandaAndroid")
 
             webViewClient = object : WebViewClient() {
                 // Webapp vastgelopen of afgesloten door Android: vastleggen en opnieuw laden
@@ -85,6 +106,8 @@ class MainActivity : Activity() {
 
                 override fun onPageFinished(view: WebView, url: String) {
                     media.resend() // de webapp is (opnieuw) geladen: laten zien wat er speelt
+                    // Stand van vóór de start (licht, deuren ...) uit het logboek overnemen; even wachten tot de webapp luistert
+                    if (!url.contains("#overlay")) view.postDelayed({ links.replayLastState() }, 3000)
                 }
 
                 override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
@@ -131,7 +154,7 @@ class MainActivity : Activity() {
             requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), REQUEST_LOCATION)
         }
 
-        webView.loadUrl(BuildConfig.DEV_URL.ifEmpty { "https://${WebViewAssetLoader.DEFAULT_DOMAIN}/index.html" })
+        webView.loadUrl(startUrl)
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
@@ -142,6 +165,8 @@ class MainActivity : Activity() {
             callWeb("voiceInput(${org.json.JSONObject().put("state", if (granted) "ready" else "error").put("error", if (granted) "" else "permission")})")
             return
         }
+        // Rechten-pagina en Telefoon/Agenda/Berichten: opnieuw inlezen
+        if (requestCode == PermissionsCenter.REQUEST_CODE) { callWeb("permissionsChanged()"); return }
         if (requestCode == REQUEST_CAMERA) {
             val request = pendingCameraRequest ?: return
             pendingCameraRequest = null
@@ -158,11 +183,17 @@ class MainActivity : Activity() {
 
     // VOL+/VOL- regelen het PandaOS-volume (stap 1, popup 3 seconden) in plaats van het Android-volume.
     // Ingedrukt houden herhaalt de stap.
+    // Kent PandaOS het meestervolume van de radio (0-40, uit het logboek), dan laten we de knop gewoon door naar de
+    // radio, net als in CarPlay en andere apps; PandaOS toont daarna het nieuwe meestervolume.
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         val delta = when (event.keyCode) {
             KeyEvent.KEYCODE_VOLUME_UP -> 1
             KeyEvent.KEYCODE_VOLUME_DOWN -> -1
             else -> return super.dispatchKeyEvent(event)
+        }
+        if (::signals.isInitialized && signals.masterVolume >= 0) {
+            if (event.action == KeyEvent.ACTION_DOWN) callWeb("volumeKey()")
+            return super.dispatchKeyEvent(event)
         }
         if (event.action == KeyEvent.ACTION_DOWN) callWeb("stepVolume($delta)")
         return true
@@ -174,9 +205,11 @@ class MainActivity : Activity() {
         resumed = true
         if (!::media.isInitialized) { if (!webViewTooOld()) recreate(); return } // WebView inmiddels bijgewerkt
         media.start()
+        overlay.stop() // PandaOS vooraan: eigen menu en volume
     }
 
     override fun onDestroy() {
+        if (::overlay.isInitialized) overlay.stop() // geen achtergebleven overlay als Android PandaOS opnieuw opbouwt
         if (!::media.isInitialized) { super.onDestroy(); return }
         media.stop()
         radio.stop()
@@ -189,6 +222,8 @@ class MainActivity : Activity() {
     override fun onPause() {
         super.onPause()
         resumed = false
+        // Andere app vooraan: PandaOS-menu (veeg omlaag) en PandaOS-volumecontainer boven die app
+        if (::overlay.isInitialized) overlay.start()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -197,6 +232,9 @@ class MainActivity : Activity() {
             hideSystemBars() // na terugkeer uit een Android-app weer volledig scherm
             // Camera-app van de radio weer weg: achteruit voorbij (als we achteruit zelf zo afgeleid hadden)
             if (reverseFromOverlay) { reverseFromOverlay = false; signals.setReverse(false, "camera-app van de radio weg") }
+            // Op PandaOS getikt terwijl een app half naast PandaOS stond: Android zet die app achter PandaOS
+            // (ook als je de app met het kruisje van Android sloot: dan krijgt PandaOS de focus terug)
+            if (halfAppOpen) { halfAppOpen = false; halfControls.hide(); callWeb("halfAppClosed()") }
             return
         }
         // Focus kwijt terwijl PandaOS vooraan blijft (geen onPause): er schuift een venster over PandaOS heen.
@@ -204,9 +242,11 @@ class MainActivity : Activity() {
         //  1. het meldingenpaneel van de fabrikant, na een veeg vanaf de bovenrand → PandaOS-paneel openen
         //  2. de camera-app van de radio (com.jancar.hd2cam) bij achteruit, zonder aanraking → achteruit tonen
         // Alleen een veeg vanaf de bovenrand telt als paneel; anders opende het paneel bij het inschakelen van R.
-        if (SystemClock.uptimeMillis() < ignoreFocusLossUntil || !::signals.isInitialized) return
+        // App half naast PandaOS kreeg de focus: even later is hij getekend, dan het vlak weg en de knoppen erop
+        if (halfAppOpen) { window.decorView.postDelayed({ halfControls.reveal() }, 600); return }
+        if (SystemClock.uptimeMillis() < ignoreFocusLossUntil || !::signals.isInitialized || halfAppOpen) return
         window.decorView.postDelayed({
-            if (!resumed || hasWindowFocus() || SystemClock.uptimeMillis() < ignoreFocusLossUntil) return@postDelayed
+            if (!resumed || hasWindowFocus() || halfAppOpen || SystemClock.uptimeMillis() < ignoreFocusLossUntil) return@postDelayed
             val swipedFromTop = SystemClock.uptimeMillis() - lastTouchDownAt < 1500 &&
                 lastTouchDownY >= 0 && lastTouchDownY < resources.displayMetrics.density * 60
             when {
@@ -226,6 +266,31 @@ class MainActivity : Activity() {
         }, 400)
     }
     private var reverseFromOverlay = false
+    // Android-app half naast PandaOS (PandaBridge.launchAppHalf): focus kwijt is dan die app, niet de camera of het paneel
+    @Volatile var halfAppOpen = false
+    val halfControls by lazy { HalfAppControls(this) }
+
+    // Knop "sluiten" op de halve app: PandaOS weer vooraan, auto over het hele scherm
+    fun closeHalfApp() {
+        halfAppOpen = false
+        halfControls.hide()
+        callWeb("halfAppClosed()")
+        startActivity(android.content.Intent(this, MainActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+    }
+
+    // Knop "volledig scherm" op de halve app (of vanuit de webapp)
+    fun fullscreenHalfApp(packageName: String): Boolean {
+        val intent = packageManager.getLaunchIntentForPackage(packageName) ?: return false
+        intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+        halfAppOpen = false
+        halfControls.hide()
+        callWeb("halfAppClosed()")
+        // Volgende keer half openen: dan een nieuwe taak (deze taak blijft volledig scherm)
+        getSharedPreferences("pandaos_half", MODE_PRIVATE).edit().putString(packageName, "full").apply()
+        val bundle = android.app.ActivityOptions.makeBasic().toBundle().apply { putInt("android.activity.windowingMode", 1) }
+        try { startActivity(intent, bundle) } catch (_: Exception) { startActivity(intent) }
+        return true
+    }
 
     // Koppelingen gewijzigd: broadcasts van koppelingen ontvangen en (met koppelingen) op de achtergrond meelezen
     fun applyCanLinks() {
@@ -266,6 +331,16 @@ class MainActivity : Activity() {
     private fun callWeb(call: String) {
         if (!::webView.isInitialized) return // te oude WebView: geen webapp geladen
         webView.evaluateJavascript("window.PandaOS && window.PandaOS.$call", null)
+        if (::overlay.isInitialized && OVERLAY_CALLS.any { call.startsWith(it) }) overlay.callWeb(call)
+    }
+
+    // PandaOS weer naar voren, eventueel met een tabblad van Instellingen open (vanuit het menu boven een andere app)
+    fun bringToFront(settingsTab: String?) {
+        halfAppOpen = false
+        halfControls.hide()
+        overlay.stop()
+        startActivity(android.content.Intent(this, MainActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+        if (settingsTab != null) callWeb("openSettingsTab(${org.json.JSONObject.quote(settingsTab)})")
     }
 
     private fun hasLocationPermission() =
@@ -293,7 +368,15 @@ class MainActivity : Activity() {
     }
 
     private fun watchSystemBars() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            // Android 9 (radio): geen ruimte vrijhouden voor balken die verschijnen als een app half naast PandaOS
+            // de focus heeft; PandaOS blijft over het hele scherm en de dock op zijn plek
+            window.decorView.setOnApplyWindowInsetsListener { view, insets ->
+                @Suppress("DEPRECATION")
+                view.onApplyWindowInsets(insets.consumeSystemWindowInsets())
+            }
+            return
+        }
         window.decorView.setOnApplyWindowInsetsListener { view, insets ->
             if (pandaPanel && insets.isVisible(WindowInsets.Type.statusBars())) {
                 hideSystemBars()
@@ -301,7 +384,9 @@ class MainActivity : Activity() {
                 val recent = SystemClock.uptimeMillis() - lastTouchDownAt < 1500
                 if (recent && lastTouchDownY < resources.displayMetrics.density * 48) callWeb("openPanel()")
             }
-            view.onApplyWindowInsets(insets)
+            // Geen ruimte vrijhouden voor de balken: PandaOS vult altijd het hele scherm (de balken liggen er doorzichtig
+            // overheen als een app half naast PandaOS de focus heeft), zodat de dock niet verschuift
+            view.onApplyWindowInsets(WindowInsets.CONSUMED)
         }
     }
 
@@ -316,7 +401,12 @@ class MainActivity : Activity() {
             @Suppress("DEPRECATION")
             window.decorView.systemUiVisibility = (android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
                 or android.view.View.SYSTEM_UI_FLAG_FULLSCREEN
-                or android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION)
+                or android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                // Indeling altijd over het hele scherm, ook als de balken verschijnen (app half naast PandaOS):
+                // PandaOS krimpt dan niet en de dock blijft onderaan
+                or android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                or android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                or android.view.View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION)
         }
     }
 
@@ -424,7 +514,9 @@ class MainActivity : Activity() {
         private const val REQUEST_CAMERA = 2
         private const val REQUEST_MIC = 3
         const val EXTRA_REQUEST_MIC = "requestMicrophone" // vanuit het Android-toetsenbord
-        const val MIN_WEBVIEW = 111 // Chrome-versie van het standaard bouwdoel van Vite 8 (chrome111)
+        // Wat de overlay ook moet weten: volume en meldingen
+        private val OVERLAY_CALLS = listOf("radioVolume(", "systemVolume(", "volumeKey(", "notificationsChanged(")
+        const val MIN_WEBVIEW = 100 // bouwdoel van de webapp (build.target chrome100 in client/vite.config.ts)
 
         // Module-scripts weigert de WebView zonder het juiste type
         private fun mimeType(file: String) = when (file.substringAfterLast('.').lowercase()) {

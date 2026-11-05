@@ -2,20 +2,22 @@ import React, { useState } from 'react';
 import { Play, Pause, SkipBack, SkipForward, SlidersHorizontal, Search, Star, Radio } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useMediaController } from './useMediaController';
+import { getEffectiveTheme } from '../../settings';
 import './_music-bar.scss';
 
 const MusicBar: React.FC = () => {
   const [isFavorite, setIsFavorite] = useState(false);
   
   // Track info en de instellingen toggler komen direct uit de UI store
-  const { currentTrack, currentArtist, albumArt, mediaPosition, mediaDuration, toggleAudioSettings } = useUIStore();
+  const { currentTrack, currentArtist, albumArt, mediaPosition, mediaDuration, toggleAudioSettings, screenMode, vehicleLightsOn } = useUIStore();
+  const isDarkMode = getEffectiveTheme(screenMode, vehicleLightsOn) === 'dark';
   const progress = mediaDuration > 0 ? Math.min(100, (mediaPosition / mediaDuration) * 100) : 0;
   
   // Functies komen uit de nieuwe Media Controller!
   const { isPlaying, togglePlayPause, playNext, playPrev } = useMediaController();
 
   return (
-    <div className="tsl-music-bar">
+    <div className={`tsl-music-bar ${isDarkMode ? 'dark-mode' : ''}`}>
       <div className="music-info">
         <div className="album-art" style={{ backgroundImage: albumArt ? `url(${albumArt})` : 'none', backgroundSize: 'cover' }}></div>
         <div className="track-details">

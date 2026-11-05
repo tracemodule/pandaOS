@@ -2,15 +2,19 @@
 // Bovenaan het gekozen speeltje (uitleg, opties, voorbeeld); onderaan de rij met alle speeltjes.
 // Geluid komt uit de speakers van de radio (Web Audio, zelf opgewekt: geen geluidsbestanden).
 // Alles wat de auto zelf zou moeten doen (lampen, toeter) kan niet: PandaOS stuurt niets naar de auto.
+// Voertuig en Neon veranderen alleen het 3D-model; de echte autostatus (CAN, radio) blijft ongemoeid.
 import React, { useEffect, useRef, useState } from 'react';
-import { X, Blocks, Rainbow, Wind, Pencil, Flame, Palette, Trash2, Play } from 'lucide-react';
-import { useUIStore } from '../uiStore';
+import { X, Blocks, Rainbow, Wind, Pencil, Flame, Palette, Trash2, Play, Car, Lightbulb, DoorOpen, DoorClosed, LightbulbOff,
+  Sun, SunDim, Zap, OctagonAlert, Undo2, ArrowBigLeft, ArrowBigRight, TriangleAlert, Power, Waves, Circle, Sparkles,
+  PanelLeft, PanelRight, PanelTop, PanelBottom, Crosshair } from 'lucide-react';
+import { useUIStore, DEFAULT_NEON, type ToyCar, type DoorId, type NeonSettings } from '../uiStore';
 import { getEffectiveTheme } from '../../settings';
 import Colouriser from '../../components/settings/Colouriser';
+import IconTiles from '../../components/settings/IconTiles';
 import { useT } from '../../i18n';
 import './_theater.scss';
 
-type ToyId = 'rainbow' | 'whoopee' | 'sketch' | 'fireplace' | 'paint';
+type ToyId = 'rainbow' | 'whoopee' | 'sketch' | 'fireplace' | 'paint' | 'vehicle' | 'neon' | 'minigun';
 
 const TOYS: { id: ToyId; name: string; text: string; icon: React.ReactNode; color: string }[] = [
   { id: 'rainbow', name: 'Rainbow Floor', text: 'A rainbow glows under your car in the car view.', icon: <Rainbow size={30} />, color: '#e84393' },
@@ -18,7 +22,82 @@ const TOYS: { id: ToyId; name: string; text: string; icon: React.ReactNode; colo
   { id: 'sketch', name: 'Sketchpad', text: 'Draw with your finger. Tap the bin to start over.', icon: <Pencil size={30} />, color: '#2d9cdb' },
   { id: 'fireplace', name: 'Fireplace', text: 'A crackling fire for when you are parked. Tap the fire to stop the sound.', icon: <Flame size={30} />, color: '#e67e22' },
   { id: 'paint', name: 'Paint Shop', text: 'Give your car a different colour and finish.', icon: <Palette size={30} />, color: '#6c3ce0' },
+  { id: 'vehicle', name: 'Vehicle Play', text: 'Open the doors and test the lights of the 3D car. Only the picture changes, not your real car.', icon: <Car size={30} />, color: '#27ae60' },
+  { id: 'neon', name: 'Neon', text: 'Neon lights under the 3D car. Choose the colour, the effect and the sides.', icon: <Lightbulb size={30} />, color: '#00b8d4' },
+  { id: 'minigun', name: 'Minigun', text: 'A minigun on the roof of the 3D car. Just for fun, only in the picture.', icon: <Crosshair size={30} />, color: '#5d6d7e' },
 ];
+
+// --- Voertuig: deuren en lampen van het 3D-model (alleen het plaatje) ---
+// Vakken zoals in Instellingen > Voertuig (IconTiles): icoon boven de tekst
+const VehiclePlay: React.FC = () => {
+  const t = useT();
+  const { toyCar, setToyCar, carState } = useUIStore();
+  // Bij het openen: beginnen bij de stand van de auto
+  useEffect(() => {
+    if (!useUIStore.getState().toyCar) {
+      setToyCar({ lights: carState.lights, highBeam: carState.highBeam, blinker: carState.blinker, brake: false, reverse: false,
+        doors: { ...carState.doors } });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  if (!toyCar) return null;
+  const set = (patch: Partial<ToyCar>) => setToyCar({ ...toyCar, ...patch });
+  const door = (id: DoorId, label: string) => ({
+    id, label: t(label), active: toyCar.doors[id], icon: toyCar.doors[id] ? <DoorOpen size={22} /> : <DoorClosed size={22} />,
+    onClick: () => set({ doors: { ...toyCar.doors, [id]: !toyCar.doors[id] } }),
+  });
+  const blinker = (id: ToyCar['blinker'], label: string, icon: React.ReactNode) => ({
+    id, label: t(label), icon, active: toyCar.blinker === id, onClick: () => set({ blinker: toyCar.blinker === id ? 'off' : id }),
+  });
+  return (
+    <div className="toy-controls">
+      <IconTiles columns={4} tiles={[door('fl', 'Front left'), door('fr', 'Front right'), door('rl', 'Rear left'), door('rr', 'Rear right')]} />
+      <IconTiles columns={4} tiles={[
+        { id: 'off', label: t('Off'), icon: <LightbulbOff size={22} />, active: toyCar.lights === 'off', onClick: () => set({ lights: 'off' }) },
+        { id: 'parking', label: t('Parking lights'), icon: <SunDim size={22} />, active: toyCar.lights === 'parking', onClick: () => set({ lights: 'parking' }) },
+        { id: 'low', label: t('Dipped beam'), icon: <Sun size={22} />, active: toyCar.lights === 'low', onClick: () => set({ lights: 'low' }) },
+        { id: 'high', label: t('High beam'), icon: <Zap size={22} />, active: toyCar.highBeam, onClick: () => set({ highBeam: !toyCar.highBeam }) },
+      ]} />
+      <IconTiles columns={5} tiles={[
+        blinker('left', 'Indicator left', <ArrowBigLeft size={22} />),
+        blinker('right', 'Indicator right', <ArrowBigRight size={22} />),
+        blinker('hazard', 'Hazard lights', <TriangleAlert size={22} />),
+        { id: 'brake', label: t('Brake light'), icon: <OctagonAlert size={22} />, active: toyCar.brake, onClick: () => set({ brake: !toyCar.brake }) },
+        { id: 'reverse', label: t('Reverse light'), icon: <Undo2 size={22} />, active: toyCar.reverse, onClick: () => set({ reverse: !toyCar.reverse }) },
+      ]} />
+    </div>
+  );
+};
+
+// --- Neon onder de auto ---
+const NEON_COLORS = ['#00e5ff', '#2d6bff', '#a020f0', '#ff2d95', '#ff1f1f', '#ff8c00', '#ffe600', '#25ff6a', '#ffffff'];
+const NeonToy: React.FC = () => {
+  const t = useT();
+  const { vehicleSettings, updateVehicleSetting } = useUIStore();
+  const neon: NeonSettings = { ...DEFAULT_NEON, ...(vehicleSettings.neon ?? {}) };
+  const set = (patch: Partial<NeonSettings>) => updateVehicleSetting('neon', { ...neon, ...patch });
+  const side = (id: keyof NeonSettings['sides'], label: string, icon: React.ReactNode) => ({
+    id, label: t(label), icon, active: neon.sides[id], onClick: () => set({ sides: { ...neon.sides, [id]: !neon.sides[id] } }),
+  });
+  return (
+    <div className="toy-controls">
+      <div className="toy-sketch-tools" style={{ flexWrap: 'wrap' }}>
+        {NEON_COLORS.map((c) => (
+          <button key={c} className={`toy-swatch ${c === neon.color ? 'is-active' : ''}`} style={{ background: c }} onClick={() => set({ color: c, on: true })} aria-label={c} />
+        ))}
+      </div>
+      <IconTiles columns={3} value={neon.effect} onChange={(id) => set({ effect: id as NeonSettings['effect'] })} tiles={[
+        { id: 'steady', label: t('Steady'), icon: <Circle size={24} /> },
+        { id: 'pulse', label: t('Pulse'), icon: <Waves size={24} /> },
+        { id: 'rainbow', label: t('Rainbow'), icon: <Sparkles size={24} /> },
+      ]} />
+      <IconTiles columns={4} tiles={[
+        side('left', 'Left', <PanelLeft size={24} />), side('right', 'Right', <PanelRight size={24} />),
+        side('front', 'Front', <PanelTop size={24} />), side('rear', 'Rear', <PanelBottom size={24} />),
+      ]} />
+    </div>
+  );
+};
 
 // --- Geluid: één AudioContext voor alle speeltjes ---
 let audio: AudioContext | null = null;
@@ -209,6 +288,9 @@ const ToyboxApp: React.FC = () => {
   const [toyId, setToyId] = useState<ToyId>('rainbow');
   const [whoopee, setWhoopee] = useState<'short' | 'long' | 'rumble'>('short');
   const [paintOpen, setPaintOpen] = useState(false);
+  const setToyCar = useUIStore((st) => st.setToyCar);
+  // Voertuig-speeltje alleen zolang het gekozen is en Toybox open staat; daarna volgt het model de auto weer
+  useEffect(() => { if (!isToyboxOpen || toyId !== 'vehicle') setToyCar(null); }, [isToyboxOpen, toyId, setToyCar]);
 
   if (!isToyboxOpen) return null;
   const toy = TOYS.find((x) => x.id === toyId)!;
@@ -244,10 +326,33 @@ const ToyboxApp: React.FC = () => {
               <button className="arcade-play" onClick={() => playWhoopee(whoopee)}><Play size={18} fill="currentColor" /> {t('Play')}</button>
             </>
           )}
+          {toy.id === 'vehicle' && (
+            <>
+              <small className="tsl-hint">{t('The tailgate cannot open in this 3D model.')}</small>
+              <button className="tsl-btn is-small toy-off" onClick={() => useUIStore.getState().setToyCar({ lights: 'off', highBeam: false, blinker: 'off',
+                brake: false, reverse: false, doors: { fl: false, fr: false, rl: false, rr: false, trunk: false } })}><Power size={16} /> {t('Everything off')}</button>
+            </>
+          )}
+          {toy.id === 'neon' && (
+            <label className="tsl-switch-row" style={{ alignSelf: 'stretch' }}>
+              <span className="tsl-field-text" style={{ flex: 1 }}>{t('Neon')}</span>
+              <input type="checkbox" className="tsl-toggle" checked={!!vehicleSettings.neon?.on}
+                onChange={(e) => updateVehicleSetting('neon', { ...DEFAULT_NEON, ...(vehicleSettings.neon ?? {}), on: e.target.checked })} />
+            </label>
+          )}
+          {toy.id === 'minigun' && (
+            <label className="tsl-switch-row" style={{ alignSelf: 'stretch' }}>
+              <span className="tsl-field-text" style={{ flex: 1 }}>{t('Minigun')}</span>
+              <input type="checkbox" className="tsl-toggle" checked={!!vehicleSettings.minigun}
+                onChange={(e) => updateVehicleSetting('minigun', e.target.checked)} />
+            </label>
+          )}
           {toy.id === 'paint' && (
             <button className="arcade-play" onClick={() => setPaintOpen(true)}><Palette size={18} /> {t('Colouriser')}</button>
           )}
         </div>
+        {toy.id === 'vehicle' && <VehiclePlay />}
+        {toy.id === 'neon' && <NeonToy />}
         {toy.id === 'sketch' && <Sketchpad />}
         {toy.id === 'fireplace' && <Fireplace />}
       </div>

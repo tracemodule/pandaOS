@@ -46,6 +46,30 @@ class CanLinks(private val activity: Activity, private val send: (String) -> Uni
     val isEmpty get() = links.isEmpty()
     val broadcastActions get() = links.filter { it.source == "broadcast" }.map { it.match }.distinct()
 
+    // Bij het opstarten van PandaOS: de stand van vóór de start overnemen (bijv. dimlicht al aan bij het starten van de
+    // auto). De monitor leest pas mee vanaf nu; hier eenmalig het logboek dat er al is doorlopen en per functie alleen
+    // de laatste regel doorsturen. Het live meelezen (check) verandert niet.
+    fun replayLastState() {
+        val current = links.filter { it.source == "logcat" }
+        if (current.isEmpty()) return
+        if (activity.checkSelfPermission(android.Manifest.permission.READ_LOGS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return
+        Thread {
+            val last = LinkedHashMap<String, String>() // func -> laatste passende regel
+            try {
+                val process = Runtime.getRuntime().exec(arrayOf("logcat", "-d", "-v", "brief"))
+                java.io.BufferedReader(java.io.InputStreamReader(process.inputStream)).use { reader ->
+                    while (true) {
+                        val line = reader.readLine() ?: break
+                        for (link in current) if (line.contains(link.match, ignoreCase = true)) last[link.func] = line
+                    }
+                }
+            } catch (_: Exception) { return@Thread }
+            if (last.isEmpty()) return@Thread
+            DiagLog.add("info", "Stand bij het opstarten overgenomen: ${last.keys.joinToString()}")
+            for (line in last.values) check("logcat", line)
+        }.apply { isDaemon = true; start() }
+    }
+
     // Elke regel van de monitor (logcat-regel of naam van de broadcast)
     fun check(source: String, text: String) {
         val current = links

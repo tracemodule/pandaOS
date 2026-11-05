@@ -3,6 +3,7 @@ import ControlBar from '../../settings/control-bar/controlbar';
 import Keyboard from '../../settings/Keyboard';
 import Map from '../../navigation/Map'; 
 import AudioSettings from '../../settings/AudioSettings'; 
+import VolumePage from '../../settings/VolumePage';
 import SidebarPane from './configuration/SidebarPane';
 import RearCamera from './configuration/RearCamera';
 import SystemNotification from '../../../notifications/SystemNotification';
@@ -17,6 +18,7 @@ import CarPlayApp from '../../../store/apps/CarPlayApp';
 import PhoneApp, { CallOverlay } from '../../../store/apps/PhoneApp';
 import CanMonitorApp from '../../../store/apps/CanMonitorApp';
 import TheaterApp from '../../../store/apps/TheaterApp';
+import PhoneDataApps from '../../../store/apps/PhoneDataApps';
 import ArcadeApp from '../../../store/apps/ArcadeApp';
 import ToyboxApp from '../../../store/apps/ToyboxApp';
 import DiagnosticsApp from '../../../store/apps/DiagnosticsApp';
@@ -27,7 +29,7 @@ import { startTripComputer } from '../../../services/tripComputer';
 import BootScreen from '../boot-screen/BootScreen';
 import PandaPanel from '../../panel/PandaPanel';
 import { PANDA_CONFIG, getEffectiveTheme } from '../../../../src/settings';
-import { Lock, User, Maximize2, Wifi, WifiOff, Bluetooth, BluetoothOff } from 'lucide-react';
+import { Lock, User, Maximize2, Wifi, WifiOff, Bluetooth, BluetoothOff, CheckCircle2 } from 'lucide-react';
 import { getLinkedAndroidPackage, launchAndroidPackage, isAndroidLauncher } from '../../../store/appLinks';
 import { checkForUpdatesAtStartup } from '../../../services/updates';
 import { useT } from '../../../i18n';
@@ -38,7 +40,7 @@ const SplashScreen: React.FC = () => {
     isMenuOpen, isMusicOpen, activeWebApp, isQuickActionsOpen, closeAll,
     initSocketListeners, initSpotify, screenMode, gear, brakeApplied,
     displaySettings, isCarPlayOpen, isMapOpen, isPhoneOpen, appLinks, vehicleLightsOn, isCameraOpen,
-    isCanMonitorOpen, closeCanMonitor, vehicleSettings, isTheaterOpen, closeTheater, isArcadeOpen, closeArcade, isToyboxOpen, closeToybox, isDiagnosticsOpen, closeDiagnostics
+    isCanMonitorOpen, closeCanMonitor, vehicleSettings, isTheaterOpen, closeTheater, panelApp, closePanelApp, isArcadeOpen, closeArcade, isToyboxOpen, closeToybox, isDiagnosticsOpen, closeDiagnostics
   } = useUIStore();
   const t = useT();
   // Een andere app opent: de CAN-monitor gaat dicht (anders liggen ze over elkaar)
@@ -53,6 +55,10 @@ const SplashScreen: React.FC = () => {
   useEffect(() => {
     if (isArcadeOpen && (isMenuOpen || isMusicOpen || isPhoneOpen || activeWebApp || isCarPlayOpen || isMapOpen || isCanMonitorOpen || isTheaterOpen)) closeArcade();
   }, [isArcadeOpen, isMenuOpen, isMusicOpen, isPhoneOpen, activeWebApp, isCarPlayOpen, isMapOpen, isCanMonitorOpen, isTheaterOpen, closeArcade]);
+  // Contacten/Agenda/Berichten dicht als er een andere app opent
+  useEffect(() => {
+    if (panelApp && (isMenuOpen || isMusicOpen || isPhoneOpen || activeWebApp || isCarPlayOpen || isMapOpen || isCanMonitorOpen || isTheaterOpen || isArcadeOpen || isToyboxOpen || isDiagnosticsOpen)) closePanelApp();
+  }, [panelApp, isMenuOpen, isMusicOpen, isPhoneOpen, activeWebApp, isCarPlayOpen, isMapOpen, isCanMonitorOpen, isTheaterOpen, isArcadeOpen, isToyboxOpen, isDiagnosticsOpen, closePanelApp]);
   // Zelfde voor Toybox
   useEffect(() => {
     if (isToyboxOpen && (isMenuOpen || isMusicOpen || isPhoneOpen || activeWebApp || isCarPlayOpen || isMapOpen || isCanMonitorOpen || isTheaterOpen || isArcadeOpen)) closeToybox();
@@ -61,10 +67,30 @@ const SplashScreen: React.FC = () => {
   useEffect(() => {
     if (isDiagnosticsOpen && (isMenuOpen || isMusicOpen || isPhoneOpen || activeWebApp || isCarPlayOpen || isMapOpen || isCanMonitorOpen || isTheaterOpen || isArcadeOpen || isToyboxOpen)) closeDiagnostics();
   }, [isDiagnosticsOpen, isMenuOpen, isMusicOpen, isPhoneOpen, activeWebApp, isCarPlayOpen, isMapOpen, isCanMonitorOpen, isTheaterOpen, isArcadeOpen, isToyboxOpen, closeDiagnostics]);
+  // Android-app die half naast de auto geopend is (Nav/Energy, appLinks.runLaunchAction): knoppen Volledig scherm en Sluiten
+  const [halfApp, setHalfApp] = useState<string | null>(null);
+  useEffect(() => {
+    const onHalf = (e: Event) => setHalfApp((e as CustomEvent<string | null>).detail);
+    window.addEventListener('pandaos-half-app', onHalf);
+    return () => window.removeEventListener('pandaos-half-app', onHalf);
+  }, []);
+  // Andere app of paneel in PandaOS geopend: de halve Android-app telt niet meer mee voor de indeling
+  useEffect(() => {
+    if (halfApp && (isMenuOpen || isMusicOpen || isPhoneOpen || isMapOpen || activeWebApp || isCarPlayOpen || isTheaterOpen || isArcadeOpen || isToyboxOpen || isDiagnosticsOpen || isCanMonitorOpen)) setHalfApp(null);
+  }, [halfApp, isMenuOpen, isMusicOpen, isPhoneOpen, isMapOpen, activeWebApp, isCarPlayOpen, isTheaterOpen, isArcadeOpen, isToyboxOpen, isDiagnosticsOpen, isCanMonitorOpen]);
   // Android-app achter Nav (Google Maps/Waze); undefined = alleen de PandaOS-kaart
   const fullscreenNavApp = isMapOpen ? getLinkedAndroidPackage(appLinks, 'maps') : undefined;
 
   const [currentDate, setCurrentDate] = useState(new Date());
+  // "Opgeslagen" na Done in het app-menu, 2 seconden
+  const savedFlashAt = useUIStore((st) => st.savedFlashAt);
+  const [savedFlash, setSavedFlash] = useState(false);
+  useEffect(() => {
+    if (!savedFlashAt) return;
+    setSavedFlash(true);
+    const timer = window.setTimeout(() => setSavedFlash(false), 2000);
+    return () => window.clearTimeout(timer);
+  }, [savedFlashAt]);
 
   // Wifi- en Bluetooth-status voor de statusbalk. Radio: via de launcher (elke 5 s); laptop/Pi: internet en de
   // Bluetooth-telefoon van de server.
@@ -204,7 +230,7 @@ const SplashScreen: React.FC = () => {
       rightWidth = '70%';
   } else {
       // Settings, Music, Phone en Nav openen naast de auto; web-apps en CarPlay schermvullend.
-      if (isMenuOpen || isMusicOpen || isPhoneOpen || isMapOpen || isCanMonitorOpen || isTheaterOpen || isArcadeOpen || isToyboxOpen || isDiagnosticsOpen) {
+      if (isMenuOpen || isMusicOpen || isPhoneOpen || isMapOpen || isCanMonitorOpen || isTheaterOpen || isArcadeOpen || isToyboxOpen || isDiagnosticsOpen || panelApp || halfApp) {
           leftWidth = '30%';
           rightWidth = '70%';
       } else if (activeWebApp || isCarPlayOpen) {
@@ -224,7 +250,7 @@ const SplashScreen: React.FC = () => {
 
   // --- HEADER BACKGROUND KLEUR LOGICA VOOR RECHTER SCHERM ---
   let rightHeaderBg = 'transparent';
-  if (isMenuOpen || isPhoneOpen || isCanMonitorOpen || isTheaterOpen || isArcadeOpen || isToyboxOpen || isDiagnosticsOpen) rightHeaderBg = isDarkMode ? '#414141' : '#f0f0f0'; // gelijk aan Settings/Phone (Figma Menu Screens)
+  if (isMenuOpen || isPhoneOpen || isCanMonitorOpen || isTheaterOpen || isArcadeOpen || isToyboxOpen || isDiagnosticsOpen || panelApp) rightHeaderBg = isDarkMode ? '#414141' : '#f0f0f0'; // gelijk aan Settings/Phone (Figma Menu Screens)
   else if (isMusicOpen) rightHeaderBg = isDarkMode ? '#1e1e1e' : '#f5f5f5'; // gelijk aan de achtergrond van MusicApp
   else if (activeWebApp || isCarPlayOpen || showCamera) rightHeaderBg = '#000000';
   // Boven de kaart: donker verloop met witte tekst (Figma "top nav with gradient"), leesbaar op een lichte kaart
@@ -277,8 +303,9 @@ const SplashScreen: React.FC = () => {
       
       {/* GLOBAL HEADER (Uitsluitend voor de rechterkant met tijd/weer/user) */}
       <header className="tsl-global-header" style={{
+          display: halfApp ? 'none' : 'flex', // app half naast de auto: daarboven staat de statusbalk van Android
           position: 'absolute', top: 0, right: 0, left: headerLeft, zIndex: 90, // Begint vanaf rechter paneel (of volle breedte)
-          display: 'flex', justifyContent: 'flex-end', padding: `12px ${headerPaddingRight} 12px 24px`,
+          justifyContent: 'flex-end', padding: `12px ${headerPaddingRight} 12px 24px`,
           // Witte tekst op donker: donker thema, boven de kaart, of boven een zwarte app (camera, web-app, CarPlay)
           pointerEvents: 'none', color: isDarkMode || isHeaderOnMap || rightHeaderBg === '#000000' ? '#fff' : '#000',
           fontFamily: 'system-ui, -apple-system, sans-serif',
@@ -294,6 +321,7 @@ const SplashScreen: React.FC = () => {
                 connectivity.bt === 'off' ? <BluetoothOff size={16} style={{ opacity: 0.5 }} />
                   : <Bluetooth size={16} style={{ opacity: connectivity.bt === 'connected' ? 1 : 0.4 }} />
               )}
+              {savedFlash && <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><CheckCircle2 size={16} color="#3ba55d" /> {t('Saved')}</span>}
               <Lock size={16} />
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                  <User size={16} /> <span>{PANDA_CONFIG.MODE === 'dev' ? 'Developer' : 'Easy Entry'}</span>
@@ -330,6 +358,7 @@ const SplashScreen: React.FC = () => {
         }}>
           {/* Klik op de kaart sluit open apps, maar niet de kaart zelf als je Navi gebruikt */}
           <main className="tsl-content-pane" onClick={() => { if (!isMapOpen) closeAll(); }} style={{ width: '100%', height: '100%', position: 'relative', cursor: 'default' }}>
+            {/* Android-app half naast de auto: Android zet zelf een balk boven het venster met volledig scherm en sluiten */}
             
             {/* MAP: onderste laag, alleen zichtbaar tijdens rijden of als Nav open is (blijft gemount, Leaflet hoeft niet opnieuw te laden) */}
             <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1, visibility: (isDriving || isMapOpen) ? 'visible' : 'hidden' }}>
@@ -360,7 +389,7 @@ const SplashScreen: React.FC = () => {
             {/* APPS WRAPPER: 50px offset om header vrij te houden */}
             {/* Zonder open app laat deze laag klikken door naar de kaart (anders werkt het Navi-zoekveld niet) */}
             <div ref={appsRef} style={{ position: 'absolute', top: '50px', left: 0, right: 0, bottom: 0, zIndex: 10,
-              pointerEvents: (isMenuOpen || isMusicOpen || isPhoneOpen || activeWebApp || isCarPlayOpen || showCamera || isCanMonitorOpen || isTheaterOpen || isArcadeOpen || isToyboxOpen || isDiagnosticsOpen) ? 'auto' : 'none' }}>
+              pointerEvents: (isMenuOpen || isMusicOpen || isPhoneOpen || activeWebApp || isCarPlayOpen || showCamera || isCanMonitorOpen || isTheaterOpen || isArcadeOpen || isToyboxOpen || isDiagnosticsOpen || panelApp) ? 'auto' : 'none' }}>
               {showCamera ? (
                  <RearCamera /> // automatisch in R, of via het Camera-pictogram
               ) : (
@@ -375,6 +404,7 @@ const SplashScreen: React.FC = () => {
                    <ArcadeApp />
                    <ToyboxApp />
                    <DiagnosticsApp />
+                   <PhoneDataApps />
                  </>
               )}
             </div>
@@ -393,6 +423,7 @@ const SplashScreen: React.FC = () => {
       </div>
 
       <AudioSettings />
+      <VolumePage />
 
       {quickActionsShown && (
         <div className={`quick-actions-wrapper ${menuSlides ? (quickActionsClosing ? 'qa-slide-out' : 'qa-slide-in') : ''}`} onClick={closeAll}>

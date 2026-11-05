@@ -16,6 +16,9 @@ android/local.properties
 tools/release/
 tools/radio-diagnose-*/
 tools/settings-diff-*/
+tools/radio-apks/
+tools/radio-shots/
+tools/radio-test-*.txt
 
 # Editors en systeem
 .idea/

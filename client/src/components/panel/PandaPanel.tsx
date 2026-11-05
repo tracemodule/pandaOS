@@ -4,7 +4,7 @@
 // Of dit paneel of dat van Android verschijnt: Settings > Apps > Paneel (appSettings.panel).
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Wifi, WifiOff, Bluetooth, BluetoothOff, SunMoon, Settings, Sun, Volume2, X, Smartphone, Gauge } from 'lucide-react';
-import { useUIStore } from '../../store/uiStore';
+import { useUIStore, VOLUME_MAX } from '../../store/uiStore';
 import { getEffectiveTheme } from '../../settings';
 import { getAndroidAppIcon, isAndroidLauncher, launchAndroidPackage } from '../../store/appLinks';
 import TeslaSlider from '../settings/TeslaSlider';
@@ -19,13 +19,15 @@ const EDGE_HEIGHT = 48; // bovenste strook (px) waar een veeg omlaag het paneel 
 
 const formatTime = (time: number) => new Date(time).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
 
-const PandaPanel: React.FC = () => {
+// overlay: het menu boven een andere app (OverlayApp); sluiten = onClose, Instellingen = PandaOS naar voren
+const PandaPanel: React.FC<{ overlay?: boolean; onClose?: () => void }> = ({ overlay = false, onClose }) => {
   const t = useT();
   const {
     appSettings, screenMode, setScreenMode, vehicleLightsOn, displaySettings, updateDisplaySetting,
     volume, setVolume, openSettingsTab,
   } = useUIStore();
-  const [open, setOpen] = useState(false);
+  const [open, setOpenState] = useState(overlay); // boven een andere app: meteen open (OverlayApp toont het pas bij 'panel')
+  const setOpen = useCallback((value: boolean) => { setOpenState(value); if (!value) onClose?.(); }, [onClose]);
   const [notifications, setNotifications] = useState<PanelNotification[]>([]);
   const [wifi, setWifi] = useState<{ enabled: boolean; ssid?: string | null } | null>(null);
   const [bt, setBt] = useState<{ enabled?: boolean; devices?: { name: string; connected: boolean }[] } | null>(null);
@@ -61,18 +63,18 @@ const PandaPanel: React.FC = () => {
     const openFromLauncher = () => setOpen(true);
     window.addEventListener('pandaos-open-panel', openFromLauncher);
     return () => window.removeEventListener('pandaos-open-panel', openFromLauncher);
-  }, [enabled]);
+  }, [enabled, setOpen]);
 
   // Android-paneel blokkeren als het PandaOS-paneel gekozen is (alleen als PandaOS apparaateigenaar is)
   useEffect(() => {
-    if (isAndroidLauncher()) bridge()?.setSystemPanelBlocked?.(enabled);
-  }, [enabled]);
+    if (isAndroidLauncher() && !overlay) bridge()?.setSystemPanelBlocked?.(enabled);
+  }, [enabled, overlay]);
 
   // Veeg omlaag vanaf de bovenste 48 px, over de hele breedte. Geen onzichtbare laag erboven: een tik op
   // P R N D, het slot of het profiel gaat gewoon door. Pas als de vinger echt omlaag sleept, opent het paneel
   // (en de klik die daarna nog zou komen wordt tegengehouden).
   useEffect(() => {
-    if (!enabled || open) return;
+    if (!enabled || open || overlay) return; // boven een andere app veegt Android (PandaOverlay) zelf
     let start: { x: number; y: number } | null = null;
     const swallowClick = (e: MouseEvent) => { e.stopPropagation(); e.preventDefault(); };
     const down = (x: number, y: number) => { start = y <= EDGE_HEIGHT ? { x, y } : null; };
@@ -108,7 +110,7 @@ const PandaPanel: React.FC = () => {
       window.removeEventListener('pointermove', onPointerMove, true);
       window.removeEventListener('pointerup', onEnd, true);
     };
-  }, [enabled, open]);
+  }, [enabled, open, overlay, setOpen]);
 
   if (!enabled) return null;
 
@@ -151,7 +153,9 @@ const PandaPanel: React.FC = () => {
                 <span className="tile-title">{t('Appearance')}</span>
                 <span className="tile-sub">{t(screenMode === 'light' ? 'Light' : screenMode === 'dark' ? 'Dark' : 'Auto')}</span>
               </button>
-              <button className="panel-tile" onClick={() => { openSettingsTab('Display'); setOpen(false); }}>
+              <button className="panel-tile" onClick={() => {
+                if (overlay) bridge()?.openPandaOS('Display'); else { openSettingsTab('Display'); setOpen(false); }
+              }}>
                 <Settings size={22} />
                 <span className="tile-title">{t('Settings')}</span>
                 <span className="tile-sub">PandaOS</span>
@@ -168,7 +172,7 @@ const PandaPanel: React.FC = () => {
               <TeslaSlider value={brightness} min={10} max={100} step={5} format={(v) => `${v}%`}
                 iconLeft={<Sun size={18} />} iconRight={<Sun size={24} />}
                 onChange={(v) => updateDisplaySetting(brightnessKey, v)} />
-              <TeslaSlider value={volume} min={0} max={100} step={1} format={(v) => `${v}`}
+              <TeslaSlider value={volume} min={0} max={VOLUME_MAX} step={1} format={(v) => `${v}`}
                 iconLeft={<Volume2 size={18} />} iconRight={<Volume2 size={24} />}
                 onChange={(v) => setVolume(v)} />
             </div>

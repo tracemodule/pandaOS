@@ -85,7 +85,7 @@ export const applyCanSignal = (signal: { func: string; action: CanAction; value:
     case 'speed': if (!isNaN(num)) store.setGpsSpeed(Math.max(0, Math.round(num))); break;
     case 'fuel': if (!isNaN(num)) store.setCarState({ fuelPercent: Math.max(0, Math.min(100, num)) }); break;
     case 'outside_temp': if (!isNaN(num)) store.setCarState({ outsideTemp: num }); break;
-    case 'radio_volume': if (!isNaN(num)) useUIStore.setState({ volume: Math.max(0, Math.min(100, Math.round((num / 40) * 100))), isVolumeOpen: true }); break;
+    case 'radio_volume': if (!isNaN(num)) useUIStore.setState({ volume: Math.max(0, Math.min(40, Math.round(num))), isVolumeOpen: true }); break;
     case 'range': if (!isNaN(num)) store.setCarState({ rangeKm: Math.max(0, num) }); break;
     default:
       if (doors[signal.func]) store.setCarState({ doors: { [doors[signal.func]]: on } });

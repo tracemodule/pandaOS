@@ -2,7 +2,7 @@
 // Web -> Android: window.PandaAndroid (zie appLinks.ts, de Wi-Fi- en Apps-tab in SettingsApp en de mediabediening in uiStore).
 // Android -> web: window.PandaOS, hier geregistreerd. De launcher roept dit aan met evaluateJavascript,
 // bijvoorbeeld bij de VOL-knoppen van de radio, het achteruit-signaal of als er iets anders gaat spelen.
-import { useUIStore } from '../store/uiStore';
+import { useUIStore, VOLUME_MAX, fromPercent } from '../store/uiStore';
 import { getLinkedAndroidPackage, launchAndroidPackage } from '../store/appLinks';
 import { diag } from './diagnostics';
 import { applyCanSignal } from './canSignals';
@@ -21,6 +21,9 @@ export interface PandaOSWebBridge {
   stepVolume: (delta: number) => void;
   setReverseSignal: (active: boolean) => void;
   systemVolume: (percent: number) => void;
+  radioVolume: (value: number) => void;
+  radioVolumes: (volumes: Record<string, number>) => void;
+  volumeKey: () => void;
   radioSetting: (setting: { table: string; key: string; value: string }) => void;
   voiceInput: (event: { state: string; text?: string; error?: string }) => void;
   canSignal: (signal: { func: string; action: 'on' | 'off' | 'value'; value: string }) => void;
@@ -34,6 +37,10 @@ export interface PandaOSWebBridge {
   // Nieuwe of verdwenen melding van een Android-app (PandaOS-paneel werkt zijn lijst bij)
   notificationsChanged: () => void;
   openPanel: () => void;
+  openSettingsTab: (tab: string) => void;
+  halfAppClosed: () => void;
+  permissionsChanged: () => void;
+  overlayMode: (mode: string) => void;
   updateStatus: (status: { state: string; progress: number; message: string }) => void;
 }
 
@@ -77,9 +84,25 @@ export const initAndroidBridge = () => {
     // Spraakinvoer (VoiceInput.kt) -> webtoetsenbord (Keyboard.tsx)
     voiceInput: (event) => window.dispatchEvent(new CustomEvent('pandaos-voice', { detail: event })),
     systemVolume: (percent) => {
-      const state = useUIStore.getState();
-      if (Math.abs(state.volume - percent) >= 1) useUIStore.setState({ volume: percent, isVolumeOpen: true });
+      if ((window as any).PandaAndroid?.getMasterVolume?.() >= 0) return; // meestervolume gaat voor
+      const volume = fromPercent(percent);
+      if (useUIStore.getState().volume !== volume) useUIStore.setState({ volume, isVolumeOpen: true });
     },
+    // Meestervolume van de radio veranderd (knop op het paneel, stuurknoppen, PandaOS zelf): 0-40
+    radioVolume: (value) => {
+      const volume = Math.max(0, Math.min(VOLUME_MAX, value));
+      if (useUIStore.getState().volume !== volume) useUIStore.setState({ volume, isVolumeOpen: true });
+    },
+    // Alle vier de volumes van de radio (CarSignals.kt): onthouden en de volumepagina bijwerken
+    radioVolumes: (volumes) => {
+      try {
+        const saved = JSON.parse(localStorage.getItem('pandaos-radio-volumes') ?? '{}');
+        localStorage.setItem('pandaos-radio-volumes', JSON.stringify({ ...saved, ...volumes }));
+      } catch { /* opslag vol */ }
+      window.dispatchEvent(new Event('pandaos-radio-volumes'));
+    },
+    // Volumeknop ingedrukt terwijl PandaOS vooraan staat: de radio regelt het volume, PandaOS toont de popup
+    volumeKey: () => useUIStore.setState({ isVolumeOpen: true }),
 
     // Mediakaart en Music volgen de Android-app die speelt; null = niets meer (dan mogen Spotify/Bluetooth weer)
     setNowPlaying: (media) => {
@@ -108,6 +131,17 @@ export const initAndroidBridge = () => {
     notificationsChanged: () => window.dispatchEvent(new Event('pandaos-notifications')),
     // Veeg van bovenaf: de launcher heeft de Android-balk weggehaald, open het PandaOS-paneel
     openPanel: () => window.dispatchEvent(new Event('pandaos-open-panel')),
+    // Vanuit het menu boven een andere app (PandaOverlay): PandaOS staat weer vooraan, dit scherm openen
+    openSettingsTab: (tab) => {
+      const store = useUIStore.getState();
+      if (tab === 'Audio') { if (!store.isAudioSettingsOpen) store.toggleAudioSettings(); }
+      else if (tab === 'Volume') store.openVolumePage();
+      else store.openSettingsTab(tab as any);
+    },
+    overlayMode: () => undefined,
+    // De halve Android-app is weg (op PandaOS getikt): de auto weer over het hele scherm
+    permissionsChanged: () => window.dispatchEvent(new Event('pandaos-permissions')),
+    halfAppClosed: () => window.dispatchEvent(new CustomEvent('pandaos-half-app', { detail: null })),
     // Voortgang van een software-update (UpdateInstaller.kt) -> Settings > Software
     updateStatus: (status) => {
       if (status.state === 'error') diag('error', 'update', status.message);
@@ -121,11 +155,41 @@ export const initAndroidBridge = () => {
   (window as any).PandaOS = bridge;
   // Volume en achteruit zoals ze nu op de radio staan
   const android = (window as any).PandaAndroid;
-  if (android?.getSystemVolume) {
+  // Opgeslagen volume uit een oudere versie (0-100) omrekenen naar 0-40
+  if (useUIStore.getState().volume > VOLUME_MAX) useUIStore.setState({ volume: fromPercent(useUIStore.getState().volume) });
+  const master = android?.getMasterVolume?.() ?? -1;
+  if (master >= 0) useUIStore.setState({ volume: Math.min(VOLUME_MAX, master) });
+  else if (android?.getSystemVolume) {
     const percent = android.getSystemVolume();
-    if (percent >= 0) useUIStore.setState({ volume: percent });
+    if (percent >= 0) useUIStore.setState({ volume: fromPercent(percent) });
   }
   if (android?.isReverseActive?.()) useUIStore.getState().setReverseSignal(true);
   // Na het opstartscherm (VW-logo) kijken of er al een telefoon verbonden is
   if ((window as any).PandaAndroid) window.setTimeout(checkPhoneAtStartup, 4000);
+};
+
+// Overlay boven andere apps (index.html#overlay): alleen wat het menu en de volumecontainer nodig hebben.
+// Geen opstartcontroles (telefoon, CarPlay openen ...): dat doet PandaOS zelf al.
+export const initOverlayBridge = () => {
+  const showVolume = (volume: number) => {
+    const clamped = Math.max(0, Math.min(VOLUME_MAX, volume));
+    useUIStore.setState({ volume: clamped, isVolumeOpen: true });
+  };
+  (window as any).PandaOS = {
+    radioVolume: (value: number) => showVolume(value),
+    systemVolume: (percent: number) => {
+      if ((window as any).PandaAndroid?.getMasterVolume?.() >= 0) return;
+      showVolume(fromPercent(percent));
+    },
+    volumeKey: () => useUIStore.setState({ isVolumeOpen: true }),
+    notificationsChanged: () => window.dispatchEvent(new Event('pandaos-notifications')),
+    overlayMode: (mode: string) => window.dispatchEvent(new CustomEvent('pandaos-overlay-mode', { detail: mode })),
+  };
+  const android = (window as any).PandaAndroid;
+  const master = android?.getMasterVolume?.() ?? -1;
+  if (master >= 0) useUIStore.setState({ volume: Math.min(VOLUME_MAX, master) });
+  else if (android?.getSystemVolume) {
+    const percent = android.getSystemVolume();
+    if (percent >= 0) useUIStore.setState({ volume: fromPercent(percent) });
+  }
 };

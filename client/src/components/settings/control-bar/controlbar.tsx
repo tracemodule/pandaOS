@@ -1,11 +1,13 @@
 import React, { useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronLeft, ChevronRight, Volume2, VolumeX, LayoutGrid, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, LayoutGrid, X } from 'lucide-react';
 import "../../control-bar/_control-bar.scss";
-import { useUIStore } from '../../../store/uiStore';
+import { useUIStore, openAudioApp } from '../../../store/uiStore';
+import { VOLUME_MAX } from '../../../store/uiStore';
 import { getEffectiveTheme } from '../../../../src/settings';
 import VolkswagenIcon from './VolkswagenIcon';
 import VolumePopup from './VolumePopup';
+import VolumeLevelIcon from './VolumeLevelIcon';
 import { getLaunchAction, runLaunchAction, useInstalledApps, getAndroidAppIcon, isAndroidAppVisible, launchAndroidPackage } from '../../../store/appLinks';
 import { pressApp, useAppDrag } from '../../../store/appDrag';
 import { useT } from '../../../i18n';
@@ -35,8 +37,12 @@ const ControlBar: React.FC = () => {
   const isVisible = (id: string) => isAndroidId(id)
     ? installedApps.some((a) => a.package === id.slice(PKG.length)) && isAndroidAppVisible(appLinks, id.slice(PKG.length))
     : actionOf(id).kind !== 'hidden';
-  const dockApps = pinnedApps.filter(isVisible);
-  const dockRecents = recentApps.filter((id) => isVisible(id) && !pinnedApps.includes(id));
+  // Standaardweergave (Software > Weergave): CAN-monitor ook niet in de dock
+  const standardMode = useUIStore((st) => st.displaySettings?.uiMode === 'standard');
+  const dockApps = pinnedApps.filter((id) => isVisible(id) && !(standardMode && id === 'canmonitor'));
+  const dockRecents = recentApps.filter((id) => isVisible(id) && !pinnedApps.includes(id) && !(standardMode && id === 'canmonitor'))
+    .slice(0, Math.max(1, Math.min(4, useUIStore.getState().displaySettings?.dockRecentCount ?? 2)));
+  const menuButtonAt = useUIStore((st) => st.displaySettings?.dockMenuButton ?? 'middle');
   const isNotInstalled = (id: string) => !isAndroidId(id) && actionOf(id).kind === 'store';
   // Wat er nu gesleept wordt (app-menu of dock), voor het meebewegende pictogram en de markering van het doel
   const drag = useAppDrag((s) => s.drag);
@@ -65,7 +71,9 @@ const ControlBar: React.FC = () => {
     else if (id === 'netflix') isTheaterOpen ? closeTheater() : openTheater();
     else if (id === 'arcade') isArcadeOpen ? closeArcade() : openArcade();
     else if (id === 'toybox') isToyboxOpen ? closeToybox() : openToybox();
+    else if (id === 'audio') openAudioApp();
     else if (id === 'diagnostics') isDiagnosticsOpen ? closeDiagnostics() : openDiagnostics();
+    else if (id === 'contacts' || id === 'calendar' || id === 'messages') useUIStore.getState().panelApp === id ? useUIStore.getState().closePanelApp() : useUIStore.getState().openPanelApp(id);
     else if (id === 'music') toggleMusic();
     else if (id === 'settings') openSettingsTab('Display');
     else if (id === 'bluetooth') openSettingsTab('Bluetooth');
@@ -78,27 +86,16 @@ const ControlBar: React.FC = () => {
     else console.log(`Opening from dock: ${id}...`);
   };
 
+  // Knop die het app-menu opent (raster)
+  const menuButton = (
+    <div className="dock-app" onClick={toggleQuickActions} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <LayoutGrid color="#A2A3A5" />
+    </div>
+  );
+
   return (
     <footer className="tsl-control-bar" style={{ position: 'relative', userSelect: 'none' }}>
       
-      {/* If in Edit Mode, show labels above the dock */}
-      {isAppEditMode && (
-         <div style={{ position: 'absolute', top: -20, left: 0, right: 0, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
-            <div style={{ display: 'flex', gap: '60px', color: '#888', fontSize: 'calc(11px * var(--text-scale, 1))', fontWeight: 'bold' }}>
-               <span style={{ position: 'relative' }}>
-                  <span style={{ position: 'absolute', top: '50%', right: '105%', width: '30px', height: '1px', background: '#444' }}></span>
-                  {t('My Apps')}
-                  <span style={{ position: 'absolute', top: '50%', left: '105%', width: '30px', height: '1px', background: '#444' }}></span>
-               </span>
-               <span style={{ position: 'relative' }}>
-                  <span style={{ position: 'absolute', top: '50%', right: '105%', width: '30px', height: '1px', background: '#444' }}></span>
-                  {t('Recent Apps')}
-                  <span style={{ position: 'absolute', top: '50%', left: '105%', width: '30px', height: '1px', background: '#444' }}></span>
-               </span>
-            </div>
-         </div>
-      )}
-
       {/* Left Controls */}
       <div className="control-group">
         <button className="icon-btn" onClick={() => { if(!isAppEditMode) toggleMenu(); }}>
@@ -117,10 +114,40 @@ const ControlBar: React.FC = () => {
       {/* Center: App Dock */}
       <div className="app-dock" style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
         
+        {!isAppEditMode && menuButtonAt === 'left' && menuButton}
+
+        {/* Recent Apps (links, zoals in de video) */}
+        <div style={{ position: 'relative', display: 'flex', gap: '10px', padding: isAppEditMode ? '5px 10px' : '0', opacity: isAppEditMode ? 0.85 : 1 }}>
+           {isAppEditMode && (
+             <div className="dock-group-label"><span>{t('Recent Apps')}</span></div>
+           )}
+           {dockRecents.map(id => (
+              <div 
+                key={id} 
+                className="dock-app" 
+                style={{ width: 'calc(36px * var(--dock-scale, 1))', height: 'calc(36px * var(--dock-scale, 1))', cursor: isAppEditMode ? 'grab' : 'pointer', opacity: isNotInstalled(id) ? 0.4 : 1, touchAction: isAppEditMode ? 'none' : 'auto' }}
+                onClick={() => handleDockAppClick(id)}
+                onPointerDown={(e) => { if (isAppEditMode) pressApp(e, { id, icon: getAppIconUrl(id), longPress: false }); }}
+              >
+                <img 
+                  src={getAppIconUrl(id)} 
+                  alt={id} 
+                  style={{ width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }}
+                  onError={(e) => { e.currentTarget.style.display='none'; }}
+                />
+              </div>
+           ))}
+        </div>
+
+        {/* Tussen Recente apps en Mijn apps: de knop van het app-menu (standaard) of een scheidingslijn */}
+        {!isAppEditMode && menuButtonAt === 'middle' ? menuButton : (
+          <div style={{ width: '1px', height: 'calc(24px * var(--dock-scale, 1))', background: isDarkMode ? '#444' : '#ccc', margin: '0 5px' }}></div>
+        )}
+
         {/* Pinned Apps (My Apps Dropzone) */}
         <div 
           style={{ 
-             display: 'flex', gap: '10px', padding: isAppEditMode ? '5px 10px' : '0', 
+             position: 'relative', display: 'flex', gap: '10px', padding: isAppEditMode ? '5px 10px' : '0', 
              background: isAppEditMode ? (drag?.over?.startsWith('pinned') ? 'rgba(62,106,225,0.35)' : 'rgba(255,255,255,0.1)') : 'transparent',
              borderRadius: '12px', transition: 'background 0.3s',
              minHeight: isAppEditMode ? '40px' : 'auto',
@@ -129,6 +156,9 @@ const ControlBar: React.FC = () => {
           // Neerzetten op de zone = achteraan; op een pictogram = op die plek
           data-drop="pinned"
         >
+           {isAppEditMode && (
+             <div className="dock-group-label"><span>{t('My Apps')}</span></div>
+           )}
            {dockApps.map((id, index) => (
               <div 
                 key={id} 
@@ -148,39 +178,15 @@ const ControlBar: React.FC = () => {
                   onError={(e) => { e.currentTarget.style.display='none'; }}
                 />
                 
-                {/* Red X for removal in Edit Mode */}
+                {/* Bewerkmodus: klein kruisje boven het pictogram (zoals in de video) haalt de app uit My Apps */}
                 {isAppEditMode && (
-                  <div 
+                  <div className="dock-remove"
                      onPointerDown={(e) => e.stopPropagation()}
                      onClick={(e) => { e.stopPropagation(); unpinApp(id); }}
-                     style={{ position: 'absolute', top: -5, right: -5, background: '#E04E3B', color: 'white', borderRadius: '50%', width: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 10 }}
                   >
-                    <X size={10} />
+                    <X size={14} strokeWidth={2.5} />
                   </div>
                 )}
-              </div>
-           ))}
-        </div>
-
-        {/* Separator */}
-        <div style={{ width: '1px', height: 'calc(24px * var(--dock-scale, 1))', background: isDarkMode ? '#444' : '#ccc', margin: '0 5px' }}></div>
-
-        {/* Recent Apps */}
-        <div style={{ display: 'flex', gap: '10px', opacity: isAppEditMode ? 0.7 : 1 }}>
-           {dockRecents.map(id => (
-              <div 
-                key={id} 
-                className="dock-app" 
-                style={{ width: 'calc(36px * var(--dock-scale, 1))', height: 'calc(36px * var(--dock-scale, 1))', cursor: isAppEditMode ? 'grab' : 'pointer', opacity: isNotInstalled(id) ? 0.4 : 1, touchAction: isAppEditMode ? 'none' : 'auto' }}
-                onClick={() => handleDockAppClick(id)}
-                onPointerDown={(e) => { if (isAppEditMode) pressApp(e, { id, icon: getAppIconUrl(id), longPress: false }); }}
-              >
-                <img 
-                  src={getAppIconUrl(id)} 
-                  alt={id} 
-                  style={{ width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }}
-                  onError={(e) => { e.currentTarget.style.display='none'; }}
-                />
               </div>
            ))}
         </div>
@@ -202,12 +208,8 @@ const ControlBar: React.FC = () => {
            </div>
         )}
 
-        {/* Quick Actions Launcher Button */}
-        {!isAppEditMode && (
-           <div className="dock-app" onClick={toggleQuickActions} style={{cursor: 'pointer', marginLeft: '10px'}}>
-             <LayoutGrid color="#A2A3A5" />
-           </div>
-        )}
+        {/* Knop van het app-menu rechts (Instellingen > Scherm > Knop app-menu) */}
+        {!isAppEditMode && menuButtonAt === 'right' && menuButton}
       </div>
 
       {/* Right Controls */}
@@ -231,7 +233,7 @@ const ControlBar: React.FC = () => {
               onClick={toggleVolume}
               aria-label="Volume"
             >
-              {volume === 0 ? <VolumeX size={24} /> : <Volume2 size={24} />}
+              <VolumeLevelIcon volume={volume} max={VOLUME_MAX} size={24} />
             </button>
             <VolumePopup anchorRef={volumeAnchorRef} />
           </div>

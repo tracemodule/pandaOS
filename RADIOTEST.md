@@ -146,3 +146,31 @@ het startscherm van de fabrikant kiezen.
 
 Daarmee schrijven we thuis de vertaling van de CAN-signalen naar `PandaOS.setCarState()` (stap 5 van "Nog open"
 in de overdracht).
+
+---
+
+## Testen vanaf de laptop met `tools/pandaos.mjs` (vanaf 1.3.9)
+
+Hiermee kun je vanaf de laptop alles in PandaOS nadoen en controleren, zonder dat de auto iets hoeft te doen.
+Nodig: **Node.js 22 of nieuwer** op de laptop (https://nodejs.org, LTS) en de radio verbonden via adb (USB of wifi-adb).
+Alle opdrachten in de map `pandaOS`:
+
+1. **Klaarzetten (eenmalig):** `node tools/pandaos.mjs setup`
+   Zet alle rechten en Android-instellingen (boven andere apps, vrije vensters, meldingen-toegang). Staat er
+   "HERSTART de radio", herstart dan één keer.
+2. **Controleren:** `node tools/pandaos.mjs doctor`. Elke regel met ✗ is iets dat nog niet klopt.
+3. **APK's van de fabrikant ophalen** (nodig om klank/balans van de radio zelf te kunnen besturen):
+   `node tools/pandaos.mjs apks`. Ze komen in `tools/radio-apks/`. Die map gaat niet naar GitHub; stuur ze ook niet door.
+4. **Testrondje:** `node tools/pandaos.mjs test`. Doet achteruit, lampen, knipperlichten, deur, handrem, tank,
+   temperatuur, volume, equalizer en camera na en zegt per stap geslaagd/mislukt. Daarna alles terug.
+5. **Zelf nadoen** (ook terwijl je rijdt of stilstaat):
+   - `node tools/pandaos.mjs sim lights low` · `sim blinker left` · `sim door fl open` · `sim gear R` · `sim speed 80`
+   - `--hold` erachter houdt de stand vast, ook als de echte auto iets anders meldt; `sim reset` laat alles los.
+   - `node tools/pandaos.mjs can list` en `can <functie> on|off|waarde`: precies de weg die het CAN-kastje gebruikt.
+6. **Klank en bronnen:** `node tools/pandaos.mjs audio` (wat de radio kan en welke bron-apps er zijn) en
+   `audio eq 0 3 1 0 -1 2` (sub, bas, laag-mid, mid, hoog-mid, hoog in dB).
+7. **Camera:** `node tools/pandaos.mjs camera open` / `close`.
+8. **Telefoon en muziek:** verbind de telefoon via Bluetooth met de radio en kijk dan met `bluetooth`, `media` en
+   `sources` (alleen aantallen, nooit namen of nummers).
+9. **Schermafbeelding:** `node tools/pandaos.mjs shot naam` → `tools/radio-shots/` (niet in git; kan persoonlijke
+   gegevens tonen).

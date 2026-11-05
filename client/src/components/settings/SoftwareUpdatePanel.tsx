@@ -52,7 +52,11 @@ const SoftwareUpdatePanel: React.FC = () => {
 
   return (
     <div className="tsl-section">
-      <span className="tsl-title">{t('Software Update')}</span>
+      <div className="tsl-title-row">
+        <span className="tsl-title">{t('Software Update')}</span>
+        {/* Release notes en handleiding (ReleaseNotes.tsx), over de hele Instellingen-pagina */}
+        <button className="tsl-link" onClick={() => window.dispatchEvent(new Event('pandaos-release-notes'))}>{t('Release notes')}</button>
+      </div>
       <div className="tsl-list">
         <div className={`tsl-list-row ${release !== undefined && !hasUpdate ? 'is-active' : ''}`}>
           {release !== undefined && !hasUpdate ? <CheckCircle2 size={22} /> : <Download size={22} />}

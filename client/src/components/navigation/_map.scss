@@ -296,7 +296,8 @@ $top-offset: 64px; // onder de statusbalk
 
   /* --- Donkere modus: donkere kaarten en een gedimde, omgekeerde kaart --- */
   &.dark-mode {
-    .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.85) contrast(0.9); }
+    // PandaOS-kaart donker maken door om te keren; Mapbox heeft een eigen nachtstijl
+    &:not(.is-mapbox) .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.85) contrast(0.9); }
 
     .tsl-nav-search,
     .tsl-nav-results,
@@ -335,3 +336,101 @@ $top-offset: 64px; // onder de statusbalk
   text-align: center;
   pointer-events: none;
 }
+
+
+// Reistijd op de route (tik = die route kiezen)
+.route-time-label {
+  transform: translate(-50%, -50%);
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #171a20;
+  font-weight: 600;
+  font-size: 13px;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+  &.is-active { background: #3e6ae1; color: #ffffff; }
+}
+// Menu onder de drie puntjes van de routesamenvatting
+.summary-more-menu {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid rgba(128, 128, 128, 0.25);
+  button { padding: 12px 16px; border: none; background: none; color: inherit; text-align: left; cursor: pointer; font-size: 14px; }
+}
+
+// Plek op de kaart (MapPlaces.tsx): gekleurd rondje met een wit icoon (SVG)
+.map-place {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  svg { width: 14px; height: 14px; }
+}
+
+// 3D: kaart gekanteld alsof je rijdt (vrij rondkijken en tijdens navigatie)
+.tsl-map-container { overflow: hidden; }
+.tsl-map-container.is-3d-active .map-layer {
+  transform: perspective(900px) rotateX(48deg) scale(1.9);
+  transform-origin: 50% 72%;
+  transition: transform 0.4s ease;
+}
+.tsl-map-container .map-layer { transition: transform 0.4s ease; }
+.map-btn .map-btn-text { font-weight: 700; font-size: 15px; }
+.map-btn.is-active { color: #3e6ae1; }
+
+// Centreren (na wegschuiven)
+.map-recenter {
+  position: absolute;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 18px;
+  border: none;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #171a20;
+  font-weight: 600;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+}
+.tsl-map-container.dark-mode .map-recenter { background: #2b2b2b; color: #ffffff; }
+
+// In-/uitzoomen + Gereed (na een tik op de kaart)
+.map-zoom-controls {
+  position: absolute;
+  right: 16px;
+  bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  z-index: 1000;
+  // Zelfde kaartjes als de 2D/3D-knop
+  .map-btn {
+    width: 56px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 4px;
+    background-color: #ffffff;
+    color: #5c5e62;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    cursor: pointer;
+    &:active { background-color: #ececec; }
+  }
+  .map-zoom-done { height: 40px; border: none; border-radius: 4px; background: #3e6ae1; color: #fff; font-weight: 600; font-size: 14px; cursor: pointer; }
+}
+.tsl-map-container.dark-mode .map-zoom-controls .map-btn { background-color: #2b2b2b; color: #e0e0e0; &:active { background-color: #3a3a3a; } }

@@ -10,6 +10,12 @@ import AndroidWifiPanel from '../../components/settings/AndroidWifiPanel';
 import SoftwareUpdatePanel from '../../components/settings/SoftwareUpdatePanel';
 import WebViewPanel from '../../components/settings/WebViewPanel';
 import HomeScreenPanel from '../../components/settings/HomeScreenPanel';
+import PermissionsPanel from '../../components/settings/PermissionsPanel';
+import TripsPanel from '../../components/settings/TripsPanel';
+import ReleaseNotes from '../../components/settings/ReleaseNotes';
+import { PlacePickerModal } from '../../components/navigation/PlacePicker';
+import { PLACE_KINDS, PLACE_ICONS } from '../../components/navigation/MapPlaces';
+import '../../components/navigation/_map.scss';
 import AndroidBluetoothPanel from '../../components/settings/AndroidBluetoothPanel';
 import TeslaSlider from '../../components/settings/TeslaSlider';
 import Colouriser from '../../components/settings/Colouriser';
@@ -66,7 +72,7 @@ const SettingsApp: React.FC = () => {
     updateDisplaySetting, updateNavigationSetting,
     btDevices, isScanning, btStatusMessage, btRadioOn, startScan, turnOnBluetooth, btDiscoverable, makeDiscoverable,
     btKnownDevices, btConnectedAddress, forgetDevice, connectToDevice, disconnectDevice, isSocketReady,
-    appLinks, updateAppLink, trips, resetTrip, carState, appSettings, updateAppSetting, openCanMonitor
+    appLinks, updateAppLink, carState, appSettings, updateAppSetting, openCanMonitor
   } = useUIStore();
 
   const isDarkMode = getEffectiveTheme(screenMode, vehicleLightsOn) === 'dark';
@@ -76,6 +82,17 @@ const SettingsApp: React.FC = () => {
   const coveredByPandaOS = getPackagesBehindPandaOSIcons(appLinks, installedApps);
   // Settings > Apps: voor welke app de lijst "Andere app" open staat
   const [otherAppFor, setOtherAppFor] = useState<string | null>(null);
+  const [editingToken, setEditingToken] = useState(false); // Mapbox-token invoeren
+  const [editingPlate, setEditingPlate] = useState(false); // kenteken invoeren
+  const [pickingPlace, setPickingPlace] = useState<'home' | 'work' | null>(null); // Navigatie: Thuis/Werk zoeken
+  const [confirmClearDrives, setConfirmClearDrives] = useState(false);
+  // Release notes / handleiding (link bij Software-update), over de hele Instellingen-pagina
+  const [releaseNotesOpen, setReleaseNotesOpen] = useState(false);
+  useEffect(() => {
+    const open = () => setReleaseNotesOpen(true);
+    window.addEventListener('pandaos-release-notes', open);
+    return () => window.removeEventListener('pandaos-release-notes', open);
+  }, []);
   const hasAndroidWifi = typeof (window as any).PandaAndroid?.openWifiSettings === 'function';
 
   // Media-info van Android-apps (Settings > Apps): opnieuw kijken als je terugkomt uit het toegangsscherm van Android
@@ -197,6 +214,8 @@ const SettingsApp: React.FC = () => {
   // --- Instellingen zoeken: het zoekveld gebruikt het PandaOS-toetsenbord; resultaten vervangen de pagina ---
   const [searching, setSearching] = useState(false);
   const [colouriserOpen, setColouriserOpen] = useState<false | 'paint' | 'rims'>(false);
+  // Software > Weergave: Standaard verbergt CAN, CAN-monitor, voertuigprotocol en grafische kwaliteit
+  const advancedMode = useUIStore((st) => (st.displaySettings?.uiMode ?? 'advanced') === 'advanced');
   const [confirmGraphics, setConfirmGraphics] = useState<'High' | 'Low' | null>(null); // Voertuig > Grafische kwaliteit: Ja/Nee
   const [editColor, setEditColor] = useState<{ hex: string; list: 'customPaints' | 'customRims' } | null>(null); // eigen kleur: naam/verwijderen
   const [confirmApplyCar, setConfirmApplyCar] = useState(false); // Geavanceerd > Instellingen van mijn auto: Ja/Nee
@@ -328,6 +347,39 @@ const SettingsApp: React.FC = () => {
                    <IconTiles tiles={paintTiles} value={paint.toLowerCase()} columns={4}
                      onChange={(hex) => updateVehicleSetting('paintColor', hex)} />
                  </div>
+                 {/* Kenteken op de 3D-auto: alleen op deze radio bewaard */}
+                 <div className="tsl-section">
+                   <label className="tsl-switch-row">
+                     <span className="tsl-title" style={{ flex: 1 }}>{t('Licence plate')}</span>
+                     <input type="checkbox" className="tsl-toggle" checked={!vehicleSettings.licensePlateHidden}
+                       onChange={(e) => updateVehicleSetting('licensePlateHidden', !e.target.checked)} />
+                   </label>
+                   {editingPlate ? (
+                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                       <input readOnly className="tsl-input" value={keyboardValue.toUpperCase()} placeholder="XX-123-X" onFocus={() => openKeyboard(keyboardValue)}
+                         style={{ flex: 1, minWidth: 0, height: 40, padding: '0 12px', border: '1px solid var(--tsl-border)', borderRadius: 4,
+                           background: 'transparent', color: 'var(--tsl-text)', fontSize: 'calc(16px * var(--text-scale, 1))' }} />
+                       <button className="tsl-btn is-small" onClick={() => { setEditingPlate(false); closeKeyboard(); }}>{t('Cancel')}</button>
+                       <button className="tsl-btn is-small is-primary" onClick={() => {
+                         updateVehicleSetting('licensePlate', keyboardValue.trim().toUpperCase().slice(0, 10)); setEditingPlate(false); closeKeyboard();
+                       }}>{t('Save')}</button>
+                     </div>
+                   ) : (
+                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                       {vehicleSettings.licensePlate
+                         ? <span className="tsl-plate-preview">{vehicleSettings.licensePlate}</span>
+                         : <span className="tsl-field-text" style={{ flex: 1 }}>{t('No licence plate')}</span>}
+                       <span style={{ flex: 1 }} />
+                       {vehicleSettings.licensePlate && (
+                         <button className="tsl-btn is-small" onClick={() => updateVehicleSetting('licensePlate', '')}>{t('Remove')}</button>
+                       )}
+                       <button className="tsl-btn" onClick={() => { setEditingPlate(true); openKeyboard(vehicleSettings.licensePlate ?? ''); }}>
+                         {t(vehicleSettings.licensePlate ? 'Change' : 'Set')}
+                       </button>
+                     </div>
+                   )}
+                   <small className="tsl-hint">{t('Shown on the 3D car. Saved only on this radio.')}</small>
+                 </div>
                  <div className="tsl-section">
                    <span className="tsl-title">{t('Wheels')}</span>
                    <IconTiles value={vehicleSettings.rimColor.toLowerCase()} onChange={(hex) => updateVehicleSetting('rimColor', hex)} tiles={rimTiles} />
@@ -376,8 +428,8 @@ const SettingsApp: React.FC = () => {
                        { id: 'pandaos', label: t('Of PandaOS'), icon: <Video size={26} /> },
                      ]} />
                  </div>
-                 {/* Grafische kwaliteit van het 3D-model: Snel = geen schaduwen en minder pixels */}
-                 <div className="tsl-section">
+                 {/* Grafische kwaliteit van het 3D-model: Snel = geen schaduwen en minder pixels (alleen in Geavanceerd) */}
+                 {advancedMode && <div className="tsl-section">
                    <span className="tsl-title">{t('Graphics')}</span>
                    {/* Wisselen vraagt eerst om bevestiging (venster met Ja / Nee) */}
                    <IconTiles value={vehicleSettings.graphics ?? 'High'} onChange={(id) => {
@@ -386,7 +438,7 @@ const SettingsApp: React.FC = () => {
                      { id: 'High', label: t('High quality'), icon: <Zap size={26} /> },
                      { id: 'Low', label: t('Fast (no shadows)'), icon: <Zap size={26} /> },
                    ]} />
-                 </div>
+                 </div>}
               </div>
               );
             })()}
@@ -399,11 +451,13 @@ const SettingsApp: React.FC = () => {
                    <span className="tsl-title">{t('Tools')}</span>
                    <IconTiles tiles={[
                      { id: 'apply', label: t('Apply settings of my car'), icon: <CarFront size={26} />, onClick: () => setConfirmApplyCar(true) },
-                     { id: 'can', label: t('CAN monitor'), icon: <Activity size={26} />, onClick: openCanMonitor },
+                     ...(advancedMode ? [{ id: 'can', label: t('CAN monitor'), icon: <Activity size={26} />, onClick: openCanMonitor }] : []),
                      ...(isAndroidLauncher() ? [{ id: 'radio', label: t('Radio settings'), icon: <RadioIcon size={26} />, onClick: () => setRadioSettingsOpen(true) }] : []),
                    ]} />
                  </div>
-                 {/* CAN-bus: kastje <-> radio (merk/type) en auto <-> kastje (voertuigprotocol); gelijk aan de fabrieksinstellingen */}
+                 {/* CAN-bus: kastje <-> radio (merk/type) en auto <-> kastje (voertuigprotocol); gelijk aan de fabrieksinstellingen.
+                     Alleen in Geavanceerd (Software > Weergave); de instellingen blijven gelden. */}
+                 {advancedMode && <>
                  <div className="tsl-section">
                    <span className="tsl-title">{t('CAN box (box ↔ radio)')}</span>
                    <IconTiles value={vehicleSettings.canbox ?? 'radio'} columns={4} onChange={(id) => updateVehicleSetting('canbox', id as CanBox)}
@@ -420,6 +474,7 @@ const SettingsApp: React.FC = () => {
                      ))}
                    </div>
                  </div>
+                 </>}
                  {/* Radio: systeembalk, volumebalk en camera-app van de radio (eerder alleen via de laptop) */}
                  <RadioSystemPanel open={radioSettingsOpen} onClose={() => setRadioSettingsOpen(false)} />
               </div>
@@ -548,6 +603,19 @@ const SettingsApp: React.FC = () => {
                      <button className="tsl-btn" onClick={() => updateDisplaySetting('dockHeight', 64)}>{t('Default')}</button>
                    </div>
                  </div>
+                 {/* Snelheid: GPS is de echte snelheid; het dashboard wijst een paar km/h te hoog aan */}
+                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                   <label className="tsl-title">{t('Speed like dashboard')}</label>
+                   <small className="tsl-hint">{t('GPS shows your real speed. The dashboard of the car shows a few km/h more.')}</small>
+                   <div className="tsl-slider-row">
+                     <TeslaSlider
+                       value={displaySettings?.speedometerOffset ?? 0} min={0} max={10} step={1}
+                       format={(v) => `+${v} km/h`}
+                       onChange={(v) => updateDisplaySetting('speedometerOffset', v)}
+                     />
+                     <button className="tsl-btn" onClick={() => updateDisplaySetting('speedometerOffset', 0)}>{t('Default')}</button>
+                   </div>
+                 </div>
                  {/* App-menu (raster in de dock): direct verschijnen/verdwijnen of omhoog schuiven */}
                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                    <label className="tsl-title">{t('App menu')}</label>
@@ -555,6 +623,25 @@ const SettingsApp: React.FC = () => {
                      {(['instant', 'slide'] as const).map((mode) => (
                        <button key={mode} className={(displaySettings?.appMenuAnimation ?? 'instant') === mode ? 'is-active' : ''}
                          onClick={() => updateDisplaySetting('appMenuAnimation', mode)}>{t(mode === 'instant' ? 'Show directly' : 'Slide up')}</button>
+                     ))}
+                   </div>
+                 </div>
+                 {/* Dock: hoeveel recente apps (1-4) en waar de knop van het app-menu staat */}
+                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                   <label className="tsl-title">{t('Recent apps in the dock')}</label>
+                   <div className="tsl-segmented">
+                     {[1, 2, 3, 4].map((n) => (
+                       <button key={n} className={(displaySettings?.dockRecentCount ?? 2) === n ? 'is-active' : ''}
+                         onClick={() => updateDisplaySetting('dockRecentCount', n)}>{n}</button>
+                     ))}
+                   </div>
+                 </div>
+                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                   <label className="tsl-title">{t('App menu button')}</label>
+                   <div className="tsl-segmented">
+                     {(['left', 'middle', 'right'] as const).map((pos) => (
+                       <button key={pos} className={(displaySettings?.dockMenuButton ?? 'middle') === pos ? 'is-active' : ''}
+                         onClick={() => updateDisplaySetting('dockMenuButton', pos)}>{t(pos === 'left' ? 'Left' : pos === 'middle' ? 'Middle' : 'Right')}</button>
                      ))}
                    </div>
                  </div>
@@ -597,6 +684,16 @@ const SettingsApp: React.FC = () => {
             {/* --- SAFETY: snelheidswaarschuwing (snelheid via GPS; de maximumsnelheid van de weg komt uit kaartgegevens) --- */}
             {activeTab === 'Safety' && (
               <div className="settings-list" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                 {/* Vaste flitspalen en trajectcontroles (OpenStreetMap): op de kaart en een waarschuwing bij nadering */}
+                 <label className="tsl-switch-row">
+                   <input type="checkbox" className="tsl-toggle" checked={safetySettings.speedCameraWarning !== false}
+                     onChange={(e) => updateSafetySetting('speedCameraWarning', e.target.checked)} />
+                   <div className="tsl-switch-text">
+                     <span className="tsl-field-text">{t('Speed cameras')}</span>
+                     <small className="tsl-hint">{t('Fixed speed cameras and section controls on the map, with a warning when you approach one. Mobile checks are not included.')}</small>
+                   </div>
+                 </label>
+
                  <label className="tsl-switch-row">
                    <input type="checkbox" className="tsl-toggle" checked={safetySettings.speedWarning}
                      onChange={(e) => updateSafetySetting('speedWarning', e.target.checked)} />
@@ -633,6 +730,127 @@ const SettingsApp: React.FC = () => {
             {/* --- NAVIGATION TAB --- */}
             {activeTab === 'Navigation' && (
               <div className="settings-list" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                {/* Thuis en Werk (ook in de kaart in te stellen); gebruikt door de kaart en het kaartje Navigeren */}
+                {(['home', 'work'] as const).map((place) => (
+                  <div key={place} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <label className="tsl-title">{t(place === 'home' ? 'Home address' : 'Work address')}</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <span className="tsl-field-text" style={{ flex: 1 }}>{navigationSettings[place]?.name ?? t('Not set')}</span>
+                      {navigationSettings[place] && (
+                        <button className="tsl-btn is-small" onClick={() => updateNavigationSetting(place, null)}>{t('Remove')}</button>
+                      )}
+                      <button className="tsl-btn" onClick={() => setPickingPlace(place)}>{t(navigationSettings[place] ? 'Change' : 'Set')}</button>
+                    </div>
+                  </div>
+                ))}
+                {pickingPlace && <PlacePickerModal place={pickingPlace} onClose={() => setPickingPlace(null)} />}
+
+                {/* Kaart: PandaOS (standaard) of Mapbox met een eigen token (alleen op deze radio bewaard) */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <label className="tsl-title">{t('Map')}</label>
+                  <div className="tsl-segmented is-wide">
+                    {([['pandaos', 'PandaOS'], ['mapbox', 'Mapbox']] as const).map(([id, label]) => (
+                      <button key={id} className={(navigationSettings.mapProvider ?? 'pandaos') === id ? 'is-active' : ''}
+                        onClick={() => updateNavigationSetting('mapProvider', id)}>{label}</button>
+                    ))}
+                  </div>
+                  {navigationSettings.mapProvider === 'mapbox' && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      {editingToken ? (
+                        <>
+                          <input readOnly className="tsl-input" value={keyboardValue} placeholder="pk.…" onFocus={() => openKeyboard(keyboardValue)}
+                            style={{ flex: 1, minWidth: 0, height: 40, padding: '0 12px', border: '1px solid var(--tsl-border)', borderRadius: 4,
+                              background: 'transparent', color: 'var(--tsl-text)' }} />
+                          <button className="tsl-btn is-small" onClick={() => { setEditingToken(false); closeKeyboard(); }}>{t('Cancel')}</button>
+                          <button className="tsl-btn is-small is-primary" onClick={() => {
+                            updateNavigationSetting('mapboxToken', keyboardValue.trim()); setEditingToken(false); closeKeyboard();
+                          }}>{t('Save')}</button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="tsl-field-text" style={{ flex: 1 }}>
+                            {navigationSettings.mapboxToken ? `${t('Own token')}: ${navigationSettings.mapboxToken.slice(0, 6)}…${navigationSettings.mapboxToken.slice(-4)}` : t('Standard PandaOS token')}
+                          </span>
+                          {navigationSettings.mapboxToken && (
+                            <button className="tsl-btn is-small" onClick={() => updateNavigationSetting('mapboxToken', '')}>{t('Standard')}</button>
+                          )}
+                          <button className="tsl-btn" onClick={() => { setEditingToken(true); openKeyboard(navigationSettings.mapboxToken ?? ''); }}>
+                            {t('Own token')}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                  {navigationSettings.mapProvider === 'mapbox' && (
+                    <small className="tsl-hint">{t('Mapbox map with traffic jams. With an invalid token PandaOS uses its own map.')}</small>
+                  )}
+                </div>
+
+                {/* Brandstof van de auto (tankstations op de kaart) */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <label className="tsl-title">{t('Fuel')}</label>
+                  <div className="tsl-segmented is-wide">
+                    {([['euro95', 'Euro 95'], ['e10', 'E10'], ['super98', 'Super 98'], ['diesel', 'Diesel'], ['lpg', 'LPG'], ['electric', 'Electric']] as const).map(([id, label]) => (
+                      <button key={id} className={(navigationSettings.fuelType ?? 'euro95') === id ? 'is-active' : ''}
+                        onClick={() => {
+                          updateNavigationSetting('fuelType', id);
+                          // Elektrisch: laadpalen in plaats van tankstations op de kaart
+                          const places = new Set(navigationSettings.places ?? []);
+                          if (places.has('fuel') || places.has('charging')) {
+                            places.delete(id === 'electric' ? 'fuel' : 'charging'); places.add(id === 'electric' ? 'charging' : 'fuel');
+                            updateNavigationSetting('places', [...places]);
+                          }
+                        }}>{t(label)}</button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Handige plekken op de PandaOS-kaart (OpenStreetMap), elk aan/uit */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <label className="tsl-title">{t('On the map')}</label>
+                  <div className="tsl-list">
+                    {PLACE_KINDS.map((kind) => (
+                      <label key={kind.id} className="tsl-switch-row">
+                        <div className="tsl-switch-text" style={{ flex: 1 }}>
+                          <span className="tsl-field-text" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <span className="map-place" style={{ background: kind.color }} dangerouslySetInnerHTML={{ __html: PLACE_ICONS[kind.id] }} />
+                            {t(kind.label)}</span>
+                        </div>
+                        <input type="checkbox" className="tsl-toggle" checked={(navigationSettings.places ?? []).includes(kind.id)}
+                          onChange={(e) => {
+                            const places = new Set(navigationSettings.places ?? []);
+                            if (e.target.checked) places.add(kind.id); else places.delete(kind.id);
+                            updateNavigationSetting('places', [...places]);
+                          }} />
+                      </label>
+                    ))}
+                  </div>
+                  <small className="tsl-hint">{t('Shown on the PandaOS map from street level, from OpenStreetMap.')}</small>
+                </div>
+
+                {/* Ritten: opnemen aan/uit en alle ritten verwijderen (Instellingen > Ritten) */}
+                <label className="tsl-switch-row">
+                  <div className="tsl-switch-text" style={{ flex: 1 }}>
+                    <span className="tsl-field-text">{t('Record drives')}</span>
+                    <small className="tsl-hint">{t('Saves the route, distance and speeds of every drive (Settings > Trips).')}</small>
+                  </div>
+                  <input type="checkbox" className="tsl-toggle" checked={navigationSettings.recordDrives !== false}
+                    onChange={(e) => updateNavigationSetting('recordDrives', e.target.checked)} />
+                </label>
+                <button className="tsl-btn" style={{ alignSelf: 'flex-start' }} onClick={() => setConfirmClearDrives(true)}>{t('Delete all drives')}</button>
+                {confirmClearDrives && (
+                  <div className="tsl-modal-backdrop" onClick={() => setConfirmClearDrives(false)}>
+                    <div className="tsl-modal" style={{ width: 420 }} onClick={(e) => e.stopPropagation()}>
+                      <span className="tsl-modal-title">{t('Delete all drives?')}</span>
+                      <small className="tsl-hint">{t('All saved drives and their routes are removed. This cannot be undone.')}</small>
+                      <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                        <button className="tsl-btn" onClick={() => setConfirmClearDrives(false)}>{t('No')}</button>
+                        <button className="tsl-btn is-primary" onClick={() => { useUIStore.getState().clearDrives(); setConfirmClearDrives(false); }}>{t('Yes')}</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                  <div className="tsl-section">
                    <span className="tsl-title">{t('Navigation Volume')}</span>
                    <TeslaSlider value={Number(navigationSettings.volume)} min={0} max={100} step={1}
@@ -660,69 +878,17 @@ const SettingsApp: React.FC = () => {
             )}
 
             {/* --- TRIPS: ritcomputer via GPS (huidige rit, Trip A, Trip B) --- */}
-            {activeTab === 'Trips' && (() => {
-              const useMiles = displaySettings?.distance === 'Miles';
-              const unit = useMiles ? 'mi' : 'km';
-              const speedUnit = useMiles ? 'mph' : 'km/h';
-              const toUnit = (km: number) => (useMiles ? km / 1.609344 : km);
-              const formatDriveTime = (s: number) => `${Math.floor(s / 3600)}:${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}`;
-              return (
-                <div className="settings-list" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                  <small className="tsl-hint">{t('Measured with GPS. Counts only while the car is moving.')}</small>
-                  {([['current', 'Current Drive'], ['tripA', 'Trip A'], ['tripB', 'Trip B']] as const).map(([key, title], i) => {
-                    const trip = trips[key];
-                    const avgKmh = trip.driveTime > 0 ? (trip.distance / 1000) / (trip.driveTime / 3600) : 0;
-                    return (
-                      <React.Fragment key={key}>
-                        {i > 0 && <hr className="tsl-divider" />}
-                        <div className="tsl-section">
-                          <div className="tsl-title-row">
-                            <span className="tsl-title">{t(title)}</span>
-                            {key !== 'current' && <button className="tsl-link" onClick={() => resetTrip(key)}>{t('Reset')}</button>}
-                          </div>
-                          <div className="tsl-list">
-                            {[
-                              ['Distance', `${toUnit(trip.distance / 1000).toFixed(1)} ${unit}`],
-                              ['Drive Time', formatDriveTime(trip.driveTime)],
-                              ['Average Speed', `${Math.round(toUnit(avgKmh))} ${speedUnit}`],
-                              ['Top Speed', `${Math.round(toUnit(trip.maxSpeed))} ${speedUnit}`],
-                              ...(key !== 'current' ? [['Since', new Date(trip.startedAt).toLocaleDateString(displaySettings.language === 'nl' ? 'nl-NL' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric' })]] : []),
-                            ].map(([label, value]) => (
-                              <div key={label} className="tsl-list-row">
-                                <span className="tsl-field-text" style={{ flex: 1 }}>{t(label)}</span>
-                                <span className="tsl-hint">{value}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </React.Fragment>
-                    );
-                  })}
-                </div>
-              );
-            })()}
+            {/* --- RITTEN: opgenomen ritten met kaart (TripsPanel) --- */}
+            {activeTab === 'Trips' && (
+              <div className="settings-list" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                <TripsPanel />
+              </div>
+            )}
 
             {/* --- APPS TAB: per app aan/uit en welke app hij opent --- */}
             {activeTab === 'Apps' && (
               <div className="settings-list" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                {/* Startscherm: PandaOS of het scherm van de radio (alleen op de radio) */}
-                {isAndroidLauncher() && <><HomeScreenPanel /><hr className="tsl-divider" /></>}
                 <small className="tsl-hint">{t('Choose which app each PandaOS app opens. On the radio, your installed Android apps appear here.')}</small>
-                {/* Alleen op de radio: toegang om te zien wat er speelt in Spotify, YouTube enz. (mediakaart en Music) */}
-                {canAskMediaAccess && (
-                  <div className="tsl-section">
-                    <span className="tsl-field-text">{t('Media info from Android apps')}</span>
-                    {hasMediaAccess ? (
-                      <small className="tsl-hint">{t('On: PandaOS shows and controls what is playing in your Android apps.')}</small>
-                    ) : (
-                      <>
-                        <button className="tsl-btn is-primary" style={{ alignSelf: 'flex-start' }}
-                          onClick={() => androidBridge.openMediaAccessSettings()}>{t('Allow access')}</button>
-                        <small className="tsl-hint">{t('Turn on PandaOS in the Android screen that opens, then come back.')}</small>
-                      </>
-                    )}
-                  </div>
-                )}
                 {LINKABLE_APPS.map((app) => {
                   const link = getAppLink(appLinks, app.id, installedApps);
                   const choices = getChoices(app, installedApps, link.target);
@@ -800,47 +966,7 @@ const SettingsApp: React.FC = () => {
                   );
                 })}
 
-                {/* Toetsenbord in Android-apps (Chrome, YouTube ...): het PandaOS-toetsenbord of dat van Android */}
-                {isAndroidLauncher() && (
-                  <div className="tsl-section">
-                    <span className="tsl-title">{t('Keyboard')}</span>
-                    {keyboardState?.default ? (
-                      <small className="tsl-hint">{t('The PandaOS keyboard is used in all apps.')}</small>
-                    ) : (
-                      <>
-                        <button className="tsl-btn is-primary" style={{ alignSelf: 'flex-start' }}
-                          onClick={() => { (window as any).PandaAndroid?.usePandaKeyboard(); setTimeout(readKeyboardState, 800); }}>
-                          {t('Use PandaOS keyboard')}
-                        </button>
-                        <small className="tsl-hint">
-                          {keyboardState?.enabled
-                            ? t('Choose "PandaOS-toetsenbord" in the list that opens.')
-                            : t('Turn on "PandaOS-toetsenbord" in the Android screen that opens, come back and tap the button again.')}
-                        </small>
-                      </>
-                    )}
-                  </div>
-                )}
 
-                {/* Paneel bij omlaag vegen vanaf de bovenrand: PandaOS of Android */}
-                {isAndroidLauncher() && (
-                  <div className="tsl-section">
-                    <span className="tsl-title">{t('Panel')}</span>
-                    <div className="tsl-segmented">
-                      {(['pandaos', 'android'] as const).map((choice) => (
-                        <button key={choice} className={(appSettings.panel ?? 'pandaos') === choice ? 'is-active' : ''}
-                          onClick={() => updateAppSetting('panel', choice)}>{choice === 'pandaos' ? 'PandaOS' : 'Android'}</button>
-                      ))}
-                    </div>
-                    <small className="tsl-hint">
-                      {(appSettings.panel ?? 'pandaos') === 'android'
-                        ? t('Swiping down from the top opens the Android panel.')
-                        : (window as any).PandaAndroid?.isDeviceOwner?.()
-                          ? t('Swiping down from the top opens the PandaOS panel. The Android panel is turned off.')
-                          : t('Swiping down from the top opens the PandaOS panel. To turn off the Android panel completely, PandaOS must be device owner (once via ADB, see the handover document).')}
-                    </small>
-                  </div>
-                )}
 
                 {/* Overige Android-apps van de radio: aan = zichtbaar in het app-menu, uit = verborgen */}
                 {/* Apps die al achter een PandaOS-pictogram zitten (bijv. Calendar) hebben hierboven hun eigen schakelaar */}
@@ -865,6 +991,70 @@ const SettingsApp: React.FC = () => {
               </div>
             )}
 
+            {/* --- RECHTEN: alle rechten van PandaOS, startscherm, toetsenbord en paneel (Apps bevat alleen apps) --- */}
+            {activeTab === 'Permissions' && (
+              <div className="settings-list" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                {/* Startscherm: PandaOS of het scherm van de radio (alleen op de radio) */}
+                {isAndroidLauncher() && <><HomeScreenPanel /><hr className="tsl-divider" /></>}
+                <PermissionsPanel />
+                {/* Toetsenbord in Android-apps (Chrome, YouTube ...): het PandaOS-toetsenbord of dat van Android */}
+                {isAndroidLauncher() && (
+                  <div className="tsl-section">
+                    <span className="tsl-title">{t('Keyboard')}</span>
+                    {keyboardState?.default ? (
+                      <small className="tsl-hint">{t('The PandaOS keyboard is used in all apps.')}</small>
+                    ) : (
+                      <>
+                        <button className="tsl-btn is-primary" style={{ alignSelf: 'flex-start' }}
+                          onClick={() => { (window as any).PandaAndroid?.usePandaKeyboard(); setTimeout(readKeyboardState, 800); }}>
+                          {t('Use PandaOS keyboard')}
+                        </button>
+                        <small className="tsl-hint">
+                          {keyboardState?.enabled
+                            ? t('Choose "PandaOS-toetsenbord" in the list that opens.')
+                            : t('Turn on "PandaOS-toetsenbord" in the Android screen that opens, come back and tap the button again.')}
+                        </small>
+                      </>
+                    )}
+                  </div>
+                )}
+                {/* Paneel bij omlaag vegen vanaf de bovenrand: PandaOS of Android */}
+                {isAndroidLauncher() && (
+                  <div className="tsl-section">
+                    <span className="tsl-title">{t('Panel')}</span>
+                    <div className="tsl-segmented">
+                      {(['pandaos', 'android'] as const).map((choice) => (
+                        <button key={choice} className={(appSettings.panel ?? 'pandaos') === choice ? 'is-active' : ''}
+                          onClick={() => updateAppSetting('panel', choice)}>{choice === 'pandaos' ? 'PandaOS' : 'Android'}</button>
+                      ))}
+                    </div>
+                    <small className="tsl-hint">
+                      {(appSettings.panel ?? 'pandaos') === 'android'
+                        ? t('Swiping down from the top opens the Android panel.')
+                        : (window as any).PandaAndroid?.isDeviceOwner?.()
+                          ? t('Swiping down from the top opens the PandaOS panel. The Android panel is turned off.')
+                          : t('Swiping down from the top opens the PandaOS panel. To turn off the Android panel completely, PandaOS must be device owner (once via ADB, see the handover document).')}
+                    </small>
+                  </div>
+                )}
+                {/* Alleen op de radio: toegang om te zien wat er speelt in Spotify, YouTube enz. (mediakaart en Music) */}
+                {canAskMediaAccess && (
+                  <div className="tsl-section">
+                    <span className="tsl-field-text">{t('Media info from Android apps')}</span>
+                    {hasMediaAccess ? (
+                      <small className="tsl-hint">{t('On: PandaOS shows and controls what is playing in your Android apps.')}</small>
+                    ) : (
+                      <>
+                        <button className="tsl-btn is-primary" style={{ alignSelf: 'flex-start' }}
+                          onClick={() => androidBridge.openMediaAccessSettings()}>{t('Allow access')}</button>
+                        <small className="tsl-hint">{t('Turn on PandaOS in the Android screen that opens, then come back.')}</small>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* --- SOFTWARE TAB --- */}
             {activeTab === 'Software' && (
               <div className="settings-list" style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
@@ -873,6 +1063,19 @@ const SettingsApp: React.FC = () => {
 
                  {/* Software-update via GitHub Releases (toont ook de huidige versie) */}
                  <SoftwareUpdatePanel />
+
+                {/* Weergave: Standaard of Geavanceerd. Standaard verbergt CAN-instellingen, de CAN-monitor, het voertuigprotocol
+                    en de grafische kwaliteit; alles blijft werken zoals ingesteld */}
+                <div className="tsl-section">
+                  <span className="tsl-title">{t('Settings view')}</span>
+                  <div className="tsl-segmented">
+                    {(['standard', 'advanced'] as const).map((mode) => (
+                      <button key={mode} className={(displaySettings?.uiMode ?? 'advanced') === mode ? 'is-active' : ''}
+                        onClick={() => updateDisplaySetting('uiMode', mode)}>{t(mode === 'standard' ? 'Standard' : 'Advanced')}</button>
+                    ))}
+                  </div>
+                  <small className="tsl-hint">{t('Standard hides the CAN settings, CAN monitor, vehicle protocol and graphics quality. They keep working.')}</small>
+                </div>
 
                  {/* WebView van de radio: versie en bijwerken (alleen op de radio) */}
                  {isAndroidLauncher() && <WebViewPanel />}
@@ -904,6 +1107,17 @@ const SettingsApp: React.FC = () => {
             {/* --- BLUETOOTH TAB --- */}
             {/* Op de radio: eigen Bluetooth-scherm op de Bluetooth van Android (geen PandaOS-server) */}
             {activeTab === 'Bluetooth' && isAndroidLauncher() && <AndroidBluetoothPanel />}
+            {/* Contacten: standaard alleen van de telefoon (Bluetooth); die van een Google-account op de radio alleen als je dat kiest */}
+            {activeTab === 'Bluetooth' && isAndroidLauncher() && (
+              <label className="tsl-switch-row" style={{ marginTop: 20 }}>
+                <div className="tsl-switch-text" style={{ flex: 1 }}>
+                  <span className="tsl-field-text">{t('Contacts from Google account')}</span>
+                  <small className="tsl-hint">{t('Off: only the contacts of your phone.')}</small>
+                </div>
+                <input type="checkbox" className="tsl-toggle" checked={!!appSettings.contactsFromGoogle}
+                  onChange={(e) => updateAppSetting('contactsFromGoogle', e.target.checked)} />
+              </label>
+            )}
 
             {/* Laptop/Pi: Bluetooth via de PandaOS-server */}
             {activeTab === 'Bluetooth' && !isAndroidLauncher() && (
@@ -1059,7 +1273,7 @@ const SettingsApp: React.FC = () => {
               </div>
             )}
 
-            {!['Vehicle', 'Advanced', 'Bluetooth', 'Display', 'Safety', 'Navigation', 'Wi-Fi', 'Software', 'Maintenance', 'Trips', 'Apps'].includes(activeTab) && (
+            {!['Vehicle', 'Advanced', 'Bluetooth', 'Display', 'Safety', 'Navigation', 'Wi-Fi', 'Software', 'Maintenance', 'Trips', 'Apps', 'Permissions'].includes(activeTab) && (
               <>
                 <div className="settings-section-title" style={{ fontSize: 'calc(11px * var(--text-scale, 1))', textTransform: 'uppercase', color: 'var(--tsl-muted)', fontWeight: 'bold', marginBottom: '16px' }}>HIGHLIGHTED FEATURES</div>
                 <div className="settings-row" style={{ padding: '20px 0', borderBottom: `1px solid var(--tsl-border)` }}>
@@ -1136,6 +1350,7 @@ const SettingsApp: React.FC = () => {
       )}
 
       {/* Bevestigen: grafische kwaliteit wisselen */}
+      {releaseNotesOpen && <ReleaseNotes onClose={() => setReleaseNotesOpen(false)} />}
       {confirmGraphics && (
         <div className="tsl-modal-backdrop" onClick={() => setConfirmGraphics(null)}>
           <div className="tsl-modal" style={{ width: 420 }} onClick={(e) => e.stopPropagation()}>

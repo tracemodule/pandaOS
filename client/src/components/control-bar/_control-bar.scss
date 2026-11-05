@@ -70,62 +70,17 @@
   }
 
   /* Verticale volume-popup (Tesla-stijl), net boven de bar en gecentreerd op het speaker-icoon */
+  // Plek van de volumebalk: boven de dock, rechts uitgelijnd met de volumeknoppen
   .tsl-volume-popup {
     position: absolute;
     /* 32px = afstand van speaker tot bovenrand bar ((88 - 24) / 2), plus 12px ruimte */
     bottom: calc(100% + 44px);
-    left: 50%;
-    transform: translateX(-50%);
-    width: 64px;
-    height: 220px;
-    padding: 14px 0 16px;
-    border-radius: 8px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 12px;
+    right: -48px;
+    width: 440px;
+    height: 64px;
     z-index: 1000;
     touch-action: none;
     animation: tsl-volume-popup-in 0.15s ease-out;
-
-    &.is-light {
-      background: #f0f0f0;
-      color: #171a20;
-      .volume-popup-track { background: #d0d1d2; }
-    }
-
-    &.is-dark {
-      background: #414141;
-      color: #ffffff;
-      .volume-popup-track { background: #757575; }
-    }
-
-    .volume-popup-value {
-      font-size: calc(18px * var(--text-scale, 1));
-      font-weight: 500;
-      line-height: 1;
-      font-variant-numeric: tabular-nums;
-    }
-
-    .volume-popup-track {
-      position: relative;
-      flex: 1;
-      width: 24px;
-      border-radius: 6px;
-      overflow: hidden;
-      cursor: pointer;
-      touch-action: none;
-    }
-
-    .volume-popup-fill {
-      position: absolute;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: #005aff;
-      pointer-events: none;
-    }
   }
 
   /* Het middengedeelte (App dock) */
@@ -166,6 +121,113 @@
 }
 
 @keyframes tsl-volume-popup-in {
-  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
-  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+// Liggende volumebalk (VolumeBar.tsx): boven de dock en boven andere apps
+.tsl-volume-bar {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px 0 10px;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+
+  &.is-light {
+    background: #f0f0f0;
+    color: #171a20;
+    .volume-bar-track { background: #d0d1d2; }
+    .volume-bar-settings { background: rgba(0, 0, 0, 0.06); }
+  }
+
+  &.is-dark {
+    background: #414141;
+    color: #ffffff;
+    .volume-bar-track { background: #757575; }
+    .volume-bar-settings { background: rgba(255, 255, 255, 0.08); }
+  }
+
+  .volume-bar-settings {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border: none;
+    border-radius: 8px;
+    color: inherit;
+    cursor: pointer;
+  }
+
+  .volume-bar-track {
+    position: relative;
+    flex: 1;
+    height: 24px;
+    border-radius: 6px;
+    overflow: hidden;
+    cursor: pointer;
+    touch-action: none;
+  }
+
+  .volume-bar-fill {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    background: #005aff;
+    pointer-events: none;
+  }
+
+  .volume-bar-value {
+    flex: none;
+    width: 32px; // vast: de balk mag niet verspringen tussen 9 en 10
+    text-align: right;
+    font-size: calc(18px * var(--text-scale, 1));
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+}
+// Bewerkmodus van de dock (zoals in de video, 10:56): label boven elke groep met een lijntje links en rechts
+.dock-group-label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 6px);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+  color: #9a9a9a;
+  font-size: calc(11px * var(--text-scale, 1));
+  font-weight: 600;
+  white-space: nowrap;
+
+  &::before, &::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: currentColor;
+    opacity: 0.5;
+  }
+}
+
+// Kruisje boven een app in My Apps (bewerkmodus)
+.dock-remove {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 2px);
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  color: #ffffff;
+  cursor: pointer;
+  z-index: 10;
 }

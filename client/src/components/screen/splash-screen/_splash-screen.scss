@@ -173,3 +173,17 @@
   from { transform: translateY(0); }
   to { transform: translateY(70vh); }
 }
+
+
+// Knop boven het app-menu: Customise / Done (zoals in de video)
+.qa-customise {
+  padding: 8px 26px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(30, 30, 30, 0.92);
+  color: #ffffff;
+  font-weight: 600;
+  font-size: calc(13px * var(--text-scale, 1));
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}

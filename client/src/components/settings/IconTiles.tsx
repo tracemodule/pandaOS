@@ -4,7 +4,8 @@
 // onLongPress: lang indrukken (0,6 s), bijv. om een eigen kleur te hernoemen of te verwijderen.
 import React, { useRef } from 'react';
 
-export type IconTile = { id: string; label: string; icon: React.ReactNode; onClick?: () => void; onLongPress?: () => void };
+// active: zelf aangeven of dit vak aan staat (voor aan/uit-vakken waarvan er meer tegelijk aan kunnen)
+export type IconTile = { id: string; label: string; icon: React.ReactNode; active?: boolean; onClick?: () => void; onLongPress?: () => void };
 
 const LONG_PRESS_MS = 600;
 
@@ -33,7 +34,7 @@ const Tile: React.FC<{ tile: IconTile; active: boolean; onChange?: (id: string) 
 const IconTiles: React.FC<{ tiles: IconTile[]; value?: string; onChange?: (id: string) => void; columns?: number }> =
   ({ tiles, value, onChange, columns = 5 }) => (
     <div className="tsl-icon-tiles" style={{ gridTemplateColumns: `repeat(${Math.min(tiles.length, columns)}, 1fr)` }}>
-      {tiles.map((tile) => <Tile key={tile.id} tile={tile} active={value === tile.id} onChange={onChange} />)}
+      {tiles.map((tile) => <Tile key={tile.id} tile={tile} active={tile.active ?? value === tile.id} onChange={onChange} />)}
     </div>
   );
 

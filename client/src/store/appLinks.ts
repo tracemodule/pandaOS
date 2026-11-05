@@ -42,6 +42,8 @@ export interface LinkableApp {
   // Opent altijd eerst de PandaOS-versie in het halve scherm; de gekoppelde Android-app via een knop
   // "Volledig scherm" (Nav: PandaOS-kaart, Google Maps/Waze volledig scherm)
   panelFirst?: boolean;
+  // Android-app half openen (venster rechts naast de auto), met een knop voor volledig scherm (Nav, Energy)
+  halfScreen?: boolean;
 }
 
 export const PANDAOS_TARGET = 'pandaos';
@@ -106,7 +108,7 @@ export const isAndroidAppVisible = (links: Record<string, AppLink>, pkg: string)
 
 export const LINKABLE_APPS: LinkableApp[] = [
   // --- Android-apps: op de radio altijd de echte app; niet geïnstalleerd = Play Store ---
-  { id: 'spotify', name: 'Spotify', icon: '/app-icons/spotify.svg', preferAndroid: true, androidOnly: true,
+  { id: 'spotify', name: 'Spotify', icon: '/app-icons/spotify.svg', preferAndroid: true, androidOnly: true, halfScreen: true,
     storePackage: 'com.spotify.music', options: [
       { id: 'spotify-android', name: 'Spotify', package: 'com.spotify.music' },
     ] },
@@ -120,7 +122,7 @@ export const LINKABLE_APPS: LinkableApp[] = [
       { id: 'netflix-android', name: 'Netflix', package: 'com.netflix.mediaclient' },
     ] },
   // Energy (tankpictogram): brandstofprijzen en tankstations
-  { id: 'energy', name: 'Energy', icon: '/app-icons/energy.svg', preferAndroid: true, androidOnly: true, allowOther: true,
+  { id: 'energy', name: 'Energy', icon: '/app-icons/energy.svg', preferAndroid: true, androidOnly: true, allowOther: true, halfScreen: true,
     storePackage: 'com.themobilecompany.Onderweg', options: [
       { id: 'anwb-onderweg', name: 'ANWB Onderweg', package: 'com.themobilecompany.Onderweg' },
     ] },
@@ -130,12 +132,12 @@ export const LINKABLE_APPS: LinkableApp[] = [
     detect: /carplay|zlink|autokit|carlink|cplink|autolink|tlink|smartlink|easyconnect|phonelink/i, options: [] },
 
   // --- Android-apps die je alleen ziet als ze geïnstalleerd zijn ---
-  { id: 'calendar', name: 'Calendar', icon: '/app-icons/calendar.svg', preferAndroid: true, androidOnly: true,
-    hideWhenMissing: true, allowOther: true, options: [
+  // Agenda, Berichten en Contacten: standaard de PandaOS-app met de gegevens van je telefoon; een Android-app kan ook
+  { id: 'calendar', name: 'Calendar', icon: '/app-icons/calendar.svg', allowOther: true, options: [
       { id: 'google-calendar', name: 'Google Calendar', package: 'com.google.android.calendar' },
     ] },
-  { id: 'messages', name: 'Messages', icon: '/app-icons/messages.svg', preferAndroid: true, androidOnly: true,
-    hideWhenMissing: true, allowOther: true, options: [
+  { id: 'contacts', name: 'Contacts', icon: '/app-icons/contacts.svg', allowOther: true, options: [] },
+  { id: 'messages', name: 'Messages', icon: '/app-icons/messages.svg', allowOther: true, options: [
       { id: 'google-messages', name: 'Google Messages', package: 'com.google.android.apps.messaging' },
     ] },
   { id: 'zoom', name: 'Zoom', icon: '/app-icons/zoom.svg', preferAndroid: true, androidOnly: true,
@@ -157,10 +159,11 @@ export const LINKABLE_APPS: LinkableApp[] = [
 
   // --- PandaOS-apps: standaard de eigen versie, een Android-app kiezen kan wel ---
   { id: 'music', name: 'Music', icon: '/app-icons/music.svg', allowOther: true, options: [] },
-  // Nav: in het halve scherm altijd de PandaOS-kaart; Google Maps/Waze via de knop Volledig scherm
-  { id: 'maps', name: 'Nav', icon: '/app-icons/maps.svg', allowOther: true, panelFirst: true, options: [
+  // Nav: de PandaOS-kaart, of Google Maps/Waze/Flitsmeister half naast de auto (knop Volledig scherm)
+  { id: 'maps', name: 'Nav', icon: '/app-icons/maps.svg', allowOther: true, panelFirst: true, halfScreen: true, options: [
     { id: 'google-maps', name: 'Google Maps', package: 'com.google.android.apps.maps' },
     { id: 'waze', name: 'Waze', package: 'com.waze' },
+    { id: 'flitsmeister', name: 'Flitsmeister', package: 'nl.flitsmeister' },
   ] },
   // Telefoon: ook de Bluetooth-/beltelefoon-app van de radio (die regelt bellen via de telefoon; Android zelf niet)
   { id: 'phone', name: 'Phone', icon: '/app-icons/phone.svg', allowOther: true,
@@ -172,8 +175,8 @@ export const LINKABLE_APPS: LinkableApp[] = [
   // Bluetooth: de Bluetooth-tab van PandaOS, of de Bluetooth-app van de radio (telefoon verbinden, muziek, bellen)
   { id: 'bluetooth', name: 'Bluetooth', icon: '/app-icons/bluetooth.svg', allowOther: true,
     detect: /bluetooth|bt ?music|bt ?phone|btmusic|btphone/i, options: [] },
-  // Audio: de PandaOS Audio Settings (vanuit Music), of de ingebouwde audio-/DSP-app van de radio
-  { id: 'audio', name: 'Audio', icon: '/app-icons/audio.svg', allowOther: true, settingsOnly: true,
+  // Audio: de PandaOS Audio-instellingen (klank, balans, bronnen van de radio), of de audio-/DSP-app van de radio
+  { id: 'audio', name: 'Audio', icon: '/app-icons/audio.svg', allowOther: true,
     detect: /\bdsp\b|equali[sz]er|\beq\b|audio ?settings|sound ?settings|geluid|amplifier|car ?audio/i, options: [] },
 ];
 
@@ -237,7 +240,7 @@ export const getAppLink = (links: Record<string, AppLink>, appId: string, instal
 
 // Wat een tik op het pictogram doet
 export type LaunchAction =
-  | { kind: 'android'; package: string } // Android-app volledig scherm
+  | { kind: 'android'; package: string; half?: boolean } // Android-app (half: venster naast de auto)
   | { kind: 'store'; package: string } // niet geïnstalleerd: Play Store (pictogram lichter)
   | { kind: 'pandaos' } // ingebouwde PandaOS-versie
   | { kind: 'none' } // gekoppeld aan "Geen": doet niets
@@ -252,9 +255,10 @@ export const getLaunchAction = (links: Record<string, AppLink>, appId: string, i
 
   if (!isAndroidLauncher()) return { kind: 'pandaos' }; // laptop/Pi: altijd de eigen versie
 
-  if (app.panelFirst) return { kind: 'pandaos' };
+  // Nav op PandaOS: de eigen kaart. Gekozen Android-app (Waze, Google Maps ...): die app zelf, half naast de auto
+  if (app.panelFirst && link.target === PANDAOS_TARGET) return { kind: 'pandaos' };
   const pkg = targetPackage(app, link.target);
-  if (pkg && installed.some((a) => a.package === pkg)) return { kind: 'android', package: pkg };
+  if (pkg && installed.some((a) => a.package === pkg)) return { kind: 'android', package: pkg, half: app.halfScreen };
   if (link.target === PANDAOS_TARGET && !app.androidOnly) return { kind: 'pandaos' };
 
   // De gekozen app staat er (nog) niet op
@@ -271,6 +275,23 @@ export const isAppEnabled = (links: Record<string, AppLink>, appId: string, inst
 export const runLaunchAction = (action: LaunchAction): boolean => {
   switch (action.kind) {
     case 'android': {
+      let freeform = false;
+      try { freeform = JSON.parse(bridge()?.getFreeformState?.() ?? '{}').supported === true; } catch { /* oud */ }
+      if (action.half && freeform && bridge()?.launchAppHalf) {
+        // Eerst schuift PandaOS het rechterpaneel in (auto naar links, zoals Instellingen, 0,4 s); daarna komt de app
+        // precies in dat paneel: rechts 70 %, boven de dock (meet de dock op dat moment, dus ook na een andere hoogte)
+        window.dispatchEvent(new CustomEvent('pandaos-half-app', { detail: action.package }));
+        window.setTimeout(() => {
+          const width = window.innerWidth;
+          const dockTop = document.querySelector('footer')?.getBoundingClientRect().top ?? window.innerHeight;
+          // kleur van het rechterpaneel: daarmee dekt de launcher het app-gebied af tot de app klaar staat
+          const pane = document.querySelector('.tsl-content-pane')?.parentElement ?? document.body;
+          const color = getComputedStyle(pane).backgroundColor;
+          if (bridge().launchAppHalfColored) bridge().launchAppHalfColored(action.package, Math.round(width * 0.3), 0, width, Math.round(dockTop), color);
+          else bridge().launchAppHalf(action.package, Math.round(width * 0.3), 0, width, Math.round(dockTop));
+        }, 420);
+        return true;
+      }
       const ok = bridge()?.launchApp?.(action.package) === true;
       if (!ok) diag('warn', 'apps', `App openen mislukt: ${action.package}`);
       return ok;

@@ -19,6 +19,15 @@ class CarSignals(private val activity: Activity, private val send: (String) -> U
 
     private val audio = activity.getSystemService(AudioManager::class.java)
     private var lastLoggedVolume = -1
+    // Meestervolume van de radio (0-40, Jancar AudioService), uit het logboek: "onVolumeChanged: VOLUME_MASTER : 12".
+    // -1 = (nog) onbekend; dan werkt PandaOS met het Android-mediavolume zoals voorheen. Vraagt READ_LOGS.
+    @Volatile var masterVolume = -1
+        private set
+    @Volatile private var masterThread: Thread? = null
+    // Laatst gelezen waarde per volume (MASTER, BLUETOOTH, MEDIA_CCD, NAVIGATION)
+    private val radioVolumes = java.util.concurrent.ConcurrentHashMap<String, Int>()
+    fun radioVolumesJson(): String = org.json.JSONObject(radioVolumes as Map<*, *>).toString()
+    @Volatile private var masterProcess: Process? = null
     @Volatile var reverseActive = false
         private set
     // Ooit een backcar-broadcast gezien op dit apparaat? Dan is het focusverlies zonder aanraking waarschijnlijk de
@@ -59,11 +68,61 @@ class CarSignals(private val activity: Activity, private val send: (String) -> U
         for (uri in listOf(android.provider.Settings.System.CONTENT_URI, android.provider.Settings.Global.CONTENT_URI, android.provider.Settings.Secure.CONTENT_URI)) {
             try { resolver.registerContentObserver(uri, true, settingsObserver) } catch (_: Exception) {}
         }
+        startMasterVolumeReader()
+    }
+
+    private fun startMasterVolumeReader() {
+        if (masterThread != null) return
+        // Android 13+ vraagt bij elk lezen van het hele logboek toestemming (venster); de radio draait Android 9
+        if (Build.VERSION.SDK_INT >= 33) return
+        if (activity.checkSelfPermission(android.Manifest.permission.READ_LOGS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return
+        // Alle vier de volumes van de radio (Jancar AudioService, gezien op 5-11-2026):
+        //   VOLUME_MASTER 0-40, VOLUME_BLUETOOTH 0-40, VOLUME_MEDIA_CCD 0-100 % (media bij camera/achteruit),
+        //   VOLUME_NAVIGATION 0-100
+        // Laatst bekende waarden (van voor een herstart): de radio logt een volume pas als het verandert
+        val saved = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        for (name in saved.getStringSet("vol_names", emptySet()) ?: emptySet()) {
+            val v = saved.getInt("vol_$name", -1)
+            if (v >= 0) radioVolumes[name] = v
+        }
+        radioVolumes["MASTER"]?.let { masterVolume = it }
+        // Elk volume dat de radio meldt ("VOLUME_<NAAM> : <waarde>"), ook nieuwe zoals AUX; VOLUME_CHANGED e.d.
+        // hebben geen ": getal" en tellen niet mee
+        val pattern = Regex("""VOLUME_([A-Z0-9_]+)\s*:\s*(\d+)""")
+        masterThread = Thread {
+            try {
+                // Eerst wat er al in het logboek staat (laatste waarden), daarna live volgen
+                val process = Runtime.getRuntime().exec(arrayOf("logcat", "-v", "brief", "-e", "VOLUME_[A-Z0-9_]+ *: *[0-9]"))
+                masterProcess = process
+                java.io.BufferedReader(java.io.InputStreamReader(process.inputStream)).use { reader ->
+                    while (true) {
+                        val line = reader.readLine() ?: break
+                        val match = pattern.find(line) ?: continue
+                        val name = match.groupValues[1]
+                        val value = match.groupValues[2].toIntOrNull() ?: continue
+                        val max = if (name == "MASTER" || name == "BLUETOOTH") MASTER_MAX else 100
+                        if (value !in 0..max || name.startsWith("BAR")) continue
+                        if (radioVolumes[name] == value) continue
+                        radioVolumes[name] = value
+                        saved.edit().putInt("vol_$name", value)
+                            .putStringSet("vol_names", HashSet(radioVolumes.keys)).apply()
+                        if (name == "MASTER") masterVolume = value
+                        val json = radioVolumesJson()
+                        activity.runOnUiThread {
+                            if (name == "MASTER") send("radioVolume($value)")
+                            send("radioVolumes($json)")
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
+            masterThread = null
+        }.apply { isDaemon = true; start() }
     }
 
     fun stop() {
         try { activity.unregisterReceiver(receiver) } catch (_: Exception) {}
         try { activity.contentResolver.unregisterContentObserver(settingsObserver) } catch (_: Exception) {}
+        try { masterProcess?.destroy() } catch (_: Exception) {}
     }
 
     private val loggedSettings = HashMap<String, String>()
@@ -113,6 +172,21 @@ class CarSignals(private val activity: Activity, private val send: (String) -> U
         return volumePercent()
     }
 
+    // Meestervolume met stappen zoals de knop van de radio (via de volumetoets-route van Android, die de radio naar
+    // zijn meestervolume stuurt). Het echte nieuwe volume komt daarna uit het logboek (radioVolume).
+    fun stepMaster(delta: Int) {
+        val am = audio ?: return
+        val direction = if (delta > 0) AudioManager.ADJUST_RAISE else AudioManager.ADJUST_LOWER
+        repeat(Math.abs(delta).coerceAtMost(MASTER_MAX)) {
+            try { am.adjustSuggestedStreamVolume(direction, AudioManager.USE_DEFAULT_STREAM_TYPE, 0) } catch (_: Exception) {}
+        }
+    }
+
+    fun setMaster(target: Int) {
+        if (masterVolume < 0) return
+        stepMaster(target.coerceIn(0, MASTER_MAX) - masterVolume)
+    }
+
     fun setVolumePercent(percent: Int) {
         val am = audio ?: return
         val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
@@ -123,6 +197,7 @@ class CarSignals(private val activity: Activity, private val send: (String) -> U
     }
 
     companion object {
+        const val MASTER_MAX = 40
         private const val PREFS = "pandaos_car"
         private const val VOLUME_CHANGED = "android.media.VOLUME_CHANGED_ACTION"
         private const val EXTRA_STREAM = "android.media.EXTRA_VOLUME_STREAM_TYPE"

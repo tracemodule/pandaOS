@@ -95,11 +95,16 @@ export interface DisplaySettings {
   dockHeight?: number; // hoogte van de zwarte balk onderin (dock), 48-96 px; standaard 64
   dockIconMode?: 'follow' | 'fixed'; // pictogrammen groeien mee met de dock, of vaste grootte
   dockIconScale?: number; // grootte van de dock-pictogrammen, 70-150 %; standaard 100
+  dockRecentCount?: number; // aantal recente apps in de dock, 1-4; standaard 2
+  uiMode?: 'standard' | 'advanced'; // Software > Weergave: standaard verbergt CAN, CAN-monitor, voertuigprotocol en grafische kwaliteit (werken wel door)
+  dockMenuButton?: 'left' | 'middle' | 'right'; // plek van de knop van het app-menu in de dock; standaard midden
+  speedometerOffset?: number; // km/h bovenop de GPS-snelheid, zodat PandaOS gelijk loopt met het dashboard (0-10)
   appMenuAnimation?: 'instant' | 'slide'; // app-menu (raster in de dock): direct tonen of omhoog schuiven
 }
 
 // Snelheidswaarschuwing (Settings > Safety). Snelheid via GPS; de maximumsnelheid van de weg uit kaartgegevens.
 export interface SafetySettings {
+  speedCameraWarning?: boolean; // waarschuwen voor vaste flitspalen (OpenStreetMap); standaard aan
   speedWarning: boolean;
   offset: number; // km/h boven de limiet voordat er gewaarschuwd wordt
   chime: boolean; // ook een geluidssignaal (anders alleen rode snelheid)
@@ -109,6 +114,7 @@ export interface SafetySettings {
 // App-instellingen (in het app-menu): welke app NAV en muziek openen, en wat er bij het opstarten opent.
 // Op de radio worden 'maps'/'waze' echte Android-apps; tot die tijd opent alles de PandaOS-varianten.
 export interface AppSettings {
+  contactsFromGoogle?: boolean; // Contacten: ook die van een Google-account op de radio (standaard alleen de telefoon)
   defaultNav: 'nav' | 'maps' | 'waze';
   defaultMusic: 'music' | 'spotify' | 'youtube';
   startup: 'home' | 'nav' | 'music';
@@ -126,6 +132,19 @@ export interface TripStats {
   startedAt: number; // tijdstip van de laatste reset
 }
 export type TripKey = 'current' | 'tripA' | 'tripB';
+
+// Opgenomen rit (services/driveLog.ts): route en cijfers, plus hard optrekken/remmen
+export interface DriveEvent { type: 'accel' | 'brake'; lat: number; lon: number; time: number; value: number }
+export interface DriveRecord {
+  id: string;
+  start: number; // tijdstip vertrek
+  end: number; // tijdstip laatste beweging
+  distance: number; // meter
+  driveTime: number; // seconden rijdend
+  maxSpeed: number; // km/h
+  points: [number, number][]; // route [breedte, lengte]
+  events: DriveEvent[];
+}
 export const emptyTrip = (): TripStats => ({ distance: 0, driveTime: 0, maxSpeed: 0, startedAt: Date.now() });
 
 // App-koppelingen (Settings > Apps): per PandaOS-app aan/uit en welke app hij opent.
@@ -192,6 +211,12 @@ export interface VehicleSettings {
   customRims?: string[]; // eigen velgkleuren uit de Kleurenkiezer
   colorNames?: Record<string, string>; // namen van eigen kleuren (hex in kleine letters -> naam)
   rainbowFloor?: boolean; // Toybox: regenboog onder de 3D-auto
+  neon?: NeonSettings; // Toybox: neon onder de 3D-auto
+  minigun?: boolean; // Toybox: minigun op het dak van de 3D-auto
+  // Kenteken op de 3D-auto (Instellingen > Voertuig). Alleen lokaal op de radio bewaard: nooit in de repo,
+  // documentatie, logboek of probleemrapport zetten.
+  licensePlate?: string;
+  licensePlateHidden?: boolean; // kenteken (tijdelijk) niet tonen
   // Naam van de auto (Settings > Software, "Name Your Vehicle"); leeg = de modelnaam
   vehicleName?: string;
 }
@@ -209,6 +234,32 @@ const DEFAULT_VEHICLE_SETTINGS: VehicleSettings = {
 // Wat de auto nu doet: lichtschakelaar, knipperlichten, deuren. Komt straks van het CAN-kastje (via de launcher,
 // window.PandaOS.setCarState) of OBD2; tot die tijd via de debug-console. Remlicht = brakeApplied, achteruit = gear 'R'.
 export type DoorId = 'fl' | 'fr' | 'rl' | 'rr' | 'trunk';
+// Toybox > Neon: gekleurde gloed onder de 3D-auto, per kant aan/uit
+export interface NeonSettings {
+  on: boolean;
+  color: string;
+  effect: 'steady' | 'pulse' | 'rainbow';
+  sides: { left: boolean; right: boolean; front: boolean; rear: boolean };
+}
+export const DEFAULT_NEON: NeonSettings = { on: false, color: '#00e5ff', effect: 'steady', sides: { left: true, right: true, front: true, rear: true } };
+
+// Toybox > Voertuig: deuren en lampen van het 3D-model voor de grap. Alleen het plaatje; de echte autostatus
+// (carState, CAN, radio) blijft ongemoeid. null = speeltje uit, het model volgt de auto weer.
+export interface ToyCar {
+  lights: CarState['lights'];
+  highBeam: boolean;
+  blinker: CarState['blinker'];
+  brake: boolean;
+  reverse: boolean;
+  doors: Record<DoorId, boolean>;
+}
+
+// Audio-app (app-menu/dock): de Audio-instellingen openen op Bronnen
+export const openAudioApp = () => {
+  if (!useUIStore.getState().isAudioSettingsOpen) useUIStore.getState().toggleAudioSettings();
+  window.setTimeout(() => window.dispatchEvent(new CustomEvent('pandaos-audio-tab', { detail: 'Sources' })), 0);
+};
+
 export interface CarState {
   lights: 'off' | 'parking' | 'low'; // lichtschakelaar: 0, stadslicht, dimlicht
   highBeam: boolean;
@@ -246,7 +297,17 @@ const loadVehicleSettings = (): VehicleSettings => {
 };
 
 // Navigatie (Settings > Navigation). De vermijd-opties gaan als 'exclude' mee naar OSRM (zie Map.tsx).
+// Opgeslagen plek (Thuis/Werk): naam van PDOK en coördinaten
+export interface SavedPlace { name: string; lat: number; lon: number }
+
 export interface NavigationSettings {
+  home?: SavedPlace | null; // Thuis (Instellingen > Navigatie of in de kaart)
+  recordDrives?: boolean; // ritten opnemen (Instellingen > Ritten); standaard aan
+  work?: SavedPlace | null; // Werk
+  fuelType?: 'euro95' | 'e10' | 'super98' | 'diesel' | 'lpg' | 'electric'; // brandstof van de auto (tankstations op de kaart)
+  places?: string[]; // plekken op de kaart: fuel, charging, food, parking, groceries, toilets
+  mapProvider?: 'pandaos' | 'mapbox'; // kaart: PandaOS (PDOK/OSM, standaard) of Mapbox
+  mapboxToken?: string; // eigen Mapbox-token (pk.…), alleen lokaal op de radio
   volume: number;
   avoidMotorways: boolean;
   avoidTolls: boolean;
@@ -295,6 +356,9 @@ interface UIState {
   // App & Navigatie States
   isMusicOpen: boolean;
   isAudioSettingsOpen: boolean;
+  isVolumePageOpen: boolean; // volumepagina met de vier volumes van de radio (VolumePage.tsx)
+  openVolumePage: () => void;
+  closeVolumePage: () => void;
   isNavigating: boolean;
   isMapOpen: boolean; // kaart zichtbaar in Park (via Nav-app); tijdens rijden staat de kaart altijd open
   isCarPlayOpen: boolean; // <--- CarPlay State
@@ -334,6 +398,8 @@ interface UIState {
   gear: GearType;
   brakeApplied: boolean;
   speed: number;
+  toyCar: ToyCar | null; // Toybox > Voertuig (niet bewaard)
+  setToyCar: (toy: ToyCar | null) => void;
 
   // --- Nieuwe Instellingen ---
   displaySettings: DisplaySettings;
@@ -347,6 +413,10 @@ interface UIState {
   appLinks: Record<string, AppLink>;
   updateAppLink: (appId: string, link: Partial<AppLink>) => void;
   trips: Record<TripKey, TripStats>;
+  drives: DriveRecord[]; // opgenomen ritten, nieuwste eerst (max 200)
+  addDrive: (drive: DriveRecord) => void;
+  removeDrive: (id: string) => void;
+  clearDrives: () => void;
   addTripSample: (distance: number, seconds: number, speedKmh: number) => void;
   resetTrip: (key: TripKey) => void;
   audioSettings: AudioSettingsState;
@@ -358,6 +428,7 @@ interface UIState {
 
   // --- App Launcher & Drag Mode ---
   isAppEditMode: boolean;
+  savedFlashAt: number; // na Done in het app-menu: bovenin kort "Opgeslagen"
   pinnedApps: string[];
   recentApps: string[];
   setAppEditMode: (mode: boolean) => void;
@@ -396,6 +467,9 @@ interface UIState {
   closeCanMonitor: () => void;
   // Theater (half scherm): videoapps zoals Netflix, YouTube en Twitch
   isTheaterOpen: boolean;
+  panelApp: 'contacts' | 'calendar' | 'messages' | null; // PhoneDataApps.tsx: half naast de auto
+  openPanelApp: (app: 'contacts' | 'calendar' | 'messages') => void;
+  closePanelApp: () => void;
   openTheater: () => void;
   closeTheater: () => void;
   // Arcade (half scherm): de games op de radio
@@ -445,6 +519,7 @@ interface UIState {
   setGearOverride: (gear: GearType | null) => void;
   setGpsSpeed: (speed: number) => void;
   speedLimit: number | null; // km/h, van de weg waar je rijdt (services/speedLimit.ts)
+  cameraAhead: { distance: number; maxspeed: number | null; kind: 'fixed' | 'section'; chime: boolean } | null; // flitspaal vóór de auto (services/speedCameras.ts)
   setSpeedLimit: (limit: number | null) => void;
   setBrake: (status: boolean) => void;
   setSpeed: (speed: number) => void;
@@ -486,8 +561,13 @@ const sendToSocket = (event: string, data?: any) => {
 // Tijdelijke dingen (open menu's, Bluetooth-scan, wat er nu speelt) worden bewust niet bewaard.
 const PERSISTED_KEYS = [
   'screenMode', 'displaySettings', 'lightsSettings', 'navigationSettings', 'vehicleSettings',
-  'pinnedApps', 'recentApps', 'mediaSource', 'btKnownDevices', 'audioSettings', 'volume', 'safetySettings', 'appSettings', 'appLinks', 'trips'
+  'pinnedApps', 'recentApps', 'mediaSource', 'btKnownDevices', 'audioSettings', 'volume', 'safetySettings', 'appSettings', 'appLinks', 'trips', 'drives'
 ] as const;
+
+// Volume van PandaOS loopt van 0 tot 40, net als het meestervolume van de radio (één klik = één stap)
+export const VOLUME_MAX = 40;
+const toPercent = (v: number) => Math.round((v * 100) / VOLUME_MAX);
+export const fromPercent = (p: number) => Math.round((p * VOLUME_MAX) / 100);
 
 export const useUIStore = create<UIState>()(persist((set, get) => ({
   isMenuOpen: false,
@@ -495,7 +575,7 @@ export const useUIStore = create<UIState>()(persist((set, get) => ({
   isKeyboardOpen: false,
   isCarScreenOpen: false, 
   keyboardValue: '',
-  volume: 50,
+  volume: 20,
   isVolumeOpen: false,
   activeTab: 'Display',
   
@@ -535,6 +615,9 @@ export const useUIStore = create<UIState>()(persist((set, get) => ({
 
   isMusicOpen: false,
   isAudioSettingsOpen: false,
+  isVolumePageOpen: false,
+  openVolumePage: () => set({ isVolumePageOpen: true, isVolumeOpen: false, isAudioSettingsOpen: false }),
+  closeVolumePage: () => set({ isVolumePageOpen: false }),
   isNavigating: false,
   isMapOpen: false,
   isCarPlayOpen: false,
@@ -547,8 +630,10 @@ export const useUIStore = create<UIState>()(persist((set, get) => ({
   screenMode: (localStorage.getItem('screenMode') as 'light' | 'dark' | 'auto') || 'auto',
   vehicleLightsOn: null,
   gear: 'P',
-  brakeApplied: true,
+  brakeApplied: false, // zonder handrem-signaal (CAN) niet aangetrokken: geen remlicht in het 3D-model
   speed: 0,
+  toyCar: null,
+  setToyCar: (toyCar) => set({ toyCar }),
 
   // --- Initialiseer Settings ---
   displaySettings: {
@@ -572,6 +657,10 @@ export const useUIStore = create<UIState>()(persist((set, get) => ({
   // Leeg = alles aan en de PandaOS-versie (zie getAppLink in appLinks.ts)
   appLinks: {},
   trips: { current: emptyTrip(), tripA: emptyTrip(), tripB: emptyTrip() },
+  drives: [],
+  addDrive: (drive) => set((state) => ({ drives: [drive, ...state.drives.filter((d) => d.id !== drive.id)].slice(0, 200) })),
+  removeDrive: (id) => set((state) => ({ drives: state.drives.filter((d) => d.id !== id) })),
+  clearDrives: () => set({ drives: [] }),
   // Eén GPS-meting telt mee in alle drie de tellers
   addTripSample: (distance, seconds, speedKmh) => set((state) => ({
     trips: Object.fromEntries(Object.entries(state.trips).map(([key, trip]) => [key, {
@@ -610,6 +699,7 @@ export const useUIStore = create<UIState>()(persist((set, get) => ({
 
   // --- App Launcher & Drag Mode ---
   isAppEditMode: false,
+  savedFlashAt: 0,
   pinnedApps: ['spotify', 'camera', 'dashcam', 'energy', 'phone'],
   recentApps: ['youtube', 'netflix'],
   
@@ -646,7 +736,8 @@ export const useUIStore = create<UIState>()(persist((set, get) => ({
     let newRecents = state.recentApps.filter(id => id !== appId);
     newRecents.unshift(appId);
     
-    if (newRecents.length > 2) newRecents = newRecents.slice(0, 2);
+    // Tot 4 onthouden; de dock toont er zoveel als ingesteld (Instellingen > Scherm > Recente apps, standaard 2)
+    if (newRecents.length > 4) newRecents = newRecents.slice(0, 4);
     
     return { recentApps: newRecents };
   }),
@@ -715,9 +806,12 @@ export const useUIStore = create<UIState>()(persist((set, get) => ({
   setKeyboardValue: (val) => set({ keyboardValue: val }),
   // Op de radio ook het Android-mediavolume zetten (CarSignals.kt); terugkoppeling via window.PandaOS.systemVolume
   setVolume: (val) => {
-    const volume = Math.max(0, Math.min(100, val));
+    const volume = Math.round(Math.max(0, Math.min(VOLUME_MAX, val)));
     set({ volume });
-    (window as any).PandaAndroid?.setSystemVolume?.(Math.round(volume));
+    const android = (window as any).PandaAndroid;
+    // Meestervolume van de radio bekend: dat zetten; anders het Android-mediavolume (in procenten)
+    if (android?.getMasterVolume?.() >= 0) android.setMasterVolume(volume);
+    else android?.setSystemVolume?.(toPercent(volume));
   },
   toggleVolume: () => set((state) => ({ isVolumeOpen: !state.isVolumeOpen })),
   // Volume omhoog/omlaag (pijltjes en straks VOL+/VOL-): stap van 1 en de popup even tonen.
@@ -725,11 +819,17 @@ export const useUIStore = create<UIState>()(persist((set, get) => ({
   stepVolume: (delta) => {
     // Op de radio: één echte volumestap van Android (de radio heeft minder dan 100 stappen) en het echte percentage tonen
     const android = (window as any).PandaAndroid;
+    // Meestervolume bekend: stap via de radio; het echte nieuwe volume komt terug via window.PandaOS.radioVolume
+    if (android?.getMasterVolume?.() >= 0) {
+      android.stepMasterVolume(delta);
+      set({ volume: Math.max(0, Math.min(VOLUME_MAX, get().volume + delta)), isVolumeOpen: true });
+      return;
+    }
     if (android?.stepSystemVolume) {
       const percent = android.stepSystemVolume(delta);
-      if (percent >= 0) { set({ volume: percent, isVolumeOpen: true }); return; }
+      if (percent >= 0) { set({ volume: fromPercent(percent), isVolumeOpen: true }); return; }
     }
-    set({ volume: Math.max(0, Math.min(100, get().volume + delta)), isVolumeOpen: true });
+    set({ volume: Math.max(0, Math.min(VOLUME_MAX, get().volume + delta)), isVolumeOpen: true });
   },
   
   setActiveTab: (tab) => set({ activeTab: tab }),
@@ -835,6 +935,12 @@ export const useUIStore = create<UIState>()(persist((set, get) => ({
 
   dial: (number, name) => {
     if (!number) return;
+    // Op de radio: de telefoon-app van de radio belt via Bluetooth en toont zelf het gesprek
+    const android = (window as any).PandaAndroid;
+    if (android?.dialNumber) {
+      if (android.dialNumber(number)) set((state) => ({ phoneRecents: [{ name: name || number, number, type: 'outgoing' as const, time: Date.now() }, ...state.phoneRecents].slice(0, 50) }));
+      return;
+    }
     set({ call: { ...IDLE_CALL, state: 'dialing', number, name: name || number, outgoing: true } });
     sendToSocket('PHONE_DIAL', { number });
   },
@@ -910,6 +1016,7 @@ export const useUIStore = create<UIState>()(persist((set, get) => ({
     gear: active ? 'R' : state.speed > 0 ? 'D' : 'P',
   })),
   speedLimit: null,
+  cameraAhead: null,
   setSpeedLimit: (limit) => set({ speedLimit: limit }),
   setGpsSpeed: (speed) => set((state) => ({
     speed,
@@ -1170,6 +1277,7 @@ export const useUIStore = create<UIState>()(persist((set, get) => ({
   },
 
   closeAll: () => set({
+    panelApp: null,
     isMenuOpen: false,
     isMapOpen: false,
     isQuickActionsOpen: false,
@@ -1199,6 +1307,18 @@ export const useUIStore = create<UIState>()(persist((set, get) => ({
     });
   },
   closeCanMonitor: () => set({ isCanMonitorOpen: false }),
+
+  // Contacten, Agenda, Berichten (half scherm, naast de auto) met gegevens van de telefoon
+  panelApp: null,
+  openPanelApp: (app) => {
+    get().addRecentApp(app);
+    set({
+      panelApp: app, isTheaterOpen: false, isArcadeOpen: false, isToyboxOpen: false, isDiagnosticsOpen: false, isCanMonitorOpen: false,
+      isMenuOpen: false, isMusicOpen: false, isPhoneOpen: false, isMapOpen: false, activeWebApp: null, isCarPlayOpen: false,
+      isCameraOpen: false, isQuickActionsOpen: false,
+    });
+  },
+  closePanelApp: () => set({ panelApp: null }),
 
   // Theater (half scherm, naast de auto): tegels van videoapps; geïnstalleerd = openen, anders de Play Store
   isTheaterOpen: false,
