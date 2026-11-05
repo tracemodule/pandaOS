@@ -11,11 +11,37 @@ import { getEffectiveTheme } from '../../settings';
 import { useT } from '../../i18n';
 import 'leaflet/dist/leaflet.css';
 import './_map.scss';
+import { diag } from '../../services/diagnostics';
 
 // --- PDOK (gratis, Kadaster): kaart en adreszoeker voor Nederland ---
 // BRT Achtergrondkaart, thema "grijs" (rustig, past bij de Tesla-stijl). Andere thema's: standaard, pastel, water.
 const PDOK_TILES = 'https://service.pdok.nl/brt/achtergrondkaart/wmts/v2_0/grijs/EPSG:3857/{z}/{x}/{y}.png';
 const PDOK_ATTRIBUTION = 'Kaartgegevens &copy; <a href="https://www.kadaster.nl">Kadaster</a>';
+// Buiten Nederland heeft PDOK geen kaart (lege, grijze tegels). Daar, en als PDOK niet bereikbaar is, de wereldkaart
+// van OpenStreetMap (gratis met naamsvermelding; CARTO vraagt sinds 2026 een API-sleutel).
+const WORLD_TILES = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+const WORLD_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+// Grove omtrek van Nederland [lengtegraad, breedtegraad]; een rechthoek is te grof (Keulen, Antwerpen vallen erin)
+const NL_OUTLINE: [number, number][] = [
+  [3.36, 51.37], [3.85, 51.21], [4.25, 51.38], [4.78, 51.43], [5.10, 51.43], [5.65, 51.20], [5.85, 51.15], [5.64, 50.85],
+  [5.69, 50.75], [6.03, 50.72], [6.12, 50.90], [5.95, 51.05], [6.22, 51.38], [6.10, 51.85], [6.45, 51.85], [6.83, 51.96],
+  [7.07, 52.24], [7.05, 52.63], [7.22, 53.24], [6.90, 53.45], [5.80, 53.50], [4.70, 53.20], [4.50, 52.80], [4.30, 52.30],
+  [3.95, 51.85], [3.40, 51.55],
+];
+const inNetherlands = ([lat, lon]: [number, number]) => {
+  let inside = false;
+  for (let i = 0, j = NL_OUTLINE.length - 1; i < NL_OUTLINE.length; j = i++) {
+    const [xi, yi] = NL_OUTLINE[i], [xj, yj] = NL_OUTLINE[j];
+    if ((yi > lat) !== (yj > lat) && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+};
+// Waarom de kaart niet laadt, voor de melding op de kaart en het logboek
+const mapProblem = () => {
+  if (!navigator.onLine) return 'No internet connection: the map cannot load.';
+  if (new Date().getFullYear() < 2025) return 'The clock of the radio is wrong, so secure connections fail. Set the date and time.';
+  return 'The map server cannot be reached. Check the internet connection of the radio.';
+};
 // Location API: adressen eerst, woonplaatsen daarna. Coördinaten in CRS84 = [lengtegraad, breedtegraad].
 const PDOK_SEARCH = 'https://api.pdok.nl/kadaster/location-api/v1/search'
   + '?adres[relevance]=1&adres[version]=1&woonplaats[relevance]=0.5&woonplaats[version]=1'
@@ -92,6 +118,22 @@ const Map: React.FC = () => {
   const [selectedDestination, setSelectedDestination] = useState<any>(null);
   const [routeData, setRouteData] = useState<any>(null);
   const [isRoutePreview, setIsRoutePreview] = useState(false);
+  // Kaarttegels: telt geladen en mislukte tegels; na herhaald mislukken de wereldkaart en een melding
+  const [pdokFailed, setPdokFailed] = useState(false);
+  const [tileProblem, setTileProblem] = useState<string | null>(null);
+  const tileStats = React.useRef({ loaded: 0, failed: 0, reported: false });
+  const useWorldMap = pdokFailed || !inNetherlands(position);
+  const tileEvents = React.useMemo(() => ({
+    tileload: () => { tileStats.current.loaded++; tileStats.current.failed = 0; setTileProblem(null); },
+    tileerror: () => {
+      const stats = tileStats.current;
+      stats.failed++;
+      if (stats.failed < 6) return;
+      if (!useWorldMap) { setPdokFailed(true); stats.failed = 0; diag('warn', 'Navigatie', 'PDOK-kaart laadt niet, over op de wereldkaart'); return; }
+      setTileProblem(mapProblem());
+      if (!stats.reported) { stats.reported = true; diag('error', 'Navigatie', `Kaart laadt niet: ${mapProblem()} (online=${navigator.onLine}, klok=${new Date().toISOString()})`); }
+    },
+  }), [useWorldMap]);
 
   // 1. Live GPS Tracking met Heading (Richting)
   useEffect(() => {
@@ -103,7 +145,7 @@ const Map: React.FC = () => {
             setHeading(pos.coords.heading);
           }
         },
-        (err) => console.error(err),
+        (err) => { console.error(err); diag('warn', 'Navigatie', `GPS-positie: ${err.message}`); },
         { enableHighAccuracy: true }
       );
       return () => navigator.geolocation.clearWatch(watchId);
@@ -192,7 +234,9 @@ const Map: React.FC = () => {
       onClick={(e) => e.stopPropagation()}>
       <div className="map-layer">
         <MapContainer center={position} zoom={15} zoomControl={false} style={{ width: '100%', height: '100%' }}>
-          <TileLayer url={PDOK_TILES} attribution={PDOK_ATTRIBUTION} maxZoom={19} maxNativeZoom={19} />
+          {useWorldMap
+            ? <TileLayer key="world" url={WORLD_TILES} attribution={WORLD_ATTRIBUTION} maxZoom={19} maxNativeZoom={19} eventHandlers={tileEvents} />
+            : <TileLayer key="pdok" url={PDOK_TILES} attribution={PDOK_ATTRIBUTION} maxZoom={19} maxNativeZoom={19} eventHandlers={tileEvents} />}
 
           {/* De Auto Marker */}
           <Marker position={position} icon={createCarIcon(heading)} />
@@ -203,6 +247,8 @@ const Map: React.FC = () => {
           <MapController position={position} isNavigating={isNavigating} is3D={is3D} recenterKey={recenterKey} />
         </MapContainer>
       </div>
+
+      {tileProblem && <div className="tsl-map-problem">{t(tileProblem)}</div>}
 
       {/* Linkerkolom (Figma: 16 px van links, 64 px van boven, onder de statusbalk) */}
       <div className="nav-left-column">

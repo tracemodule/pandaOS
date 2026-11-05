@@ -209,6 +209,7 @@ export interface CarState {
   // airco): dan verbergt PandaOS de temperatuurknoppen in de dock.
   climateLeft: number | null;
   climateRight: number | null;
+  seatbeltUnfastened: boolean | null; // gordelwaarschuwing; null = onbekend (geen lampje)
 }
 // Teksten voor meldingen en de deur-open-aanduiding (vertaald via t() in de componenten)
 export const DOOR_LABELS: Record<DoorId, string> = {
@@ -217,7 +218,7 @@ export const DOOR_LABELS: Record<DoorId, string> = {
 export const DEFAULT_CAR_STATE: CarState = {
   lights: 'off', highBeam: false, fogFront: false, fogRear: false, blinker: 'off',
   doors: { fl: false, fr: false, rl: false, rr: false, trunk: false }, detectedTransmission: null,
-  fuelPercent: null, rangeKm: null, outsideTemp: null, climateLeft: null, climateRight: null,
+  fuelPercent: null, rangeKm: null, outsideTemp: null, climateLeft: null, climateRight: null, seatbeltUnfastened: null,
 };
 
 const loadVehicleSettings = (): VehicleSettings => {

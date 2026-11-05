@@ -11,6 +11,7 @@ import { useUIStore, type WindowTint, type CarState, type DoorId, DOOR_LABELS } 
 import { getEffectiveTheme } from '../../../../../src/settings';
 import { getVehicleModel, type VehicleModel, type TrimRegion } from './vehicleModels';
 import './_sidebar-pane.scss';
+import WarningLights from './WarningLights';
 
 // Welke onderdelen lak, velgen, ramen en losse rommel zijn, staat per model in vehicleModels.ts.
 // Voorruit en voorportierramen blijven altijd licht (wettelijk); alleen de achterste ramen krijgen tint.
@@ -534,13 +535,17 @@ const SidebarPane: React.FC<{ widthFraction?: number }> = ({ widthFraction = 1 }
       {/* --- VERSNELLING EN BRANDSTOF (links boven, zodat ze nooit met de statusbalk rechts botsen) --- */}
       <div style={{
          position: 'absolute', top: 0, left: 0, right: 0, padding: '18px 25px',
-         display: 'flex', alignItems: 'center', gap: '28px', zIndex: 20
+         display: 'flex', alignItems: 'flex-start', gap: '28px', zIndex: 20
       }}>
+         {/* Versnelling met daaronder de controlelampjes (licht, knipperlicht, gordel) */}
+         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
          {/* Automaat: P R N D. Handgeschakeld: N, R of de versnelling (1-6), uit Settings > Vehicle > Transmission */}
          <div style={{ display: 'flex', gap: '15px', fontSize: 'calc(20px * var(--text-scale, 1))', fontWeight: '800', color: isDarkMode ? '#555' : '#aaa' }}>
            {gearLabels.map(g => (
               <span key={g} style={{ color: g === activeGearLabel ? (isDarkMode ? '#fff' : '#000') : '' }}>{g}</span>
            ))}
+         </div>
+         <WarningLights />
          </div>
          {/* Brandstof (tankniveau/actieradius van de auto); verborgen zolang onbekend */}
          {energyDisplay && <div style={{ fontWeight: '600', fontSize: 'calc(18px * var(--text-scale, 1))', display: 'flex', alignItems: 'center', gap: '8px', color: isDarkMode ? '#fff' : '#555' }}>

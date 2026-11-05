@@ -21,7 +21,7 @@ const ControlBar: React.FC = () => {
     toggleMenu, toggleQuickActions, isAppEditMode,
     pinnedApps, recentApps, unpinApp, screenMode, addRecentApp,
     openWebApp, toggleMusic, openSettingsTab, toggleCarPlay, // <--- Hier toegevoegd!
-    isPhoneOpen, openPhone, closePhone, openCanMonitor,
+    isPhoneOpen, openPhone, closePhone, openCanMonitor, isMapOpen, openMap, closeAll,
     volume, stepVolume, toggleVolume, isVolumeOpen, vehicleLightsOn, appLinks
   } = useUIStore();
   // Uitgeschakelde en (op de radio) ontbrekende apps verdwijnen uit de dock (Settings > Apps);
@@ -68,6 +68,8 @@ const ControlBar: React.FC = () => {
     else if (id === 'bluetooth') openSettingsTab('Bluetooth');
     else if (id === 'carplay') toggleCarPlay();
     else if (id === 'canmonitor') openCanMonitor();
+    else if (id === 'maps') isMapOpen ? closeAll() : openMap(); // Nav: PandaOS-kaart (Google Maps/Waze via Volledig scherm)
+    else if (id === 'carinfo') (window as any).PandaAndroid?.openCarInfoApp?.(); // CAN-app van de radio
     else if (id === 'developer') (window as any).PandaAndroid?.openDeveloperSettings?.(); // ontwikkelaarsopties van Android
     else if (id === 'phone') isPhoneOpen ? closePhone() : openPhone(); // Telefoon via Bluetooth (CarPlay staat los in het app-menu)
     else console.log(`Opening from dock: ${id}...`);

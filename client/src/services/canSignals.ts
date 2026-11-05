@@ -29,6 +29,9 @@ export const CAN_FUNCTIONS: CanFunction[] = [
   { id: 'blinker_left', label: 'Left indicator', group: 'Lights', kind: 'switch', hint: 'Left indicator on (on) or off (off).' },
   { id: 'blinker_right', label: 'Right indicator', group: 'Lights', kind: 'switch', hint: 'Right indicator on (on) or off (off).' },
   { id: 'hazard', label: 'Hazard lights', group: 'Lights', kind: 'switch', hint: 'Hazard lights on (on) or off (off).' },
+  { id: 'fog_front', label: 'Front fog lights', group: 'Lights', kind: 'switch', hint: 'Front fog lights on (on) or off (off).' },
+  { id: 'fog_rear', label: 'Rear fog light', group: 'Lights', kind: 'switch', hint: 'Rear fog light on (on) or off (off).' },
+  { id: 'seatbelt', label: 'Seatbelt warning', group: 'Drive', kind: 'switch', hint: 'Unfasten the driver seatbelt (on) or fasten it (off).' },
   { id: 'speed', label: 'Speed', group: 'Values', kind: 'value', unit: 'km/h', hint: 'Drive a short distance so the speed changes.' },
   { id: 'fuel', label: 'Fuel level', group: 'Values', kind: 'value', unit: '%', hint: 'The fuel level line usually comes by itself; wait a moment.' },
   { id: 'outside_temp', label: 'Outside temperature', group: 'Values', kind: 'value', unit: '°C', hint: 'The temperature line usually comes by itself; wait a moment.' },
@@ -73,6 +76,9 @@ export const applyCanSignal = (signal: { func: string; action: CanAction; value:
     case 'blinker_left': store.setCarState({ blinker: on ? 'left' : 'off' }); break;
     case 'blinker_right': store.setCarState({ blinker: on ? 'right' : 'off' }); break;
     case 'hazard': store.setCarState({ blinker: on ? 'hazard' : 'off' }); break;
+    case 'fog_front': store.setCarState({ fogFront: on }); break;
+    case 'fog_rear': store.setCarState({ fogRear: on }); break;
+    case 'seatbelt': store.setCarState({ seatbeltUnfastened: on }); break;
     case 'speed': if (!isNaN(num)) store.setGpsSpeed(Math.max(0, Math.round(num))); break;
     case 'fuel': if (!isNaN(num)) store.setCarState({ fuelPercent: Math.max(0, Math.min(100, num)) }); break;
     case 'outside_temp': if (!isNaN(num)) store.setCarState({ outsideTemp: num }); break;

@@ -237,6 +237,12 @@ class CanMonitor(private val activity: Activity, private val onLine: (source: St
             .toString()
     }
 
+    // Alleen de pakketnamen (voor de app Auto-info in PandaBridge)
+    fun canAppPackages(): JSONArray {
+        val apps = canApps()
+        return JSONArray().also { out -> for (i in 0 until apps.length()) out.put(apps.getJSONObject(i).getString("package")) }
+    }
+
     // Apps van de fabrikant die met de auto te maken hebben (CAN-app, auto-info, MCU-dienst ...)
     private fun canApps(): JSONArray {
         val pm = activity.packageManager

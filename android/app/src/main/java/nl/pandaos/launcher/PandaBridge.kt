@@ -394,6 +394,23 @@ class PandaBridge(
         return true
     }
 
+    // App "Auto-info": de CAN-app van de radio (Voertuig informatie). Eerst de bekende pakketten, anders de eerste
+    // startbare app uit de CAN-apps van de CAN-monitor. Geeft de pakketnaam terug, of "" als er geen is.
+    @JavascriptInterface
+    fun openCarInfoApp(): String {
+        val pm = activity.packageManager
+        val known = listOf("com.can.activity", "com.autoai.canbus", "com.jancar.carinfo", "com.syu.canbus", "com.microntek.canbus")
+        val found = can.canAppPackages()
+        val candidates = known + (0 until found.length()).map { found.getString(it) }.filter { !it.contains("scan", true) }
+        val pkg = candidates.firstOrNull { it != activity.packageName && pm.getLaunchIntentForPackage(it) != null } ?: run {
+            DiagLog.add("warn", "Auto-info: geen CAN-app van de radio gevonden")
+            return ""
+        }
+        DiagLog.add("info", "Auto-info: $pkg geopend")
+        launchApp(pkg)
+        return pkg
+    }
+
     // Een webpagina kan zelf geen wifi-netwerken zien; daarom de wifi-instellingen van Android openen
     @JavascriptInterface
     fun openWifiSettings() {

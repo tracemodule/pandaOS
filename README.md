@@ -18,4 +18,5 @@ Instellingen → Software → Software-update en installeert de nieuwe versie.
 
 - Gebaseerd op PandaOS van Cyberpandino, GPL-3.0. Deze versie valt daarom ook onder de GPL-3.0 (zie `LICENSE`).
 - 3D-model "Volkswagen Golf 6 (A6)" door GT Cars: Hyperspeed, CC-BY 4.0 (Sketchfab).
+- Kaart buiten Nederland: © OpenStreetMap-bijdragers (tile.openstreetmap.org); in Nederland PDOK/Kadaster.
 - Lichtomgevingen (HDR) "Potsdamer Platz" en "Dikhololo Night" van Poly Haven, CC0.

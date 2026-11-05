@@ -32,3 +32,6 @@
     background-color: rgba(0, 0, 0, 0.2);
   }
 }
+// Knipperlicht-lampje: aan/uit in het ritme van een knipperlicht (~1,5 Hz)
+.tsl-indicator-blink { animation: tsl-indicator-blink 0.66s steps(1, end) infinite; }
+@keyframes tsl-indicator-blink { 50% { opacity: 0; } }

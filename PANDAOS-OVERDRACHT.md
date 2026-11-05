@@ -244,6 +244,15 @@ verborgen zolang de auto niets doorgeeft); de app viel om zonder internet omdat 
 kwam, nu meegeleverd in `client/public/hdr`; WebView-uitleg; GPS uit de CAN-detectie. Nog open: de "72"-knoppen
 onderin (klimaat) zijn plaatshouders; de auto heeft handmatige airco.
 
+**Nieuw in 1.3.6 (5 november 2026)**: Nav-knop in de dock deed niets (geen actie voor 'maps' sinds panelFirst), nu
+openMap/closeAll. Kaart: PDOK alleen binnen de omtrek van Nederland (`NL_OUTLINE` in Map.tsx), daarbuiten of als PDOK faalt
+de OpenStreetMap-tegels (CARTO vraagt sinds 2026 een API-sleutel); melding op de kaart + logboek als tegels niet laden
+(geen internet / verkeerde klok / server). Maximumsnelheid (services/speedLimit.ts): wegen in 500 m vóór de auto ophalen
+(Overpass, drie servers, 40 s), zelf de weg kiezen op afstand + rijrichting, NL:urban/zone30 en maxspeed:conditional
+(snelweg 100/130). Overpass is soms erg traag (30-80 s). Controlelampjes onder P R D (WarningLights.tsx, outline, gordel
+onderaan; `carState.seatbeltUnfastened`), te leren in Koppelen: gordel, mistlampen voor/achter. App Auto-info opent de
+CAN-app van de radio (`openCarInfoApp`, eerst com.can.activity).
+
 ## Nog open
 
 **Klaar voor 1.3.1 (nog niet uitgebracht: David wil er eerst nog dingen bij, 4 november 2026)**: app Ontwikkelaarsopties

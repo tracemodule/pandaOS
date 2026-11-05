@@ -21,8 +21,16 @@ const distanceBetween = (lat1: number, lon1: number, lat2: number, lon2: number)
   return 2 * R * Math.asin(Math.sqrt(a));
 };
 
+// Kompasrichting (0 = noord) van punt 1 naar punt 2
+const bearingBetween = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const y = Math.sin(toRad(lon2 - lon1)) * Math.cos(toRad(lat2));
+  const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) - Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(toRad(lon2 - lon1));
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+};
+
 const handlePosition = (pos: GeolocationPosition) => {
-  const { latitude: lat, longitude: lon, accuracy, speed } = pos.coords;
+  const { latitude: lat, longitude: lon, accuracy, speed, heading } = pos.coords;
   if (accuracy > MAX_ACCURACY_M) return;
 
   const now = pos.timestamp;
@@ -42,7 +50,10 @@ const handlePosition = (pos: GeolocationPosition) => {
   if (speedKmh >= MIN_MOVING_KMH) {
     useUIStore.getState().addTripSample(meters, seconds, speedKmh);
     // Maximumsnelheid van de weg bijwerken (voor de snelheidswaarschuwing)
-    updateSpeedLimit(lat, lon, (aLat, aLon) => distanceBetween(aLat, aLon, lat, lon));
+    // Rijrichting: van de GPS zelf, anders uit de verplaatsing (pas vanaf ~5 m, anders is het ruis)
+    const course = heading !== null && Number.isFinite(heading) ? heading
+      : meters >= 5 ? bearingBetween(previous.lat, previous.lon, lat, lon) : null;
+    updateSpeedLimit(lat, lon, course);
   }
 };
 

@@ -37,6 +37,8 @@ const ALL_APPS = [
   { id: 'canmonitor', icon: '/app-icons/canmonitor.svg', name: 'CAN monitor', type: 'image' },
   // Rechtstreeks naar de ontwikkelaarsopties van Android (alleen op de radio)
   { id: 'developer', icon: '/app-icons/developer.svg', name: 'Developer options', type: 'image' },
+  // De CAN-app van de radio (Voertuig informatie: deuren, airco, instellingen van het CAN-kastje; alleen op de radio)
+  { id: 'carinfo', icon: '/app-icons/carinfo.svg', name: 'Car info', type: 'image' },
 ];
 
 const QuickActionsApp: React.FC = () => {
@@ -81,7 +83,7 @@ const QuickActionsApp: React.FC = () => {
   // Geïnstalleerde Android-apps (op de radio) en wat elk PandaOS-pictogram doet (Settings > Apps)
   const installedApps = useInstalledApps();
   const actions = new Map<string, LaunchAction>(ALL_APPS.map((app) => [app.id, getLaunchAction(appLinks, app.id, installedApps)]));
-  const visibleApps = ALL_APPS.filter((app) => actions.get(app.id)!.kind !== 'hidden' && (app.id !== 'developer' || isAndroidLauncher()));
+  const visibleApps = ALL_APPS.filter((app) => actions.get(app.id)!.kind !== 'hidden' && (!['developer', 'carinfo'].includes(app.id) || isAndroidLauncher()));
   // Overige Android-apps: alles wat niet al achter een PandaOS-pictogram zit
   // (en ook geen alternatieven daarvan, bijv. Google Phone als Telefoon op PandaOS staat)
   const coveredPackages = getPackagesBehindPandaOSIcons(appLinks, installedApps);
@@ -153,6 +155,10 @@ const QuickActionsApp: React.FC = () => {
       case 'developer':
         addRecentApp('developer');
         (window as any).PandaAndroid?.openDeveloperSettings?.();
+        break;
+      case 'carinfo':
+        addRecentApp('carinfo');
+        (window as any).PandaAndroid?.openCarInfoApp?.();
         break;
       default:
         console.log(`Geen actie gekoppeld aan: ${id}`);
