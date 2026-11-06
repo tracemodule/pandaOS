@@ -1,7 +1,7 @@
 # PandaOS – overdracht (stand van zaken)
 
 Lees dit eerst als je verder werkt op een andere computer of in een nieuwe Claude-sessie.
-Laatst bijgewerkt: 4 november 2026.
+Laatst bijgewerkt: 6 november 2026 (PandaOS 1.4.4).
 
 ## Wat is PandaOS
 
@@ -216,6 +216,46 @@ Op de radio neemt die app de rol van de Node-server over.
 - **Tekstgrootte**: Standaard (1), Groot (1,15), Handmatig (schuifbalk 85–140 %). Kiezen = meteen voorvertoning,
   OK = opslaan, Annuleren = terug. Werkt via `--text-scale`: alle `font-size` in SCSS en inline zijn
   `calc(Npx * var(--text-scale, 1))` (behalve ≥ 40px). Nieuwe tekstgroottes ook zo schrijven.
+
+## Versies 1.4.0 – 1.4.4 (5-6 november 2026)
+
+Alles getest op de Android 9-emulator, nog niet op de radio. Wat op de radio nog moet: RADIOTEST.md en BEVINDINGEN.md.
+
+- **1.4.0 – radiotest verwerkt**: Jancar-meestervolume blijft leidend (Android-mediavolume op 100 %, `keepMediaVolumeFull`),
+  hd2cam blijft aan (melding), achteruitcamera 8, Bluetooth-muziek zet eerst de Jancar-bron op A2DP, "Speelt via
+  CarPlay/AA" uit broadcasts (`MediaWatcher.kt`), CarPlay automatisch verbinden, policy_control opnieuw bij onResume,
+  volumebalk verbergen via overscan (smalle hidden-API-uitzondering, alleen `IWindowManager`/`WindowManagerGlobal`/
+  `DisplayInfo`), Build-keuze Ontwikkelaar/Publicatie (Instellingen → Software), bredere veegstrook (32 dp),
+  studio-achtergrond, weer + buitentemperatuur in de bovenbalk (Open-Meteo), SOS-knop (Telefoon met 112, belt niet),
+  eigen Bluetooth-app, Radio-app via Jancar (afstemmen via geraden broadcasts), geanimeerd app-menu-icoon.
+- **Emulatorcrash (exit 139)**: SwiftShader/gfxstream crasht als grote CSS-gradients of een transparante 3D-vloer onder
+  het transparante WebGL-canvas liggen. Oplossing: de studio wordt één keer als canvas-2D-bitmap getekend en als
+  achtergrond gebruikt (`studioBackground` in SidebarPane.tsx). Geen grote transparante vlakken onder de auto zetten.
+- **Prestaties**: Canvas `frameloop="demand"` met `RenderOnDemand`: alleen continu tekenen bij slepen, knipperlicht,
+  neon-pulse/regenboog, regenboogvloer en lopende Toybox-effecten; anders ~1 beeld per seconde. Stand in
+  `window.__pandaRender`. Zware apps (CarPlay, CAN-monitor, Theater, Arcade, Diagnose) via React.lazy. Herstartreden in
+  het logboek ("Start: …", "Geheugenwaarschuwing").
+- **Updates**: Instellingen → Software → Update-pagina: downloaden met voortgang, apart installeren, na de installatie
+  start PandaOS zelf weer en toont "Bijgewerkt naar …" (`UpdateInstaller.kt`, `UpdatePage.tsx`).
+- **1.4.2**: bestuurdersprofielen (`driverProfiles`, `PROFILE_KEYS` in uiStore; eigen scherm-, navigatie-, geluids-,
+  veiligheids- en app-instellingen en dock), "Opslaan… / Opgeslagen" bij de naam, weervenster, bovenaanzicht van de
+  auto in R, app-menu schuift van onderen, overal naar rechts dichtvegen (`useSwipeToClose` met capture; let op:
+  `touch-action` werkt maar tot de dichtstbijzijnde scroll-container, daarom `.swipe-pan-y *`), wifi/BT-icoon opent
+  de instellingen, kaartknoppen (satelliet, verkeer, plekken, tankstations) en zoeken op categorie.
+- **1.4.3 – OBD2** (`Obd2Client.kt`, `services/obd.ts`, `ObdApp.tsx`): ELM327 via Bluetooth Classic (SPP), live-waarden,
+  foutcodes lezen (mode 03/07) met uitleg; mode 04 (wissen) wordt bewust nooit gestuurd. Demostand voor testen.
+  Telefoon en dongle tegelijk kan volgens Android 9; op de Jancar nog controleren met `pandaos.mjs bt-check`.
+- **1.4.4**:
+  - Telefoon-app opnieuw (`PhoneApp.tsx`, `PhoneParts.tsx`, `_phone-app.scss`): Recent per dag, Contacten met
+    initialen, zoeken en A-Z-index, toetsenblok altijd rechts, lang drukken op 0 = +, balk "Verbinden" zonder
+    telefoon (`getBluetoothState`, OBD-dongles tellen niet mee). Nummers worden nergens gelogd of opgeslagen.
+  - CAN-monitor: icoonknoppen in de kop, tabs over de hele breedte, kaarten (berichten/s, CAN-ID's of
+    "Verschillende signalen", verbinding). Diagnose (`DiagnosticsPanel.tsx`): gekleurde tellers en bolletje per regel.
+  - Toybox (`ToyEffects.tsx`, `toyFx.ts`, `toySounds.ts`): Lichtshow (tempo, geen echte beat-detectie), Weer op de
+    auto, Wasstraat, Geluidenbord (WebAudio, geen bestanden), Boost, velgafwerking en verlagen (0-5 cm) in de
+    Spuiterij, Feestdagen (december lichtjes en muts, 31 dec/1 jan vuurwerk; standaard aan). Testen:
+    `pandaStore.getState().startToyFx('holidayPreview' | 'wash' | 'boost')`,
+    `updateVehicleSetting('weatherFx', 'rain' | 'snow' | 'sun' | 'auto' | 'off')`.
 
 ## De echte radio (eerste test in de auto, 4 november 2026)
 

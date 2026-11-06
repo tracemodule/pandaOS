@@ -1,4 +1,17 @@
-# Takenlijst volgende versie (na 1.3.8)
+# Takenlijst volgende versie (na 1.4.4)
+
+## Open na 1.4.4 (6 november 2026)
+- **Op de radio testen** (zie RADIOTEST.md): OBD2 met een echte dongle en `bt-check` met de telefoon tegelijk,
+  Radio-app (afstemmen), bellen via de Jancar-Bluetooth-app, "Speelt via CarPlay/AA", volumebalk verbergen,
+  Telefoon-app ziet of de telefoon verbonden is, geluiden van Geluidenbord en Boost.
+- **Toybox bijschaven na het testen**: regen is op de lichte achtergrond slecht te zien; boost-vlammen zie je vanaf de
+  voorkant niet; vuurwerk nu de hele dag op 31 dec/1 jan (eventueel alleen 's avonds: `holidaysOn` in `toyFx.ts`).
+- **Later (afgesproken)**: welkomstwizard bij de eerste start, laadscherm, splitsen in processen + aparte
+  Updater-app. Herstartreden staat al in het logboek: eerst gegevens van de radio bekijken.
+
+---
+Hieronder oudere lijsten (1.3.8 – 1.3.9), ter naslag.
+
 
 Vaste lijst met alles wat David heeft gevraagd. Bijwerken zodra iets klaar is. Pas committen als de lijst af is
 (of als David dat zegt). Videotijden verwijzen naar https://www.youtube.com/watch?v=0hZyOJGAggo

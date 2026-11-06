@@ -5,9 +5,12 @@ Een Tesla-achtige interface voor de Android-autoradio van een Volkswagen Golf 6,
 - `client/` — de webapp (React + TypeScript + Vite)
 - `android/` — de launcher-app voor de radio (Kotlin, WebView met de webapp, brug naar Android)
 - `server/` — Node-server voor laptop/Raspberry Pi (Bluetooth, telefoon, media)
-- `tools/` — `release.ps1` (nieuwe versie uitbrengen) en `radio-diagnose.ps1` (radio verkennen via ADB)
+- `tools/` — `release.ps1` (nieuwe versie uitbrengen), `pandaos.mjs` (PandaOS op de radio testen vanaf de laptop)
+  en `radio-diagnose.ps1` (radio verkennen via ADB)
 
-Hoe alles werkt en wat er nog open staat: [PANDAOS-OVERDRACHT.md](PANDAOS-OVERDRACHT.md).
+Hoe alles werkt: [PANDAOS-OVERDRACHT.md](PANDAOS-OVERDRACHT.md). Wat er nog open staat:
+[TODO-VOLGENDE-VERSIE.md](TODO-VOLGENDE-VERSIE.md). Testen op de radio: [RADIOTEST.md](RADIOTEST.md) en
+[BEVINDINGEN.md](BEVINDINGEN.md).
 
 ## Updates
 

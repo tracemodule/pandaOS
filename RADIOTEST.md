@@ -177,6 +177,11 @@ in de overdracht).
 > - Weer in de bovenbalk (met internet) en de studio-achtergrond op het startscherm, licht en donker.
 > - OBD2 (vanaf 1.4.3): zie BEVINDINGEN.md, hoofdstuk "OBD2 en Bluetooth tegelijk": dongle koppelen, app OBD2,
 >   live-waarden, foutcodes lezen, en `node tools/pandaos.mjs bt-check` met de telefoon tegelijk verbonden.
+> - Telefoon-app (vanaf 1.4.4): met de telefoon verbonden mag de balk "Verbinden" niet verschijnen; zonder telefoon wel.
+>   Past het toetsenblok met de Bellen-knop zonder scrollen (licht en donker)? A-Z-index, zoeken, lang drukken op 0.
+> - CAN-monitor (vanaf 1.4.4): kaarten bovenaan (berichten per seconde, CAN-ID's, verbinding) tijdens opnemen.
+> - Toybox (vanaf 1.4.4): Geluidenbord en Boost via de speakers, Lichtshow, Wasstraat, Weer op de auto, velgen en
+>   verlagen in de Spuiterij; let op of het beeld vloeiend blijft en of de radio niet trager wordt.
 
 Hiermee kun je vanaf de laptop alles in PandaOS nadoen en controleren, zonder dat de auto iets hoeft te doen.
 Nodig: **Node.js 22 of nieuwer** op de laptop (https://nodejs.org, LTS) en de radio verbonden via adb (USB of wifi-adb).
