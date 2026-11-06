@@ -11,6 +11,7 @@ import './_theater.scss';
 import { ContactDetail } from './PhoneParts';
 import BluetoothApp from './BluetoothApp';
 import RadioApp from './RadioApp';
+import ObdApp from './ObdApp';
 
 const bridge = () => (window as any).PandaAndroid;
 
@@ -186,6 +187,7 @@ const PhoneDataApps: React.FC = () => {
   if (panelApp === 'messages') return <MessagesView />;
   if (panelApp === 'bluetooth') return <BluetoothApp />;
   if (panelApp === 'radio') return <RadioApp />;
+  if (panelApp === 'obd') return <ObdApp />;
   return null;
 };
 

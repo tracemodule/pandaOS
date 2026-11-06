@@ -80,6 +80,8 @@ class MainActivity : Activity() {
         signals = CarSignals(this) { call -> callWeb(call) }.also { it.start() }
         // Radio FM/AM/DAB van de radio (Jancar): zender en RDS naar de Radio-app als DOM-event 'pandaos-radio'
         JancarRadio.start(this) { js -> runOnUiThread { if (::webView.isInitialized) webView.evaluateJavascript(js, null) } }
+        // OBD2 (ELM327 via Bluetooth): live waarden en foutcodes naar de OBD-app als DOM-event 'pandaos-obd'
+        Obd2Client.start(this) { js -> runOnUiThread { if (::webView.isInitialized) webView.evaluateJavascript(js, null) } }
         voice = VoiceInput(this,
             onPartial = { callWeb("voiceInput(${org.json.JSONObject().put("state", "partial").put("text", it)})") },
             onFinal = { callWeb("voiceInput(${org.json.JSONObject().put("state", "final").put("text", it)})") },

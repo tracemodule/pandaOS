@@ -480,8 +480,8 @@ interface UIState {
   closeCanMonitor: () => void;
   // Theater (half scherm): videoapps zoals Netflix, YouTube en Twitch
   isTheaterOpen: boolean;
-  panelApp: 'contacts' | 'calendar' | 'messages' | 'bluetooth' | 'radio' | null; // PhoneDataApps.tsx: half naast de auto
-  openPanelApp: (app: 'contacts' | 'calendar' | 'messages' | 'bluetooth' | 'radio') => void;
+  panelApp: 'contacts' | 'calendar' | 'messages' | 'bluetooth' | 'radio' | 'obd' | null; // PhoneDataApps.tsx: half naast de auto
+  openPanelApp: (app: 'contacts' | 'calendar' | 'messages' | 'bluetooth' | 'radio' | 'obd') => void;
   closePanelApp: () => void;
   openTheater: () => void;
   closeTheater: () => void;

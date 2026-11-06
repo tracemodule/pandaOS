@@ -140,3 +140,24 @@ extra's `freq`/`frequency`/`band`): niet geverifieerd. Bij de volgende laptoptes
   bevestigd` (na een tik op een zender in de Radio-app).
 - Controleren: zet het openen van de radio-app (Radio-app > tegel of "Radio openen") de bron echt op radio, en komt
   PandaOS na 700 ms terug zonder dat het geluid stopt?
+
+## OBD2 en Bluetooth tegelijk met de telefoon (voorbereid 6-11-2026, nog testen in de auto)
+
+**Kan de radio tegelijk met de telefoon en een OBD2-dongle verbonden zijn?** Volgens hoe Android 9 werkt: ja.
+- De telefoon gebruikt *audio- en belprofielen* (A2DP-sink voor muziek, HFP-client voor bellen, AVRCP voor bediening,
+  PBAP voor contacten). Die lopen bij de Golf-radio via de gewone Android-Bluetooth-stack (gezien: `com.android.bluetooth`
+  A2dpSink/AvrcpController, aangestuurd door `com.jancar.btservice`).
+- Een ELM327-OBD2-dongle gebruikt **SPP** (seriële poort over RFCOMM). Dat is geen audio en telt niet mee voor het
+  maximum aantal audio-apparaten. Android kan tot 7 Bluetooth-verbindingen tegelijk aan; telefoon + dongle = 2.
+- Risico's: sommige Jancar-firmware verbreekt onbekende apparaten of laat in de eigen Bluetooth-app alleen telefoons
+  zien; zoeken naar apparaten (discovery) kan de muziek even laten haperen (PandaOS stopt het zoeken voor het verbinden).
+- Gebruik een **klassieke Bluetooth** ELM327 (v1.5/v2.1 "Bluetooth"), geen BLE-only dongle (veel iOS-dongles zijn BLE).
+
+**Testen in de auto (laptop, Build op Ontwikkelaar):**
+1. Telefoon verbonden en muziek aan. Dongle in de OBD-poort (Golf 6: onder het stuur, links van de stuurkolom).
+2. Koppel de dongle bij PandaOS Instellingen > Bluetooth (pincode meestal 1234 of 0000).
+3. Open de app OBD2, kies de dongle. Live-waarden moeten binnen ~10 s verschijnen (eerste keer zoekt de dongle het
+   protocol; Golf 6 is meestal ISO 15765-4 CAN 11/500).
+4. `node tools/pandaos.mjs bt-check`: welke profielen zijn verbonden (telefoon) en is OBD verbonden? Speelt de muziek
+   nog door en kun je nog bellen?
+5. Foutcodes lezen in de app. Wissen zit er bewust niet in.

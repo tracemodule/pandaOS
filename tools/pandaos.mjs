@@ -171,7 +171,7 @@ const SECTIONS = { display: 'displaySettings', navigation: 'navigationSettings',
 const showSetting = (label, ns, key) => console.log(`${label}: ${sh(`settings get ${ns} ${key}`)}`);
 
 const COMMANDS = ['status', 'volume', 'volumes', 'set', 'open', 'bluetooth', 'media', 'sources', 'log', 'js', 'setup', 'doctor', 'apks',
-  'carplay-auto', 'immersive', 'overscan', 'can', 'sim', 'camera', 'audio', 'shot', 'test'];
+  'bt-check', 'carplay-auto', 'immersive', 'overscan', 'can', 'sim', 'camera', 'audio', 'shot', 'test'];
 const [cmd, ...args] = process.argv.slice(2);
 try {
   if (COMMANDS.includes(cmd) && !ADB) throw adbMissing();
@@ -322,6 +322,28 @@ try {
       break;
     }
 
+    // Bluetooth: telefoon en OBD2-dongle tegelijk? Alleen aantallen en profielnamen, nooit adressen of namen van mensen.
+    case 'bt-check': {
+      const dump = sh('dumpsys bluetooth_manager');
+      const lines = dump.split('\n');
+      const pick = (re) => lines.filter((l) => re.test(l)).map((l) => l.trim().replace(/([0-9A-F]{2}:){5}[0-9A-F]{2}/gi, 'XX:XX:XX:XX:XX:XX'));
+      console.log('Bluetooth-stack van de radio (dumpsys bluetooth_manager, adressen gemaskeerd):');
+      for (const l of pick(/^\s*(enabled|state|name):/i).slice(0, 4)) console.log('  ' + l);
+      console.log('Profielen met een verbinding:');
+      for (const l of pick(/(A2dpSink|HeadsetClient|AvrcpController|PbapClient|MapClient|Sap|Hid|Pan).*(Connected|STATE_CONNECTED|state=2)/i).slice(0, 12)) console.log('  ' + l);
+      console.log('RFCOMM / SPP (OBD2-dongles gebruiken SPP):');
+      for (const l of pick(/rfcomm|spp|serial port/i).slice(0, 8)) console.log('  ' + l);
+      const max = sh('getprop persist.bluetooth.maxconnectedaudiodevices').trim();
+      console.log(`Max. audio-apparaten tegelijk (persist.bluetooth.maxconnectedaudiodevices): ${max || 'niet gezet (standaard 1 voor audio)'}`);
+      console.log('Let op: dit gaat over AUDIO. Een OBD2-dongle is geen audio (SPP), die telt hier niet mee.');
+      // In PandaOS zelf (Ontwikkelaar-stand): wat ziet de launcher?
+      try {
+        const info = await evaluate('JSON.stringify(window.PandaAndroid && PandaAndroid.obdBluetoothInfo ? JSON.parse(PandaAndroid.obdBluetoothInfo()) : null)');
+        console.log('PandaOS (obdBluetoothInfo): ' + info);
+      } catch { console.log('PandaOS: niet bereikbaar (Instellingen > Software > Build op Ontwikkelaar?)'); }
+      break;
+    }
+
     case 'carplay-auto': {
       if (['on', 'off'].includes(args[0])) sh(`settings put global CarplayAutoConnectSwitch ${args[0] === 'on' ? 1 : 0}`);
       else if (args[0] && args[0] !== 'status') throw new Error('Gebruik: carplay-auto on|off|status');
@@ -436,6 +458,7 @@ try {
     default:
       console.log(`Gebruik: node tools/pandaos.mjs <${COMMANDS.join('|')}> ...  (zie bovenaan dit bestand)
   volumes [music100]              Jancar-volumes uit het logboek + Android-muziekvolume (music100 = op 100)
+  bt-check                        Bluetooth: telefoon + OBD2 tegelijk? Profielen en SPP (adressen gemaskeerd)
   carplay-auto on|off|status      CarPlay automatisch verbinden
   immersive on|off|status         systeembalken verbergen
   overscan hide|reset|status      onderste balk wegschuiven / terugzetten

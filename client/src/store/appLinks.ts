@@ -178,6 +178,9 @@ export const LINKABLE_APPS: LinkableApp[] = [
   // Radio: de PandaOS-radio (FM/AM/DAB van de radio zelf, via de Jancar-radio), of de radio-app van de fabrikant
   { id: 'radio', name: 'Radio', icon: '/app-icons/radio.svg', allowOther: true,
     detect: /jancar\.radio|\bradio\b|\bdab\b|\bfm\b|tuner/i, options: [] },
+  // OBD2: de PandaOS OBD2-app (ELM327-dongle via Bluetooth: live waarden en foutcodes), of een eigen OBD2-app
+  { id: 'obd', name: 'OBD2', icon: '/app-icons/obd.svg', allowOther: true,
+    detect: /\bobd|torque|elm ?327|car ?scanner|obdeleven/i, options: [] },
   // Audio: de PandaOS Audio-instellingen (klank, balans, bronnen van de radio), of de audio-/DSP-app van de radio
   { id: 'audio', name: 'Audio', icon: '/app-icons/audio.svg', allowOther: true,
     detect: /\bdsp\b|equali[sz]er|\beq\b|audio ?settings|sound ?settings|geluid|amplifier|car ?audio/i, options: [] },

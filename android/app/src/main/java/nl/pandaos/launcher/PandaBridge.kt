@@ -985,4 +985,37 @@ class PandaBridge(
     // Afstemmen: GERADEN broadcasts, niet geverifieerd (zie JancarRadio.tune)
     @JavascriptInterface
     fun tuneRadio(freq: Double, band: String): String = JancarRadio.tune(freq, band)
+
+    // --- OBD2 via een ELM327-adapter (ObdApp.tsx): zie Obd2Client. Alleen lezen; foutcodes wissen bestaat bewust niet ---
+
+    // [{"name":"OBDII","address":"..","likelyObd":true}, ..., {"name":"Demo","address":"demo","likelyObd":true}]
+    @JavascriptInterface
+    fun obdListDevices(): String = Obd2Client.listDevicesJson()
+
+    // Verbinden (onthoudt het apparaat als laatste); "demo" = gesimuleerde Golf zonder Bluetooth
+    @JavascriptInterface
+    fun obdConnect(address: String) = Obd2Client.connect(address)
+
+    @JavascriptInterface
+    fun obdDisconnect() = Obd2Client.disconnect()
+
+    // Aan: bij het starten met het laatste apparaat verbinden en blijven herverbinden (5 s, 10 s, 30 s)
+    @JavascriptInterface
+    fun obdSetAutoConnect(on: Boolean) = Obd2Client.setAutoConnect(on)
+
+    // {"autoConnect":bool,"lastAddress":"..","lastName":".."}
+    @JavascriptInterface
+    fun obdGetSettings(): String = Obd2Client.settingsJson()
+
+    // {"state":..,"device":..,"protocol":..,"error":..,"supported":[..],"values":{..},"dtc":..,"updatedAt":..,"demo":..}
+    @JavascriptInterface
+    fun obdState(): String = Obd2Client.stateJson()
+
+    // Foutcodes (modus 03 en 07) lezen; resultaat in state.dtc (event 'pandaos-obd')
+    @JavascriptInterface
+    fun obdReadDtc() = Obd2Client.readDtc()
+
+    // {"adapterEnabled":..,"bonded":n,"connectedProfiles":{"a2dpSink":[..],"headsetClient":[..],"avrcpController":[..]},"obdConnected":..}
+    @JavascriptInterface
+    fun obdBluetoothInfo(): String = Obd2Client.bluetoothInfoJson()
 }

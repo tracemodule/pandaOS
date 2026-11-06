@@ -5,6 +5,12 @@ export type VersionNotes = { version: string; items: NoteItem[] };
 
 export const RELEASE_NOTES: VersionNotes[] = [
   {
+    version: '1.4.3',
+    items: [
+      { icon: 'car', title: 'OBD2', text: 'Nieuwe app OBD2: koppel een ELM327-adapter via Bluetooth en zie live toerental, snelheid, koelvloeistof, accu, tank, buitentemperatuur, verbruik en meer. Foutcodes lezen met uitleg; wissen kan bewust niet. Automatisch verbinden bij het starten. Je telefoon kan tegelijk verbonden blijven.' },
+    ],
+  },
+  {
     version: '1.4.2',
     items: [
       { icon: 'phone', title: 'Bestuurdersprofielen', text: 'Tik bovenin op je naam: wissel van bestuurder, voeg een bestuurder toe of open Profielinstellingen. Elk profiel heeft eigen scherm-, navigatie-, geluids-, veiligheids- en app-instellingen en een eigen dock.' },

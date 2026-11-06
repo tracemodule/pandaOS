@@ -26,6 +26,7 @@ import LanguagePanel from '../../components/settings/LanguagePanel';
 import IconTiles, { type IconTile, ColorDot, TintIcon, ExhaustIcon, ManualIcon } from '../../components/settings/IconTiles';
 import { SETTINGS_INDEX } from '../settingsIndex';
 import { useT } from '../../i18n';
+import { ObdMaintenanceSummary } from './ObdApp';
 import { LINKABLE_APPS, getAppLink, getChoices, useInstalledApps, isAndroidLauncher, otherAppTarget, getAndroidAppIcon, getLaunchAction,
   getAndroidAppName, isAndroidAppVisible, androidAppKey, getPackagesBehindPandaOSIcons } from '../appLinks';
 
@@ -1277,7 +1278,8 @@ const SettingsApp: React.FC = () => {
             {/* --- MAINTENANCE: voertuiginformatie en onderhoud (gegevens komen uit OBD2) --- */}
             {activeTab === 'Maintenance' && (
               <div className="settings-list" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                <small className="tsl-hint">{t('OBD2 adapter not connected. The values below appear once the adapter is plugged in.')}</small>
+                {/* OBD2: live waarden als de dongle verbonden is, anders de uitleg; knop naar de OBD2-app */}
+                <ObdMaintenanceSummary />
 
                 <div className="tsl-section">
                   <span className="tsl-title">{t('Vehicle')}</span>

@@ -74,7 +74,7 @@ const ControlBar: React.FC = () => {
     else if (id === 'toybox') isToyboxOpen ? closeToybox() : openToybox();
     else if (id === 'audio') openAudioApp();
     else if (id === 'diagnostics') isDiagnosticsOpen ? closeDiagnostics() : openDiagnostics();
-    else if (id === 'contacts' || id === 'calendar' || id === 'messages' || id === 'bluetooth' || id === 'radio') useUIStore.getState().panelApp === id ? useUIStore.getState().closePanelApp() : useUIStore.getState().openPanelApp(id);
+    else if (id === 'contacts' || id === 'calendar' || id === 'messages' || id === 'bluetooth' || id === 'radio' || id === 'obd') useUIStore.getState().panelApp === id ? useUIStore.getState().closePanelApp() : useUIStore.getState().openPanelApp(id);
     else if (id === 'music') toggleMusic();
     else if (id === 'settings') openSettingsTab('Display');
     else if (id === 'carplay') toggleCarPlay();
