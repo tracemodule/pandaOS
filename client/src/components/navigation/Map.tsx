@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Search, CornerUpLeft, CornerUpRight, MoveUp, RotateCw, Battery, MoreHorizontal, X, Plus, Minus, Navigation2, MapPin
+  Search, CornerUpLeft, CornerUpRight, MoveUp, RotateCw, Battery, MoreHorizontal, X, Plus, Minus, Navigation2, MapPin,
+  Satellite, TrafficCone, MapPinned, Fuel, Info
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, useMap, Polyline, CircleMarker } from 'react-leaflet';
 import L from 'leaflet';
@@ -12,8 +13,13 @@ import './_map.scss';
 import { diag } from '../../services/diagnostics';
 import { PlacePickerModal } from './PlacePicker';
 import { getSpeedCameras } from '../../services/speedCameras';
-import MapPlaces from './MapPlaces';
-import { DEFAULT_MAPBOX_TOKEN, mapboxTiles, MAPBOX_ATTRIBUTION } from './mapbox';
+import MapPlaces, {
+  categoryForSearch, searchNearby, placeAddress, distanceMeters, iconFor, PLACE_ICONS, PLACE_KINDS, type Place, type PlaceQuery
+} from './MapPlaces';
+import {
+  DEFAULT_MAPBOX_TOKEN, mapboxTiles, mapboxPlainTiles, mapboxSatelliteTiles, MAPBOX_ATTRIBUTION, ESRI_SATELLITE_TILES, ESRI_ATTRIBUTION
+} from './mapbox';
+import PlaceCard from './PlaceCard';
 
 // --- PDOK (gratis, Kadaster): kaart en adreszoeker voor Nederland ---
 // BRT Achtergrondkaart, thema "grijs" (rustig, past bij de Tesla-stijl). Andere thema's: standaard, pastel, water.
@@ -138,6 +144,13 @@ const Map: React.FC = () => {
   const [mapboxFailed, setMapboxFailed] = useState(false);
   const mapboxToken = (navigationSettings.mapboxToken ?? '').trim() || DEFAULT_MAPBOX_TOKEN;
   const useMapbox = navigationSettings.mapProvider === 'mapbox' && mapboxToken.startsWith('pk.') && !mapboxFailed;
+  // Knoppen rechts: satelliet, verkeer (alleen Mapbox), plekken, tankstations (bewaard in Instellingen > Navigatie)
+  const satellite = !!navigationSettings.mapSatellite;
+  const traffic = navigationSettings.mapTraffic !== false;
+  const trafficAvailable = useMapbox && !satellite;
+  const placesList = navigationSettings.places ?? [];
+  const placesShown = !navigationSettings.placesHidden && placesList.length > 0;
+  const fuelShown = placesShown && placesList.includes('fuel');
   // Token controleren met één tegel: ongeldig (401/403) = terug naar de PandaOS-kaart
   useEffect(() => {
     setMapboxFailed(false);
@@ -174,6 +187,18 @@ const Map: React.FC = () => {
   const [zoomButtons, setZoomButtons] = useState(false);
   const mapRef = React.useRef<L.Map | null>(null);
   const [isRoutePreview, setIsRoutePreview] = useState(false);
+  // Kaartje van een plek (tik op een plek of op (i) in de zoekresultaten)
+  const [placeCard, setPlaceCard] = useState<Place | null>(null);
+  // Zoeken op soort ("tanken", "eten", "parkeren"): plekken in de buurt, gesorteerd op afstand
+  const [category, setCategory] = useState<{ query: PlaceQuery; status: 'loading' | 'done' | 'offline' | 'error'; places: Place[] } | null>(null);
+  const positionRef = React.useRef(position);
+  positionRef.current = position;
+  // Korte melding op de kaart (bijv. waarom Verkeer niet kan)
+  const [hint, setHint] = useState<string | null>(null);
+  const hintTimer = React.useRef<number | undefined>(undefined);
+  const showHint = (text: string) => { setHint(text); window.clearTimeout(hintTimer.current); hintTimer.current = window.setTimeout(() => setHint(null), 4000); };
+  // Satelliet via Mapbox: lukt dat niet (token geweigerd), dan Esri
+  const [satMapboxFailed, setSatMapboxFailed] = useState(false);
   // Kaarttegels: telt geladen en mislukte tegels; na herhaald mislukken de wereldkaart en een melding
   const [pdokFailed, setPdokFailed] = useState(false);
   const [tileProblem, setTileProblem] = useState<string | null>(null);
@@ -190,6 +215,16 @@ const Map: React.FC = () => {
       if (!stats.reported) { stats.reported = true; diag('error', 'Navigatie', `Kaart laadt niet: ${mapProblem()} (online=${navigator.onLine}, klok=${new Date().toISOString()})`); }
     },
   }), [useWorldMap]);
+  const satStats = React.useRef({ failed: 0 });
+  const satEvents = React.useMemo(() => ({
+    tileload: () => { satStats.current.failed = 0; setTileProblem(null); },
+    tileerror: () => {
+      if (++satStats.current.failed < 6) return;
+      satStats.current.failed = 0;
+      if (mapboxToken.startsWith('pk.') && !satMapboxFailed && navigator.onLine) { setSatMapboxFailed(true); diag('warn', 'Navigatie', 'Mapbox-satelliet laadt niet, over op Esri'); return; }
+      setTileProblem(mapProblem());
+    },
+  }), [mapboxToken, satMapboxFailed]);
 
   // 1. Live GPS Tracking met Heading (Richting)
   useEffect(() => {
@@ -211,6 +246,20 @@ const Map: React.FC = () => {
   // 2. Adres Zoeken API (PDOK Location API). Alleen zoeken als het Navi-zoekveld actief is,
   // want keyboardValue wordt ook door andere zoekvelden (Settings) gebruikt.
   useEffect(() => {
+    // Een soort plek ("tanken", "eten", "parkeren"): plekken in de buurt in plaats van adressen
+    const query = isSearching && !isNavigating ? categoryForSearch(keyboardValue) : null;
+    if (query) {
+      setSearchResults([]);
+      setCategory({ query, status: 'loading', places: [] });
+      let cancelled = false;
+      const timer = setTimeout(async () => {
+        const list = await searchNearby(query, positionRef.current, mapboxToken, useUIStore.getState().navigationSettings.fuelType ?? 'euro95');
+        if (cancelled) return;
+        setCategory({ query, places: list ?? [], status: list ? 'done' : navigator.onLine ? 'error' : 'offline' });
+      }, 400);
+      return () => { cancelled = true; clearTimeout(timer); };
+    }
+    setCategory(null);
     if (!isSearching || keyboardValue.length < 3 || isNavigating) {
       setSearchResults([]);
       return;
@@ -227,7 +276,7 @@ const Map: React.FC = () => {
       } catch (e) { console.error(e); }
     }, 400);
     return () => clearTimeout(timer);
-  }, [keyboardValue, isNavigating, isSearching]);
+  }, [keyboardValue, isNavigating, isSearching, mapboxToken]);
 
   // 3. Route berekenen
   const calculateRoute = async (destLat: number, destLon: number) => {
@@ -272,6 +321,8 @@ const Map: React.FC = () => {
       closeKeyboard();
       return;
     }
+    setPlaceCard(null);
+    if (isNavigating) setNavigating(false);
     setSelectedDestination({ lat: address.lat, lon: address.lon, name: address.display_name });
     setKeyboardValue(address.display_name.split(',')[0]);
     setSearchResults([]);
@@ -292,7 +343,35 @@ const Map: React.FC = () => {
     return () => window.removeEventListener('pandaos-nav-place', onPlace);
   });
 
+  // Plek (zoekresultaat of kaartje) als bestemming: de gewone routeflow
+  const navigateToPlace = (p: Place) =>
+    handleSelectAddress({ display_name: [p.name || t(p.label), placeAddress(p)].filter(Boolean).join(', '), lat: p.lat, lon: p.lon });
+  const openPlaceCard = (p: Place) => {
+    setPlaceCard(p);
+    setIsSearching(false);
+    closeKeyboard();
+  };
+
+  // Knoppen rechts op de kaart
+  const setNav = useUIStore.getState().updateNavigationSetting;
+  const toggleTraffic = () => {
+    if (!useMapbox) { showHint(t('Traffic needs the Mapbox map (Settings > Navigation).')); return; }
+    if (satellite) { showHint(t('Traffic is not shown on the satellite view.')); return; }
+    setNav('mapTraffic', !traffic);
+  };
+  const togglePlaces = () => {
+    if (placesShown) { setNav('placesHidden', true); return; }
+    if (placesList.length === 0) setNav('places', ['fuel', 'food', 'parking']);
+    setNav('placesHidden', false);
+  };
+  const toggleFuel = () => {
+    if (fuelShown) { setNav('places', placesList.filter((k) => k !== 'fuel')); return; }
+    if (!placesList.includes('fuel')) setNav('places', [...placesList, 'fuel']);
+    setNav('placesHidden', false);
+  };
+
   const clearSearch = () => {
+    setPlaceCard(null);
     setRoutes([]);
     setDepartAt(null);
     setMoreOpen(false);
@@ -310,13 +389,18 @@ const Map: React.FC = () => {
 
   return (
     // Klikken op de kaart en de kaarten erop mag Navi niet sluiten (SplashScreen sluit apps bij een klik op de kaart)
-    <div className={`tsl-map-container ${isDarkMode ? 'dark-mode' : ''} ${is3D ? 'is-3d-active' : ''} ${useMapbox ? 'is-mapbox' : ''}`}
+    <div className={`tsl-map-container ${isDarkMode ? 'dark-mode' : ''} ${is3D ? 'is-3d-active' : ''} ${useMapbox ? 'is-mapbox' : ''} ${satellite ? 'is-satellite' : ''}`}
       onClick={(e) => e.stopPropagation()}>
       <div className="map-layer">
         <MapContainer ref={mapRef} center={position} zoom={15} zoomControl={false} style={{ width: '100%', height: '100%' }}>
-          {useMapbox
-            ? <TileLayer key={`mapbox-${isDarkMode}`} url={mapboxTiles(mapboxToken, isDarkMode)} attribution={MAPBOX_ATTRIBUTION}
-                tileSize={512} zoomOffset={-1} maxZoom={20} maxNativeZoom={20} />
+          {satellite
+            ? (mapboxToken.startsWith('pk.') && !satMapboxFailed && !mapboxFailed
+              ? <TileLayer key="sat-mapbox" url={mapboxSatelliteTiles(mapboxToken)} attribution={MAPBOX_ATTRIBUTION}
+                  tileSize={512} zoomOffset={-1} maxZoom={20} maxNativeZoom={20} eventHandlers={satEvents} />
+              : <TileLayer key="sat-esri" url={ESRI_SATELLITE_TILES} attribution={ESRI_ATTRIBUTION} maxZoom={20} maxNativeZoom={18} eventHandlers={satEvents} />)
+            : useMapbox
+            ? <TileLayer key={`mapbox-${isDarkMode}-${traffic}`} url={traffic ? mapboxTiles(mapboxToken, isDarkMode) : mapboxPlainTiles(mapboxToken, isDarkMode)}
+                attribution={MAPBOX_ATTRIBUTION} tileSize={512} zoomOffset={-1} maxZoom={20} maxNativeZoom={20} />
             : useWorldMap
             ? <TileLayer key="world" url={WORLD_TILES} attribution={WORLD_ATTRIBUTION} maxZoom={19} maxNativeZoom={19} eventHandlers={tileEvents} />
             : <TileLayer key="pdok" url={PDOK_TILES} attribution={PDOK_ATTRIBUTION} maxZoom={19} maxNativeZoom={19} eventHandlers={tileEvents} />}
@@ -341,7 +425,12 @@ const Map: React.FC = () => {
               eventHandlers={{ click: () => setRouteData(r) }} />
           ))}
 
-          <MapPlaces />
+          <MapPlaces hidden={!!navigationSettings.placesHidden} onSelect={setPlaceCard} />
+          {/* Resultaten van zoeken op soort ook op de kaart */}
+          {isSearching && category?.places.map((p) => (
+            <Marker key={`cat-${p.id}`} position={[p.lat, p.lon]} icon={iconFor(p.kind)} eventHandlers={{ click: () => openPlaceCard(p) }} />
+          ))}
+          {placeCard && <Marker key="place-card" position={[placeCard.lat, placeCard.lon]} />}
           <MapController position={position} isNavigating={isNavigating} is3D={is3D} recenterKey={recenterKey}
             following={following} onUserMove={() => setFollowing(false)} onMapTap={() => setZoomButtons(true)}
             fitPoints={isRoutePreview && routes.length > 0 ? [position, ...routes.flatMap((r) => r.geometry.filter((_: any, i: number) => i % 10 === 0))] : null} />
@@ -367,6 +456,29 @@ const Map: React.FC = () => {
             {(keyboardValue && (isSearching || selectedDestination)) && (
               <button className="clear-btn" onClick={clearSearch} aria-label={t('Clear')}><X size={20} /></button>
             )}
+          </div>
+        )}
+
+        {/* Zoeken op soort: plekken in de buurt (tik = route, (i) = kaartje) */}
+        {!isNavigating && category && (
+          <div className="tsl-nav-results">
+            {category.status === 'loading' && <div className="result-empty">{t('Searching nearby…')}</div>}
+            {category.status === 'offline' && <div className="result-empty">{t('No internet connection')}</div>}
+            {category.status === 'error' && <div className="result-empty">{t('Places could not be loaded. Try again later.')}</div>}
+            {category.status === 'done' && category.places.length === 0 && <div className="result-empty">{t('Nothing found nearby')}</div>}
+            {category.places.map((p) => (
+              <div key={p.id} className="result-row is-place">
+                <button className="result-main" onClick={() => navigateToPlace(p)}>
+                  <span className="map-place" style={{ background: PLACE_KINDS.find((k) => k.id === p.kind)?.color }}
+                    dangerouslySetInnerHTML={{ __html: PLACE_ICONS[p.kind] }} />
+                  <div className="result-text">
+                    <span className="result-title">{p.name || t(p.label)}</span>
+                    <span className="result-sub">{[formatDistance(p.distance ?? 0), placeAddress(p)].filter(Boolean).join(' · ')}</span>
+                  </div>
+                </button>
+                <button className="result-info" aria-label={t('Details')} onClick={() => openPlaceCard(p)}><Info size={20} /></button>
+              </div>
+            ))}
           </div>
         )}
 
@@ -411,7 +523,13 @@ const Map: React.FC = () => {
       </div>
 
       {/* Bestemmingskaart (Figma "Destination Summary", hier 360 breed): routevoorbeeld en tijdens het rijden */}
-      {routeData && (isRoutePreview || isNavigating) && (
+      {/* Kaartje van een plek: naam, soort, adres, afstand, openingstijden; Navigeren of sluiten */}
+      {placeCard && (
+        <PlaceCard place={placeCard} distance={formatDistance(distanceMeters(position, [placeCard.lat, placeCard.lon]))}
+          onNavigate={() => navigateToPlace(placeCard)} onClose={() => setPlaceCard(null)} />
+      )}
+
+      {routeData && (isRoutePreview || isNavigating) && !placeCard && (
         <div className="tsl-destination-summary">
           <div className="summary-top">
             <div className="summary-main">
@@ -460,20 +578,29 @@ const Map: React.FC = () => {
         </div>
       )}
 
-      {/* Rechterknoppen (Figma: los kompas, daaronder vier knoppen in één kaart; 56 breed) */}
+      {hint && <div className="tsl-map-problem is-hint">{hint}</div>}
+
+      {/* Knoppenkolom rechts (Tesla): 2D/3D, satelliet, verkeer, plekken, tankstations, centreren. 48 x 48 per knop. */}
       <div className="map-controls-right">
         {/* 2D / 3D: kantelt de kaart alsof je rijdt */}
-        <button className={`map-btn compass ${is3D ? 'is-active' : ''}`} onClick={() => setIs3D(!is3D)} aria-label="3D/2D">
+        <button className={`map-btn ${is3D ? 'is-active' : ''}`} onClick={() => setIs3D(!is3D)} aria-label="3D/2D">
           <span className="map-btn-text">{is3D ? '3D' : '2D'}</span>
         </button>
+        <button className={`map-btn ${satellite ? 'is-active' : ''}`} aria-label={t('Satellite')} aria-pressed={satellite}
+          onClick={() => setNav('mapSatellite', !satellite)}><Satellite size={22} /></button>
+        <button className={`map-btn ${trafficAvailable && traffic ? 'is-active' : ''} ${trafficAvailable ? '' : 'is-disabled'}`}
+          aria-label={t('Traffic')} aria-pressed={trafficAvailable && traffic} onClick={toggleTraffic}><TrafficCone size={22} /></button>
+        <button className={`map-btn ${placesShown ? 'is-active' : ''}`} aria-label={t('Places')} aria-pressed={placesShown}
+          onClick={togglePlaces}><MapPinned size={22} /></button>
+        <button className={`map-btn ${fuelShown ? 'is-active' : ''}`} aria-label={t('Petrol stations')} aria-pressed={fuelShown}
+          onClick={toggleFuel}><Fuel size={22} /></button>
+        {/* Weggeschoven van je locatie: centreren */}
+        {!following && (
+          <button className="map-btn" aria-label={t('Recenter')} onClick={() => { setFollowing(true); setRecenterKey((k) => k + 1); }}>
+            <Navigation2 size={22} />
+          </button>
+        )}
       </div>
-
-      {/* Weggeschoven van je locatie: centreren */}
-      {!following && (
-        <button className="map-recenter" onClick={() => { setFollowing(true); setRecenterKey((k) => k + 1); }}>
-          <Navigation2 size={18} /> {t('Recenter')}
-        </button>
-      )}
 
       {/* Na een tik op de kaart: inzoomen, uitzoomen en Gereed */}
       {zoomButtons && (

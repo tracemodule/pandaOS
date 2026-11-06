@@ -5,6 +5,18 @@ export type VersionNotes = { version: string; items: NoteItem[] };
 
 export const RELEASE_NOTES: VersionNotes[] = [
   {
+    version: '1.4.2',
+    items: [
+      { icon: 'phone', title: 'Bestuurdersprofielen', text: 'Tik bovenin op je naam: wissel van bestuurder, voeg een bestuurder toe of open Profielinstellingen. Elk profiel heeft eigen scherm-, navigatie-, geluids-, veiligheids- en app-instellingen en een eigen dock.' },
+      { icon: 'view', title: 'Opslaan zichtbaar', text: 'Verander je iets in de instellingen, dan staat bij je naam even Opslaan… en daarna Opgeslagen.' },
+      { icon: 'view', title: 'Weer', text: 'Tik op de temperatuur bovenin voor het weer: verwachting per uur, regenkans, luchtvochtigheid, wind, UV en luchtkwaliteit.' },
+      { icon: 'car', title: 'Bovenaanzicht in R', text: 'Zet je de auto in de achteruit, dan draait de 3D-auto vloeiend naar een bovenaanzicht naast de camera.' },
+      { icon: 'menu', title: 'Vegen en schuiven', text: 'Het app-menu schuift van onderen omhoog en weer omlaag; sleep het omlaag om te sluiten. Instellingen en andere apps veeg je overal naar rechts dicht, het PandaOS-menu veeg je omhoog dicht.' },
+      { icon: 'menu', title: 'Wifi en Bluetooth bovenin', text: 'Tik op het wifi- of Bluetooth-icoon bovenin om meteen naar die instellingen van PandaOS te gaan.' },
+      { icon: 'route', title: 'Kaart', text: 'Rechts op de kaart staan knoppen voor satelliet, verkeer, plekken en tankstations. Zoek op bijvoorbeeld eten of tanken voor een lijst in de buurt, en tik op een plek voor de details.' },
+    ],
+  },
+  {
     version: '1.4.1',
     items: [
       { icon: 'update', title: 'Updatepagina', text: 'Bij Instellingen > Software > Bekijken en installeren zie je wat er nieuw is, download je de update met voortgang en installeer je hem daarna met Nu installeren (alleen in P). PandaOS start vanzelf opnieuw en meldt dat de update gelukt is.' },

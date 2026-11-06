@@ -249,7 +249,7 @@ $top-offset: 64px; // onder de statusbalk
     }
   }
 
-  /* --- Rechterknoppen (Figma "RightNavIcons") --- */
+  /* --- Knoppenkolom rechts (Tesla): elke knop een eigen kaartje van 48 × 48 --- */
   .map-controls-right {
     position: absolute;
     top: $top-offset;
@@ -257,36 +257,133 @@ $top-offset: 64px; // onder de statusbalk
     z-index: 1000;
     display: flex;
     flex-direction: column;
-    gap: 12px;
-
-    .map-btn-group {
-      display: flex;
-      flex-direction: column;
-      background-color: $card-light;
-      border-radius: 4px;
-      box-shadow: $card-shadow;
-      overflow: hidden;
-    }
+    gap: 8px;
 
     .map-btn {
-      width: 56px;
+      width: 48px;
       height: 48px;
+      padding: 0;
       display: flex;
       align-items: center;
       justify-content: center;
-      background: transparent;
+      background-color: $card-light;
       border: none;
+      border-radius: 8px;
+      box-shadow: $card-shadow;
       color: #5c5e62;
       cursor: pointer;
 
-      &:active { background-color: rgba(0, 0, 0, 0.06); }
+      &:active { background-color: #e4e4e4; }
+      &.is-active { color: #3e6ae1; }
+      &.is-disabled { opacity: 0.45; }
+    }
+  }
 
-      // Kompas staat los in een eigen kaart van 80 × 80
-      &.compass {
-        height: 56px;
-        background-color: $card-light;
-        border-radius: 4px;
-        box-shadow: $card-shadow;
+  /* --- Zoeken op soort: rij met (i)-knop voor het kaartje --- */
+  .tsl-nav-results {
+    .result-row.is-place { padding: 0; gap: 0; cursor: default; }
+    .result-main {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-height: 56px;
+      padding: 8px 8px 8px 16px;
+      background: none;
+      border: none;
+      text-align: left;
+      color: inherit;
+      cursor: pointer;
+      &:active { background-color: rgba(0, 0, 0, 0.05); }
+    }
+    .result-info {
+      flex: 0 0 52px;
+      align-self: stretch;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: none;
+      border: none;
+      color: $muted;
+      cursor: pointer;
+      &:active { background-color: rgba(0, 0, 0, 0.05); }
+    }
+    .map-place { flex-shrink: 0; }
+    .result-empty {
+      padding: 16px;
+      font-size: calc(14px * var(--text-scale, 1));
+      color: $muted;
+    }
+  }
+
+  /* --- Kaartje van een plek (zelfde stijl als de bestemmingskaart) --- */
+  .tsl-place-card {
+    position: absolute;
+    left: 16px;
+    bottom: 16px;
+    z-index: 1000;
+    width: 360px;
+    background-color: $card-light;
+    border-radius: 4px;
+    box-shadow: $card-shadow;
+    color: $text-light;
+
+    .place-top {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 8px 8px 18px;
+    }
+    .map-place { flex-shrink: 0; width: 32px; height: 32px; svg { width: 17px; height: 17px; } }
+    .place-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+    .place-name {
+      font-size: calc(17px * var(--text-scale, 1));
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .place-kind { font-size: calc(13px * var(--text-scale, 1)); color: $muted; }
+    .place-close {
+      flex: 0 0 44px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: none;
+      border: none;
+      color: $muted;
+      cursor: pointer;
+    }
+    .place-info {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 0 18px 12px;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    }
+    .place-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      font-size: calc(14px * var(--text-scale, 1));
+      color: $muted;
+      svg { flex-shrink: 0; margin-top: 2px; }
+      span { min-width: 0; overflow-wrap: anywhere; }
+    }
+    .place-actions {
+      display: flex;
+      height: 52px;
+      button {
+        flex: 1;
+        background: none;
+        border: none;
+        font-size: calc(15px * var(--text-scale, 1));
+        font-weight: 600;
+        color: $text-light;
+        cursor: pointer;
+        &.primary { color: #3e6ae1; }
       }
     }
   }
@@ -297,22 +394,31 @@ $top-offset: 64px; // onder de statusbalk
   /* --- Donkere modus: donkere kaarten en een gedimde, omgekeerde kaart --- */
   &.dark-mode {
     // PandaOS-kaart donker maken door om te keren; Mapbox heeft een eigen nachtstijl
-    &:not(.is-mapbox) .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.85) contrast(0.9); }
+    // Satelliet nooit omkeren
+    &:not(.is-mapbox):not(.is-satellite) .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.85) contrast(0.9); }
 
     .tsl-nav-search,
     .tsl-nav-results,
     .tsl-direction-primary,
     .tsl-direction-secondary,
     .tsl-destination-summary,
-    .map-controls-right .map-btn-group,
-    .map-controls-right .map-btn.compass {
+    .tsl-place-card,
+    .map-controls-right .map-btn {
       background-color: $card-dark;
       color: $text-dark;
     }
+    .tsl-place-card .place-actions button.primary { color: #6b8ff0; }
+    .tsl-place-card .place-info { border-color: rgba(255, 255, 255, 0.1); }
     .tsl-nav-search input { color: $text-dark; }
     .tsl-nav-results .result-title,
     .tsl-destination-summary .summary-actions button { color: $text-dark; }
-    .map-controls-right .map-btn { color: #e0e0e0; }
+    .map-controls-right .map-btn {
+      color: #e0e0e0;
+      &:active { background-color: #4a4a4a; }
+      &.is-active { color: #6b8ff0; }
+    }
+    .tsl-nav-results .result-main:active,
+    .tsl-nav-results .result-info:active { background-color: rgba(255, 255, 255, 0.06); }
     .tsl-nav-results .result-row,
     .tsl-direction-secondary .secondary-row,
     .tsl-destination-summary .summary-top { border-color: rgba(255, 255, 255, 0.1); }
@@ -385,26 +491,8 @@ $top-offset: 64px; // onder de statusbalk
 .map-btn .map-btn-text { font-weight: 700; font-size: 15px; }
 .map-btn.is-active { color: #3e6ae1; }
 
-// Centreren (na wegschuiven)
-.map-recenter {
-  position: absolute;
-  left: 50%;
-  bottom: 24px;
-  transform: translateX(-50%);
-  z-index: 500;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 10px 18px;
-  border: none;
-  border-radius: 8px;
-  background: #ffffff;
-  color: #171a20;
-  font-weight: 600;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-  cursor: pointer;
-}
-.tsl-map-container.dark-mode .map-recenter { background: #2b2b2b; color: #ffffff; }
+// Korte melding (bijv. Verkeer zonder Mapbox): iets hoger dan de kaartmelding
+.tsl-map-problem.is-hint { bottom: 170px; }
 
 // In-/uitzoomen + Gereed (na een tik op de kaart)
 .map-zoom-controls {

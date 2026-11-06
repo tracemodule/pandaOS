@@ -310,6 +310,9 @@ export interface NavigationSettings {
   places?: string[]; // plekken op de kaart: fuel, charging, food, parking, groceries, toilets
   mapProvider?: 'pandaos' | 'mapbox'; // kaart: PandaOS (PDOK/OSM, standaard) of Mapbox
   mapboxToken?: string; // eigen Mapbox-token (pk.…), alleen lokaal op de radio
+  mapSatellite?: boolean; // knoppen rechts op de kaart: satellietbeeld
+  mapTraffic?: boolean; // verkeer (alleen Mapbox); standaard aan
+  placesHidden?: boolean; // plekken tijdelijk verbergen (keuze in Instellingen blijft)
   volume: number;
   avoidMotorways: boolean;
   avoidTolls: boolean;
@@ -433,6 +436,12 @@ interface UIState {
   // --- App Launcher & Drag Mode ---
   isAppEditMode: boolean;
   savedFlashAt: number; // na Done in het app-menu: bovenin kort "Opgeslagen"
+  driverProfiles: DriverProfile[]; // leeg = één standaardprofiel zonder naam
+  activeProfileId: string;
+  switchProfile: (id: string) => void;
+  addProfile: (name: string) => void;
+  renameProfile: (id: string, name: string) => void;
+  deleteProfile: (id: string) => void;
   pinnedApps: string[];
   recentApps: string[];
   setAppEditMode: (mode: boolean) => void;
@@ -565,8 +574,19 @@ const sendToSocket = (event: string, data?: any) => {
 // Tijdelijke dingen (open menu's, Bluetooth-scan, wat er nu speelt) worden bewust niet bewaard.
 const PERSISTED_KEYS = [
   'screenMode', 'displaySettings', 'lightsSettings', 'navigationSettings', 'vehicleSettings',
-  'pinnedApps', 'recentApps', 'mediaSource', 'btKnownDevices', 'audioSettings', 'volume', 'safetySettings', 'appSettings', 'appLinks', 'trips', 'drives'
+  'pinnedApps', 'recentApps', 'mediaSource', 'btKnownDevices', 'audioSettings', 'volume', 'safetySettings', 'appSettings', 'appLinks', 'trips', 'drives',
+  'driverProfiles', 'activeProfileId'
 ] as const;
+
+// Bestuurdersprofielen (zoals Tesla): elk profiel bewaart zijn eigen scherm-, navigatie-, audio-, veiligheids- en
+// app-instellingen en zijn dock. De auto zelf (Voertuig: lak, kenteken ...) is van iedereen en hoort er niet bij.
+export const PROFILE_KEYS = ['screenMode', 'displaySettings', 'navigationSettings', 'audioSettings', 'safetySettings',
+  'appSettings', 'appLinks', 'pinnedApps'] as const;
+export interface DriverProfile { id: string; name: string; settings?: Record<string, unknown> }
+
+// Zonder opgeslagen profielen bestaat er één standaardprofiel ("Bestuurder")
+const ensureDefaultProfile = (profiles: DriverProfile[], activeId: string): DriverProfile[] =>
+  profiles.length ? profiles : [{ id: activeId || 'default', name: 'Bestuurder' }];
 
 // Volume van PandaOS loopt van 0 tot 40, net als het meestervolume van de radio (één klik = één stap)
 export const VOLUME_MAX = 40;
@@ -705,6 +725,41 @@ export const useUIStore = create<UIState>()(persist((set, get) => ({
   // --- App Launcher & Drag Mode ---
   isAppEditMode: false,
   savedFlashAt: 0,
+  driverProfiles: [],
+  activeProfileId: 'default',
+  // Wisselen: huidige instellingen in het oude profiel bewaren, die van het nieuwe profiel terugzetten
+  switchProfile: (id) => {
+    const state = get();
+    if (id === state.activeProfileId) return;
+    const snapshot = Object.fromEntries(PROFILE_KEYS.map((k) => [k, (state as any)[k]]));
+    const profiles = ensureDefaultProfile(state.driverProfiles, state.activeProfileId)
+      .map((pr) => pr.id === state.activeProfileId ? { ...pr, settings: snapshot } : pr);
+    const target = profiles.find((pr) => pr.id === id);
+    if (!target) return;
+    set({ driverProfiles: profiles, activeProfileId: id, ...(target.settings ?? {}) } as Partial<UIState>);
+  },
+  // Nieuw profiel begint met de instellingen van nu (zoals Tesla: daarna zelf aanpassen)
+  addProfile: (name) => {
+    const state = get();
+    const id = `p${Date.now().toString(36)}`;
+    const profiles = ensureDefaultProfile(state.driverProfiles, state.activeProfileId);
+    set({ driverProfiles: [...profiles, { id, name: name.trim() || 'Bestuurder' }] });
+    get().switchProfile(id);
+  },
+  renameProfile: (id, name) => set((state) => ({
+    driverProfiles: ensureDefaultProfile(state.driverProfiles, state.activeProfileId)
+      .map((pr) => pr.id === id ? { ...pr, name: name.trim() || pr.name } : pr),
+  })),
+  deleteProfile: (id) => {
+    const state = get();
+    const profiles = ensureDefaultProfile(state.driverProfiles, state.activeProfileId);
+    if (profiles.length <= 1) return; // altijd minstens één profiel
+    const rest = profiles.filter((pr) => pr.id !== id);
+    if (id === state.activeProfileId) {
+      const next = rest[0];
+      set({ driverProfiles: rest, activeProfileId: next.id, ...(next.settings ?? {}) } as Partial<UIState>);
+    } else set({ driverProfiles: rest });
+  },
   pinnedApps: ['spotify', 'camera', 'dashcam', 'energy', 'phone'],
   recentApps: ['youtube', 'netflix'],
   

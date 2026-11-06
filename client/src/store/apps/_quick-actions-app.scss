@@ -1,0 +1,37 @@
+// App-menu (QuickActionsApp.tsx): net boven de dock, horizontaal gecentreerd (zoals Tesla).
+// De schuifanimatie zit in de component zelf (transform + opacity), dus de keyframes van de wrapper
+// in SplashScreen (Omhoog schuiven) staan hier uit, anders schuift het menu dubbel.
+.quick-actions-wrapper.qa-slide-in > div,
+.quick-actions-wrapper.qa-slide-out > div {
+  animation: none !important;
+}
+
+.qa-launcher {
+  position: relative;
+  // De wrapper staat op 100px van de onderkant; zo komt het menu 12px boven de dock (hoogte instelbaar)
+  margin-bottom: calc(var(--dock-height, 64px) + 12px - 100px);
+}
+
+// Greep bovenaan het menu om het omlaag te slepen
+.qa-grabber {
+  position: absolute;
+  top: 0;
+  left: 56px;
+  right: 56px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  touch-action: none;
+  z-index: 5;
+
+  span {
+    width: 40px;
+    height: 4px;
+    border-radius: 2px;
+    background-color: #c4c4c6;
+    pointer-events: none;
+    &.is-dark { background-color: #4a4b4e; }
+  }
+}

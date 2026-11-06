@@ -27,23 +27,39 @@ const makeGlass = (opacity: number) =>
 // Dan schuift de camera verder naar achteren, zodat de auto (halfLength van het model aan weerszijden) niet wordt afgesneden.
 const CAMERA_FOV = 35;
 const CAMERA_TARGET = new THREE.Vector3(0, 1, 0);
-const FitCamera = ({ position, halfLength }: { position: [number, number, number]; halfLength: number }) => {
+// topDown: bovenaanzicht (in R, zoals Tesla). De auto ligt dan in de lengte op het scherm, dus passend maken op de
+// hoogte van het beeld. Wisselen van stand gaat vloeiend: de camera schuift in ~1 s naar de nieuwe plek.
+const FitCamera = ({ position, halfLength, topDown = false }: { position: [number, number, number]; halfLength: number; topDown?: boolean }) => {
   const { width, height } = useThree((state) => state.size);
   const aspect = width / Math.max(height, 1);
-  const tanHalfHorizontal = Math.tan(THREE.MathUtils.degToRad(CAMERA_FOV / 2)) * aspect;
+  const tanHalfVertical = Math.tan(THREE.MathUtils.degToRad(CAMERA_FOV / 2));
+  const tanHalfHorizontal = tanHalfVertical * aspect;
 
   const offset = new THREE.Vector3(...position).sub(CAMERA_TARGET);
-  const neededDistance = halfLength / tanHalfHorizontal;
+  const neededDistance = topDown ? (halfLength * 1.15) / tanHalfVertical : halfLength / tanHalfHorizontal;
   const factor = Math.max(1, neededDistance / offset.length());
   const fitted = offset.multiplyScalar(factor).add(CAMERA_TARGET);
 
+  const cameraRef = useRef<THREE.PerspectiveCamera>(null);
+  const goal = useRef(fitted.clone());
+  goal.current.copy(fitted);
+  const placed = useRef(false);
+  useFrame((_, delta) => {
+    const cam = cameraRef.current;
+    if (!cam) return;
+    if (!placed.current) { cam.position.copy(goal.current); placed.current = true; } // eerste keer: meteen goed
+    else if (cam.position.distanceToSquared(goal.current) > 1e-6) cam.position.lerp(goal.current, 1 - Math.exp(-5 * Math.min(delta, 0.1)));
+    else return;
+    cam.lookAt(CAMERA_TARGET); // Camera kijkt altijd netjes naar het midden van de auto
+  });
+
   return (
     <PerspectiveCamera
+      ref={cameraRef}
       makeDefault
-      position={[fitted.x, fitted.y, fitted.z]}
       fov={CAMERA_FOV}
       onUpdate={(self) => {
-        self.lookAt(CAMERA_TARGET); // Camera kijkt altijd netjes naar het midden van de auto
+        if (!placed.current) { self.position.copy(goal.current); self.lookAt(CAMERA_TARGET); }
         self.updateProjectionMatrix();
       }}
     />
@@ -889,7 +905,12 @@ const SidebarPane: React.FC<{ widthFraction?: number }> = ({ widthFraction = 1 }
   // car.glb (Golf 6): Y is boven, neus wijst naar +Z. Geen pitch (x) meer, anders staat de auto met de neus omlaag.
   let carRotation: [number, number, number] = [0.00, -0.66, 0.00];
 
-  if (isDriving) {
+  // In R: bovenaanzicht, auto met de neus naar boven (zoals Tesla bij achteruitrijden)
+  const reversing = toyCar ? toyCar.reverse : gear === 'R';
+  if (reversing) {
+    cameraPosition = [0.00, 9.00, 0.60];
+    carRotation = [0.00, Math.PI, 0.00];
+  } else if (isDriving) {
     cameraPosition = [0.20, 1.80, 13.80];
     carRotation = [0.00, Math.PI, 0.00]; // auto van achteren gezien
   } else if (isBigScreen) {
@@ -1054,7 +1075,7 @@ const SidebarPane: React.FC<{ widthFraction?: number }> = ({ widthFraction = 1 }
                   || (!!vehicleSettings.neon?.on && vehicleSettings.neon.effect !== 'steady')
                   || !!vehicleSettings.rainbowFloor}
                 deps={[userYaw, carRotation[0], carRotation[1], carRotation[2], isDarkMode, widthFraction, String(cameraPosition)]} />
-              <FitCamera position={cameraPosition} halfLength={vehicleModel.halfLength} />
+              <FitCamera position={cameraPosition} halfLength={vehicleModel.halfLength} topDown={reversing} />
               
               <CarModel 
                 key={vehicleModel.id} // ander model = nieuwe component (schone materialen en state)

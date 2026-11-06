@@ -636,7 +636,7 @@ const SettingsApp: React.FC = () => {
                    <label className="tsl-title">{t('App menu')}</label>
                    <div className="tsl-segmented">
                      {(['instant', 'slide'] as const).map((mode) => (
-                       <button key={mode} className={(displaySettings?.appMenuAnimation ?? 'instant') === mode ? 'is-active' : ''}
+                       <button key={mode} className={(displaySettings?.appMenuAnimation ?? 'slide') === mode ? 'is-active' : ''}
                          onClick={() => updateDisplaySetting('appMenuAnimation', mode)}>{t(mode === 'instant' ? 'Show directly' : 'Slide up')}</button>
                      ))}
                    </div>

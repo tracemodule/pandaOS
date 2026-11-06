@@ -6,6 +6,15 @@ import { getLaunchAction, runLaunchAction, useInstalledApps, getAndroidAppIcon, 
 import { pressApp } from '../appDrag';
 import { Wind, Settings2, ChevronLeft, Plus, Pencil, Trash2, Check, ListChecks } from 'lucide-react';
 import { useAppGroups } from '../appGroups';
+import './_quick-actions-app.scss';
+
+// Schuifanimatie van het app-menu (zoals Tesla): omhoog vanachter de dock bij openen, omlaag bij sluiten.
+// Alleen transform + opacity (de software-GPU van de radio kan geen blur/grote verlopen aan).
+const QA_EASE = 'cubic-bezier(0.16, 1, 0.3, 1)';
+const QA_OPEN_MS = 300;
+const QA_CLOSE_MS = 280; // SplashScreen houdt het menu na het sluiten 300 ms vast (schuifanimatie omlaag)
+const QA_DRAG_CLOSE_PX = 80; // zo ver omlaag slepen = sluiten
+const QA_FLICK_PX_PER_MS = 0.6; // of snel omlaag vegen
 
 // Keuzes voor App Settings (tandwiel rechtsboven in het app-menu)
 const APP_SETTING_ROWS: { key: keyof AppSettings; title: string; options: { id: string; label: string }[] }[] = [
@@ -63,6 +72,65 @@ const QuickActionsApp: React.FC = () => {
 
   const isDarkMode = getEffectiveTheme(screenMode) === 'dark';
   const overlayRef = useRef<HTMLDivElement>(null);
+
+  // --- Openen/sluiten: 'enter' (nog onder de dock) -> 'shown' -> 'leave' (terug omlaag) ---
+  // Sluiten kan overal vandaan komen (store-vlag), dus we kijken naar isQuickActionsOpen zolang we nog getoond worden.
+  const isOpen = useUIStore((st) => st.isQuickActionsOpen);
+  const [phase, setPhase] = useState<'enter' | 'shown' | 'leave'>('enter');
+  useEffect(() => {
+    if (!isOpen) { setPhase('leave'); return; }
+    // twee frames wachten, zodat de beginstand (onder de dock) eerst getekend wordt
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => { raf2 = requestAnimationFrame(() => setPhase('shown')); });
+    return () => { cancelAnimationFrame(raf1); cancelAnimationFrame(raf2); };
+  }, [isOpen]);
+
+  // --- Omlaag slepen om te sluiten (greep bovenaan het menu) ---
+  const [dragY, setDragY] = useState<number | null>(null);
+  const dragRef = useRef<{ startY: number; samples: { y: number; t: number }[] } | null>(null);
+  const onGrabDown = (e: React.PointerEvent) => {
+    if (phase === 'leave') return;
+    e.stopPropagation();
+    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+    dragRef.current = { startY: e.clientY, samples: [{ y: e.clientY, t: e.timeStamp }] };
+    setDragY(0);
+  };
+  const onGrabMove = (e: React.PointerEvent) => {
+    const d = dragRef.current;
+    if (!d) return;
+    const dy = e.clientY - d.startY;
+    d.samples.push({ y: e.clientY, t: e.timeStamp });
+    if (d.samples.length > 6) d.samples.shift();
+    // omhoog slepen gaat maar een klein stukje (weerstand)
+    setDragY(dy >= 0 ? dy : Math.max(-14, dy * 0.25));
+  };
+  const onGrabUp = (e: React.PointerEvent) => {
+    const d = dragRef.current;
+    if (!d) return;
+    dragRef.current = null;
+    const dy = e.clientY - d.startY;
+    const first = d.samples[0];
+    const dt = Math.max(1, e.timeStamp - first.t);
+    const velocity = (e.clientY - first.y) / dt;
+    if (dy > QA_DRAG_CLOSE_PX || (dy > 10 && velocity > QA_FLICK_PX_PER_MS)) {
+      setPhase('leave'); // direct omlaag vanaf de huidige plek; de store volgt
+      setDragY(null);
+      closeQuickActions();
+    } else {
+      setDragY(null); // terugveren
+    }
+  };
+
+  const hidden = phase !== 'shown';
+  const motionStyle: React.CSSProperties = dragY !== null
+    ? { transform: `translateY(${dragY}px)`, opacity: 1, transition: 'none' }
+    : {
+        transform: hidden ? 'translateY(calc(100% + 16px))' : 'translateY(0)',
+        opacity: hidden ? 0 : 1,
+        transition: phase === 'leave'
+          ? `transform ${QA_CLOSE_MS}ms ${QA_EASE}, opacity ${QA_CLOSE_MS}ms ease-in`
+          : `transform ${QA_OPEN_MS}ms ${QA_EASE}, opacity ${Math.round(QA_OPEN_MS * 0.6)}ms ease-out`,
+      };
 
   // Click outside listener: sluit edit mode of de lade
   useEffect(() => {
@@ -278,7 +346,7 @@ const QuickActionsApp: React.FC = () => {
   };
 
   return (
-    <div style={{ position: 'relative' }} ref={overlayRef}>
+    <div className="qa-launcher" ref={overlayRef} style={{ ...motionStyle, pointerEvents: phase === 'leave' ? 'none' : undefined }}>
       
       {/* Boven het menu (zoals in de video, 10:56): "Customise" zet de bewerkmodus aan, "Done" weer uit (en toont
           bovenin kort "Opgeslagen") */}
@@ -306,6 +374,11 @@ const QuickActionsApp: React.FC = () => {
           userSelect: 'none' // Geen tekstselectie tijdens slepen
         }}
       >
+        {/* Greep bovenaan: omlaag slepen (of snel vegen) sluit het menu */}
+        <div className="qa-grabber" onPointerDown={onGrabDown} onPointerMove={onGrabMove} onPointerUp={onGrabUp} onPointerCancel={onGrabUp}>
+          <span className={isDarkMode ? 'is-dark' : ''} />
+        </div>
+
         {isAppEditMode && (
           <div style={{ textAlign: 'center', marginBottom: '25px', color: '#888', fontSize: 'calc(14px * var(--text-scale, 1))', fontWeight: '500' }}>
             {t('Drag icons to My Apps to customise')}

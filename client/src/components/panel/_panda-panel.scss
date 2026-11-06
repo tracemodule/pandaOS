@@ -96,7 +96,8 @@
     flex-direction: column;
     gap: 8px;
     overflow-y: auto;
-    touch-action: pan-y;
+    touch-action: none; // past alles: een veeg omhoog sluit het paneel (useSwipeToClose)
+    &.is-scrollable { touch-action: pan-y; } // te lang: verticaal scrollen gaat voor
   }
 
   .panel-notification {
@@ -113,9 +114,10 @@
     cursor: pointer;
   }
 
-  // Greep onderaan: omhoog vegen sluit
+  // Greep onderaan: omhoog vegen sluit (overal op het paneel, zie useSwipeToClose)
   .panel-handle {
     align-self: center;
+    flex-shrink: 0;
     width: 48px;
     height: 5px;
     border-radius: 3px;

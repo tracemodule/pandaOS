@@ -1,0 +1,119 @@
+// Weer-popup (tik op de temperatuur in de bovenbalk). Licht voor de zwakke GPU van de radio:
+// geen blur, geen grote verlopen; alleen transform + opacity animeren.
+.tsl-ui .weather-popup-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  background: transparent;
+}
+
+.tsl-ui .weather-popup {
+  position: fixed;
+  top: 56px;
+  right: 16px;
+  z-index: 3001;
+  width: 380px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 72px);
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 16px 18px 12px;
+  border-radius: 14px;
+  background: var(--tsl-white);
+  color: var(--tsl-text);
+  border: 1px solid var(--tsl-border);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  transform-origin: top right;
+  animation: weather-popup-in 200ms ease-out;
+  font-size: calc(14px * var(--text-scale, 1));
+}
+
+.tsl-ui.dark-mode .weather-popup {
+  background: #2a2a2a;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+@keyframes weather-popup-in {
+  from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+.weather-popup {
+  &__place {
+    font-size: calc(15px * var(--text-scale, 1));
+    font-weight: 600;
+    color: var(--tsl-title);
+  }
+
+  &__now {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin: 6px 0 4px;
+  }
+
+  &__temp {
+    font-size: calc(48px * var(--text-scale, 1));
+    font-weight: 300;
+    line-height: 1;
+  }
+
+  &__cond {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: calc(15px * var(--text-scale, 1));
+  }
+
+  &__hilo {
+    color: var(--tsl-muted);
+    font-size: calc(13px * var(--text-scale, 1));
+  }
+
+  &__hours {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 0;
+    margin: 8px 0 4px;
+    border-top: 1px solid var(--tsl-border);
+    border-bottom: 1px solid var(--tsl-border);
+  }
+
+  &__hour {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    min-width: 48px;
+    font-size: calc(13px * var(--text-scale, 1));
+
+    span:first-child { color: var(--tsl-muted); }
+  }
+
+  &__row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--tsl-border);
+
+    &:last-of-type { border-bottom: none; }
+    svg { color: var(--tsl-muted); flex-shrink: 0; }
+  }
+
+  &__label { flex: 1; }
+  &__value { font-weight: 600; }
+
+  &__status {
+    margin-top: 6px;
+    color: var(--tsl-muted);
+    font-size: calc(12px * var(--text-scale, 1));
+    text-align: right;
+  }
+
+  &__empty {
+    padding: 24px 0;
+    text-align: center;
+    color: var(--tsl-muted);
+  }
+}

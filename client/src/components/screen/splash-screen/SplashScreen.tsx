@@ -42,7 +42,7 @@ import { startTripComputer } from '../../../services/tripComputer';
 import BootScreen from '../boot-screen/BootScreen';
 import PandaPanel from '../../panel/PandaPanel';
 import { PANDA_CONFIG, getEffectiveTheme } from '../../../../src/settings';
-import { Lock, User, Maximize2, Wifi, WifiOff, Bluetooth, BluetoothOff, CheckCircle2, Sun, Moon, CloudSun, Cloud, CloudFog, CloudDrizzle, CloudRain, CloudSnow, CloudLightning, BellRing } from 'lucide-react';
+import { Lock, Maximize2, Wifi, WifiOff, Bluetooth, BluetoothOff, Sun, Moon, CloudSun, Cloud, CloudFog, CloudDrizzle, CloudRain, CloudSnow, CloudLightning, BellRing } from 'lucide-react';
 import { openPhoneWithNumber } from '../../../services/dialer';
 import { useWeather, weatherKind, type WeatherKind } from '../../../services/weather';
 
@@ -52,7 +52,10 @@ const WEATHER_ICONS: Record<WeatherKind, React.FC<{ size?: number }>> = {
 import { getLinkedAndroidPackage, launchAndroidPackage, isAndroidLauncher } from '../../../store/appLinks';
 import { checkForUpdatesAtStartup } from '../../../services/updates';
 import { UpdatedNotice } from '../../settings/UpdatePage';
+import ProfileStatus from './ProfileStatus';
+import WeatherPopup from '../../weather/WeatherPopup';
 import { useT } from '../../../i18n';
+import { useSwipeToClose, startsInScrollable } from '../../../hooks/useSwipeToClose';
 import './_splash-screen.scss';
 
 const SplashScreen: React.FC = () => {
@@ -110,15 +113,7 @@ const SplashScreen: React.FC = () => {
   const fullscreenNavApp = isMapOpen ? getLinkedAndroidPackage(appLinks, 'maps') : undefined;
 
   const [currentDate, setCurrentDate] = useState(new Date());
-  // "Opgeslagen" na Done in het app-menu, 2 seconden
-  const savedFlashAt = useUIStore((st) => st.savedFlashAt);
-  const [savedFlash, setSavedFlash] = useState(false);
-  useEffect(() => {
-    if (!savedFlashAt) return;
-    setSavedFlash(true);
-    const timer = window.setTimeout(() => setSavedFlash(false), 2000);
-    return () => window.clearTimeout(timer);
-  }, [savedFlashAt]);
+  // "Opgeslagen" na Done in het app-menu: zit nu in ProfileStatus (profielvak in de bovenbalk)
 
   // Wifi- en Bluetooth-status voor de statusbalk. Radio: via de launcher (elke 5 s); laptop/Pi: internet en de
   // Bluetooth-telefoon van de server.
@@ -147,14 +142,14 @@ const SplashScreen: React.FC = () => {
   }, [btConnectedAddress]);
 
   // App-menu: direct tonen/weghalen, of omhoog schuiven en bij sluiten terug omlaag (Settings > Display)
-  const menuSlides = displaySettings?.appMenuAnimation === 'slide';
+  const menuSlides = (displaySettings?.appMenuAnimation ?? 'slide') === 'slide'; // standaard schuiven (zoals Tesla)
   const [quickActionsShown, setQuickActionsShown] = useState(isQuickActionsOpen);
   const [quickActionsClosing, setQuickActionsClosing] = useState(false);
   useEffect(() => {
     if (isQuickActionsOpen) { setQuickActionsClosing(false); setQuickActionsShown(true); return; }
     if (!menuSlides) { setQuickActionsShown(false); return; }
     setQuickActionsClosing(true);
-    const timer = setTimeout(() => { setQuickActionsShown(false); setQuickActionsClosing(false); }, 220);
+    const timer = setTimeout(() => { setQuickActionsShown(false); setQuickActionsClosing(false); }, 300);
     return () => clearTimeout(timer);
   }, [isQuickActionsOpen, menuSlides]);
 
@@ -176,6 +171,7 @@ const SplashScreen: React.FC = () => {
   const outsideTemp = useUIStore((s) => s.carState.outsideTemp);
   // Geen thermometer van de auto: temperatuur van het weer (services/weather.ts)
   const weather = useWeather();
+  const [weatherOpen, setWeatherOpen] = useState(false); // tik op de temperatuur: weervenster (WeatherPopup)
   const shownTemp = outsideTemp ?? weather?.temp ?? null;
   const currentTemp = shownTemp == null ? null
     : displaySettings?.temperature === 'F' ? `${Math.round(shownTemp * 9 / 5 + 32)} °F` : `${Math.round(shownTemp)} °C`;
@@ -329,6 +325,32 @@ const SplashScreen: React.FC = () => {
     };
   }, [activeAppKey, isReverse]);
 
+  // --- WEGVEGEN: pak de linkerrand van een open app (Settings, Music, Phone, ...) en sleep naar rechts om te sluiten ---
+  // Een eigen doorzichtige strook (48 px) aan de linkerrand, boven de inhoud van de app: apps die stopPropagation
+  // doen of een iframe/canvas tonen kunnen de veeg zo niet opeten. touch-action: pan-y op de strook, zodat de
+  // browser horizontale bewegingen niet overneemt. Sluiten = closeAll, net als naast de app tikken.
+  // Een gewone tik op de strook gaat door naar wat eronder ligt (forwardStripTap).
+  const swipeableAppOpen = !showCamera && !!(isMenuOpen || isMusicOpen || isPhoneOpen || activeWebApp || isCarPlayOpen
+    || isCanMonitorOpen || isTheaterOpen || isArcadeOpen || isToyboxOpen || isDiagnosticsOpen || panelApp);
+  const swipeStripRef = useRef<HTMLDivElement>(null);
+  useSwipeToClose({ ref: swipeStripRef, moveRef: appsRef, axis: 'x', direction: 1, enabled: swipeableAppOpen, onClose: closeAll });
+  // Ook overal in de app zelf naar rechts vegen (zoals op een telefoon), mits duidelijk horizontaal en niet op een
+  // schuifbalk, de kaart, een canvas of een lijst die zelf horizontaal schuift. Capture-fase: apps die
+  // stopPropagation doen, houden de veeg niet tegen. Zelfde paneel, zelfde sluitactie als de strook.
+  useSwipeToClose({ ref: appsRef, moveRef: appsRef, axis: 'x', direction: 1, enabled: swipeableAppOpen, onClose: closeAll,
+    capture: true, dominance: 1.4, slop: 10,
+    canStart: (_x, _y, target, el) => !target.closest('.tsl-swipe-strip') && !startsInScrollable(target, el, 'x', 1) });
+  const forwardStripTap = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.stopPropagation(); // niet als 'naast de app tikken' tellen
+    const strip = e.currentTarget;
+    strip.style.pointerEvents = 'none';
+    const below = document.elementFromPoint(e.clientX, e.clientY);
+    strip.style.pointerEvents = '';
+    if (!(below instanceof HTMLElement)) return;
+    if (below.matches('input, textarea, select')) below.focus();
+    below.click();
+  };
+
   return (
     <div className={`tsl-splash-screen ${isDarkMode ? 'dark-mode' : 'light-mode'} ${PANDA_CONFIG.MODE === 'dev' ? 'dev-border' : ''}`}
       style={{ filter: screenFilter, transition: 'filter 0.4s ease' }}>
@@ -345,15 +367,21 @@ const SplashScreen: React.FC = () => {
       }}>
           <div style={{ display: 'flex', gap: '24px', pointerEvents: 'auto', alignItems: 'center', fontWeight: '600', fontSize: 'calc(14px * var(--text-scale, 1))' }}>
               {/* Wifi en Bluetooth: gedimd = aan maar niet verbonden, doorgestreept = uit */}
+              {/* Tik: opent de Wi-Fi- of Bluetooth-pagina van PandaOS-Instellingen */}
               {connectivity.wifi !== null && (
-                connectivity.wifi === 'off' ? <WifiOff size={16} style={{ opacity: 0.5 }} />
-                  : <Wifi size={16} style={{ opacity: connectivity.wifi === 'connected' ? 1 : 0.4 }} />
+                <span style={{ display: 'flex', padding: 6, margin: -6, cursor: 'pointer' }}
+                  onClick={() => useUIStore.getState().openSettingsTab('Wi-Fi')}>
+                  {connectivity.wifi === 'off' ? <WifiOff size={16} style={{ opacity: 0.5 }} />
+                    : <Wifi size={16} style={{ opacity: connectivity.wifi === 'connected' ? 1 : 0.4 }} />}
+                </span>
               )}
               {connectivity.bt !== null && (
-                connectivity.bt === 'off' ? <BluetoothOff size={16} style={{ opacity: 0.5 }} />
-                  : <Bluetooth size={16} style={{ opacity: connectivity.bt === 'connected' ? 1 : 0.4 }} />
+                <span style={{ display: 'flex', padding: 6, margin: -6, cursor: 'pointer' }}
+                  onClick={() => useUIStore.getState().openSettingsTab('Bluetooth')}>
+                  {connectivity.bt === 'off' ? <BluetoothOff size={16} style={{ opacity: 0.5 }} />
+                    : <Bluetooth size={16} style={{ opacity: connectivity.bt === 'connected' ? 1 : 0.4 }} />}
+                </span>
               )}
-              {savedFlash && <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><CheckCircle2 size={16} color="#3ba55d" /> {t('Saved')}</span>}
               {/* SOS: opent Telefoon met 112 ingevuld; bellen doet de bestuurder zelf (groene knop) */}
               <button aria-label={t('Emergency number')} onClick={() => openPhoneWithNumber('112')}
                 style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 14, border: 'none',
@@ -361,13 +389,13 @@ const SplashScreen: React.FC = () => {
                 <BellRing size={14} /> SOS
               </button>
               <Lock size={16} />
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                 <User size={16} /> <span>{PANDA_CONFIG.MODE === 'dev' ? 'Developer' : 'Easy Entry'}</span>
-              </div>
+              {/* Bestuurdersprofiel; toont ook "Opslaan… / Opgeslagen" bij een wijziging (ProfileStatus.tsx) */}
+              <ProfileStatus />
+              <WeatherPopup open={weatherOpen} onClose={() => setWeatherOpen(false)} />
               <span style={{ color: '#ff4d4d', fontSize: 'calc(18px * var(--text-scale, 1))' }}>⏺</span> 
               <span>{formattedTime}</span>
               {currentTemp && (
-                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }} onClick={() => setWeatherOpen(true)}>
                   {WeatherIcon && (weatherKind(weather!.code) === 'clear' && !weather!.isDay ? <Moon size={16} /> : <WeatherIcon size={16} />)}
                   {currentTemp}
                 </span>
@@ -431,8 +459,10 @@ const SplashScreen: React.FC = () => {
 
             {/* APPS WRAPPER: 50px offset om header vrij te houden */}
             {/* Zonder open app laat deze laag klikken door naar de kaart (anders werkt het Navi-zoekveld niet) */}
-            <div ref={appsRef} style={{ position: 'absolute', top: '50px', left: 0, right: 0, bottom: 0, zIndex: 10,
-              pointerEvents: (isMenuOpen || isMusicOpen || isPhoneOpen || activeWebApp || isCarPlayOpen || showCamera || isCanMonitorOpen || isTheaterOpen || isArcadeOpen || isToyboxOpen || isDiagnosticsOpen || panelApp) ? 'auto' : 'none' }}>
+            <div ref={appsRef} className={swipeableAppOpen ? 'swipe-pan-y' : undefined} style={{ position: 'absolute', top: '50px', left: 0, right: 0, bottom: 0, zIndex: 10,
+              pointerEvents: (isMenuOpen || isMusicOpen || isPhoneOpen || activeWebApp || isCarPlayOpen || showCamera || isCanMonitorOpen || isTheaterOpen || isArcadeOpen || isToyboxOpen || isDiagnosticsOpen || panelApp) ? 'auto' : 'none',
+              // Verticaal scrollen blijft van de browser; horizontaal is voor wegvegen (anders breekt de browser de veeg af)
+              touchAction: swipeableAppOpen ? 'pan-y' : undefined }}>
               {showCamera ? (
                  <RearCamera /> // automatisch in R, of via het Camera-pictogram
               ) : (
@@ -449,6 +479,15 @@ const SplashScreen: React.FC = () => {
                    {isDiagnosticsOpen && <Suspense fallback={null}><DiagnosticsApp /></Suspense>}
                    <PhoneDataApps />
                  </>
+              )}
+              {/* Greepstrook aan de linkerrand: vastpakken en naar rechts slepen sluit de app (zie WEGVEGEN) */}
+              {swipeableAppOpen && (
+                <div ref={swipeStripRef} className="tsl-swipe-strip" onClick={forwardStripTap}
+                  style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 48, zIndex: 2000,
+                    display: 'flex', alignItems: 'center', paddingLeft: 6, boxSizing: 'border-box', touchAction: 'pan-y' }}>
+                  <div style={{ width: 4, height: 40, borderRadius: 2, pointerEvents: 'none',
+                    background: isDarkMode ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.22)' }} />
+                </div>
               )}
             </div>
 

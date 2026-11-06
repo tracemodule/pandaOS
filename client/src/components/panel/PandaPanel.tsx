@@ -2,7 +2,7 @@
 // Snelknoppen (wifi, Bluetooth, weergave, instellingen), helderheid, volume en de meldingen van Android-apps
 // (via de meldingen-luisteraar van de launcher). Sluiten: omhoog vegen of naast het paneel tikken.
 // Of dit paneel of dat van Android verschijnt: Settings > Apps > Paneel (appSettings.panel).
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Wifi, WifiOff, Bluetooth, BluetoothOff, SunMoon, Settings, Sun, Volume2, X, Smartphone, Gauge } from 'lucide-react';
 import { useUIStore, VOLUME_MAX } from '../../store/uiStore';
 import { getEffectiveTheme } from '../../settings';
@@ -11,6 +11,7 @@ import TeslaSlider from '../settings/TeslaSlider';
 import { useT } from '../../i18n';
 import './_panda-panel.scss';
 import { toggleRadio } from '../../services/radioToggle';
+import { useSwipeToClose, startsInScrollable } from '../../hooks/useSwipeToClose';
 
 interface PanelNotification { key: string; app: string; package: string; title: string; text: string; time: number; clearable: boolean }
 
@@ -32,7 +33,9 @@ const PandaPanel: React.FC<{ overlay?: boolean; onClose?: () => void }> = ({ ove
   const [notifications, setNotifications] = useState<PanelNotification[]>([]);
   const [wifi, setWifi] = useState<{ enabled: boolean; ssid?: string | null } | null>(null);
   const [bt, setBt] = useState<{ enabled?: boolean; devices?: { name: string; connected: boolean }[] } | null>(null);
-  const dragStart = useRef<number | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const [listScrolls, setListScrolls] = useState(false); // meldingenlijst langer dan er ruimte is
   // Optimalisatie: vrij werkgeheugen en de uitkomst van 'Apps sluiten'
   const [memory, setMemory] = useState<{ totalMb: number; availableMb: number } | null>(null);
   const [optimized, setOptimized] = useState<{ closed: number; freedMb: number } | null>(null);
@@ -113,14 +116,22 @@ const PandaPanel: React.FC<{ overlay?: boolean; onClose?: () => void }> = ({ ove
     };
   }, [enabled, open, overlay, setOpen]);
 
-  if (!enabled) return null;
+  // Kan de meldingenlijst scrollen, dan touch-action: pan-y daar (verticaal scrollen); anders none, zodat ook
+  // daar een veeg omhoog het paneel sluit in plaats van door de browser afgebroken te worden (pointercancel).
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    setListScrolls(!!list && list.scrollHeight > list.clientHeight + 1);
+  }, [open, notifications]);
+  // Omhoog vegen sluit het paneel: het volgt de vinger, loslaten voorbij 25 % of snel omhoog vegen sluit, anders
+  // veert het terug. Overal op het paneel (ook op de tegels, de tik gaat dan niet door), behalve op de schuifbalken
+  // en in de meldingenlijst zolang die zelf nog verder kan scrollen.
+  useSwipeToClose({
+    ref: panelRef, axis: 'y', direction: -1, enabled: enabled && open, onClose: () => setOpen(false),
+    baseTransform: 'translateX(-50%)',
+    canStart: (_x, _y, target, el) => !startsInScrollable(target, el, 'y', -1),
+  });
 
-  // Omhoog vegen op het paneel sluit het
-  const onPanelDown = (e: React.PointerEvent) => { dragStart.current = e.clientY; };
-  const onPanelUp = (e: React.PointerEvent) => {
-    if (dragStart.current !== null && dragStart.current - e.clientY > OPEN_DISTANCE) setOpen(false);
-    dragStart.current = null;
-  };
+  if (!enabled) return null;
 
   // Helderheid: bij Auto de stand die nu geldt (dag of nacht), anders de vaste helderheid
   const brightnessKey = displaySettings.autoBrightness ? (isDarkMode ? 'nightBrightness' : 'dayBrightness') : 'brightness';
@@ -133,7 +144,7 @@ const PandaPanel: React.FC<{ overlay?: boolean; onClose?: () => void }> = ({ ove
       {open && (
         <div className="panda-panel-backdrop" onClick={() => setOpen(false)}>
           <div className={`panda-panel tsl-ui ${isDarkMode ? 'dark-mode' : ''}`} onClick={(e) => e.stopPropagation()}
-            onPointerDown={onPanelDown} onPointerUp={onPanelUp}>
+            ref={panelRef}>
 
             {/* Snelknoppen */}
             <div className="panel-tiles">
@@ -209,7 +220,7 @@ const PandaPanel: React.FC<{ overlay?: boolean; onClose?: () => void }> = ({ ove
             )}
 
             {/* Meldingen van Android-apps */}
-            <div className="panel-notifications">
+            <div ref={listRef} className={`panel-notifications ${listScrolls ? 'is-scrollable' : ''}`}>
               <div className="tsl-title-row">
                 <span className="tsl-title">{t('Notifications')}</span>
                 {notifications.some((n) => n.clearable) && (
