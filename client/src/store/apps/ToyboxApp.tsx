@@ -6,15 +6,23 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { X, Blocks, Rainbow, Wind, Pencil, Flame, Palette, Trash2, Play, Car, Lightbulb, DoorOpen, DoorClosed, LightbulbOff,
   Sun, SunDim, Zap, OctagonAlert, Undo2, ArrowBigLeft, ArrowBigRight, TriangleAlert, Power, Waves, Circle, Sparkles,
-  PanelLeft, PanelRight, PanelTop, PanelBottom, Crosshair } from 'lucide-react';
-import { useUIStore, DEFAULT_NEON, type ToyCar, type DoorId, type NeonSettings } from '../uiStore';
+  PanelLeft, PanelRight, PanelTop, PanelBottom, Crosshair, Music2, CloudSunRain, Droplets, AudioLines, Rocket, TreePine,
+  Activity, ArrowLeftRight, RotateCw, Minus, Plus, Hand, Ban, RefreshCw, CloudRain, Snowflake, Bug, Drum, Laugh,
+  Megaphone, PartyPopper, TrendingUp, MoveVertical, Sparkle, CircleDot } from 'lucide-react';
+import { useUIStore, DEFAULT_NEON, DEFAULT_LIGHT_SHOW, type ToyCar, type DoorId, type NeonSettings, type LightShowSettings,
+  type WeatherFx, type RimFinish } from '../uiStore';
+import { getVehicleModel } from '../../components/screen/splash-screen/configuration/vehicleModels';
+import { WASH_MS } from '../../components/screen/splash-screen/configuration/toyFx';
+import { ctx, noiseBuffer, playApplause, playCrickets, playDrumroll, playRimshot, playClownHorn, playAirHorn, playSlideWhistle,
+  playBoing, playBoost, playWash } from './toySounds';
 import { getEffectiveTheme } from '../../settings';
 import Colouriser from '../../components/settings/Colouriser';
 import IconTiles from '../../components/settings/IconTiles';
 import { useT } from '../../i18n';
 import './_theater.scss';
 
-type ToyId = 'rainbow' | 'whoopee' | 'sketch' | 'fireplace' | 'paint' | 'vehicle' | 'neon' | 'minigun';
+type ToyId = 'rainbow' | 'whoopee' | 'sketch' | 'fireplace' | 'paint' | 'vehicle' | 'neon' | 'minigun'
+  | 'lightshow' | 'weather' | 'wash' | 'sounds' | 'boost' | 'holidays';
 
 const TOYS: { id: ToyId; name: string; text: string; icon: React.ReactNode; color: string }[] = [
   { id: 'rainbow', name: 'Rainbow Floor', text: 'A rainbow glows under your car in the car view.', icon: <Rainbow size={30} />, color: '#e84393' },
@@ -25,6 +33,12 @@ const TOYS: { id: ToyId; name: string; text: string; icon: React.ReactNode; colo
   { id: 'vehicle', name: 'Vehicle Play', text: 'Open the doors and test the lights of the 3D car. Only the picture changes, not your real car.', icon: <Car size={30} />, color: '#27ae60' },
   { id: 'neon', name: 'Neon', text: 'Neon lights under the 3D car. Choose the colour, the effect and the sides.', icon: <Lightbulb size={30} />, color: '#00b8d4' },
   { id: 'minigun', name: 'Minigun', text: 'A minigun on the roof of the 3D car. Just for fun, only in the picture.', icon: <Crosshair size={30} />, color: '#5d6d7e' },
+  { id: 'lightshow', name: 'Light Show', text: 'The lights of the 3D car flash to a beat. The radio cannot hear the music, so you choose the tempo or tap along.', icon: <Music2 size={30} />, color: '#9b59b6' },
+  { id: 'weather', name: 'Weather on the Car', text: 'Rain, snow or sunshine on the 3D car. Auto follows the real weather from the top bar.', icon: <CloudSunRain size={30} />, color: '#3b7dd8' },
+  { id: 'wash', name: 'Car Wash', text: 'Foam over the 3D car, a rinse and a shine. Takes about 8 seconds.', icon: <Droplets size={30} />, color: '#16a085' },
+  { id: 'sounds', name: 'Soundboard', text: 'Funny sounds through the speakers of the radio, made by PandaOS itself.', icon: <AudioLines size={30} />, color: '#c0392b' },
+  { id: 'boost', name: 'Boost', text: 'Flames from the exhaust of the 3D car, with a boost sound.', icon: <Rocket size={30} />, color: '#d35400' },
+  { id: 'holidays', name: 'Holidays', text: 'In December lights and a Santa hat on the 3D car, fireworks around New Year. You can switch it off here.', icon: <TreePine size={30} />, color: '#1e8449' },
 ];
 
 // --- Voertuig: deuren en lampen van het 3D-model (alleen het plaatje) ---
@@ -99,16 +113,109 @@ const NeonToy: React.FC = () => {
   );
 };
 
-// --- Geluid: één AudioContext voor alle speeltjes ---
-let audio: AudioContext | null = null;
-const ctx = () => (audio ??= new (window.AudioContext || (window as any).webkitAudioContext)());
+// --- Lichtshow: lampen van het 3D-model op een tempo. De muziek speelt meestal buiten PandaOS (radio, telefoon),
+// dus PandaOS kan de tel niet horen: je kiest het tempo zelf of tikt het mee. ---
+const LightShowToy: React.FC = () => {
+  const t = useT();
+  const { vehicleSettings, updateVehicleSetting } = useUIStore();
+  const show: LightShowSettings = { ...DEFAULT_LIGHT_SHOW, ...(vehicleSettings.lightShow ?? {}) };
+  const set = (patch: Partial<LightShowSettings>) => updateVehicleSetting('lightShow', { ...show, ...patch });
+  const bpm = (v: number) => set({ bpm: Math.max(60, Math.min(200, Math.round(v))) });
+  const taps = useRef<number[]>([]);
+  const tap = () => {
+    const now = performance.now();
+    taps.current = [...taps.current.filter((x) => now - x < 2500), now].slice(-6);
+    if (taps.current.length >= 2) {
+      const gaps = taps.current.slice(1).map((x, i) => x - taps.current[i]);
+      bpm(60000 / (gaps.reduce((a, b) => a + b, 0) / gaps.length));
+    }
+  };
+  return (
+    <div className="toy-controls">
+      <IconTiles columns={4} value={show.pattern} onChange={(id) => set({ pattern: id as LightShowSettings['pattern'], on: true })} tiles={[
+        { id: 'pulse', label: t('Pulse'), icon: <Activity size={22} /> },
+        { id: 'alternate', label: t('Alternate'), icon: <ArrowLeftRight size={22} /> },
+        { id: 'chase', label: t('Chase'), icon: <RotateCw size={22} /> },
+        { id: 'strobe', label: t('Strobe'), icon: <Zap size={22} /> },
+      ]} />
+      <div className="toy-sketch-tools">
+        <button className="tsl-btn is-small" onClick={() => bpm(show.bpm - 5)} aria-label="-"><Minus size={16} /></button>
+        <span className="tsl-field-text" style={{ minWidth: 72, textAlign: 'center' }}>{show.bpm} BPM</span>
+        <button className="tsl-btn is-small" onClick={() => bpm(show.bpm + 5)} aria-label="+"><Plus size={16} /></button>
+        <button className="tsl-btn is-small" onClick={tap}><Hand size={16} /> {t('Tap')}</button>
+      </div>
+      <label className="tsl-switch-row">
+        <span className="tsl-field-text" style={{ flex: 1 }}>{t('Only while music plays')}</span>
+        <input type="checkbox" className="tsl-toggle" checked={show.onlyWhilePlaying} onChange={(e) => set({ onlyWhilePlaying: e.target.checked })} />
+      </label>
+    </div>
+  );
+};
 
-const noiseBuffer = (ac: AudioContext, seconds: number) => {
-  const buffer = ac.createBuffer(1, ac.sampleRate * seconds, ac.sampleRate);
-  const data = buffer.getChannelData(0);
-  let last = 0;
-  for (let i = 0; i < data.length; i++) { last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02; data[i] = last * 3.5; } // bruine ruis
-  return buffer;
+// --- Weer op de auto: uit, automatisch (echte weer) of zelf gekozen ---
+const WeatherToy: React.FC = () => {
+  const t = useT();
+  const { vehicleSettings, updateVehicleSetting } = useUIStore();
+  return (
+    <div className="toy-controls">
+      <IconTiles columns={3} value={vehicleSettings.weatherFx ?? 'off'} onChange={(id) => updateVehicleSetting('weatherFx', id as WeatherFx)} tiles={[
+        { id: 'off', label: t('Off'), icon: <Ban size={22} /> },
+        { id: 'auto', label: t('Auto'), icon: <RefreshCw size={22} /> },
+        { id: 'rain', label: t('Rain'), icon: <CloudRain size={22} /> },
+        { id: 'snow', label: t('Snow'), icon: <Snowflake size={22} /> },
+        { id: 'sun', label: t('Sun'), icon: <Sun size={22} /> },
+      ]} />
+      {vehicleSettings.weatherFx === 'auto' && <small className="tsl-hint">{t('Shows nothing when it is cloudy, foggy or night, or when the weather in the top bar is off.')}</small>}
+    </div>
+  );
+};
+
+// --- Geluidenbord ---
+const SOUNDS: { id: string; label: string; icon: React.ReactNode; play: () => void }[] = [
+  { id: 'applause', label: 'Applause', icon: <Hand size={22} />, play: playApplause },
+  { id: 'crickets', label: 'Crickets', icon: <Bug size={22} />, play: playCrickets },
+  { id: 'drumroll', label: 'Drumroll', icon: <Drum size={22} />, play: playDrumroll },
+  { id: 'rimshot', label: 'Ba-dum-tss', icon: <Laugh size={22} />, play: playRimshot },
+  { id: 'clown', label: 'Clown horn', icon: <PartyPopper size={22} />, play: playClownHorn },
+  { id: 'airhorn', label: 'Air horn', icon: <Megaphone size={22} />, play: playAirHorn },
+  { id: 'whistle', label: 'Slide whistle', icon: <TrendingUp size={22} />, play: playSlideWhistle },
+  { id: 'boing', label: 'Boing', icon: <MoveVertical size={22} />, play: playBoing },
+];
+const SoundboardToy: React.FC = () => {
+  const t = useT();
+  return (
+    <div className="toy-controls">
+      <IconTiles columns={4} tiles={SOUNDS.map((x) => ({ id: x.id, label: t(x.label), icon: x.icon, active: false, onClick: x.play }))} />
+    </div>
+  );
+};
+
+// --- Spuiterij: velgen (kleur en afwerking) en verlagen ---
+const PaintShopExtras: React.FC<{ onRims: () => void }> = ({ onRims }) => {
+  const t = useT();
+  const { vehicleSettings, updateVehicleSetting } = useUIStore();
+  // Verlagen kan alleen als het model de wielen los van de carrosserie heeft (wheelParts in vehicleModels.ts)
+  const canLower = !!getVehicleModel(vehicleSettings.model).wheelParts;
+  const lowered = Number(vehicleSettings.lowered) || 0;
+  return (
+    <div className="toy-controls">
+      <button className="tsl-btn is-small" onClick={onRims}><Palette size={16} /> {t('Rim colour')}</button>
+      <IconTiles columns={4} value={vehicleSettings.rimFinish ?? 'gloss'} onChange={(id) => updateVehicleSetting('rimFinish', id as RimFinish)} tiles={[
+        { id: 'gloss', label: t('Gloss'), icon: <Sparkle size={22} /> },
+        { id: 'satin', label: t('Satin'), icon: <CircleDot size={22} /> },
+        { id: 'matte', label: t('Matte'), icon: <Circle size={22} /> },
+        { id: 'chrome', label: t('Chrome'), icon: <Sparkles size={22} /> },
+      ]} />
+      {canLower ? (
+        <label className="tsl-switch-row" style={{ gap: 10 }}>
+          <span className="tsl-field-text">{t('Lowered')}</span>
+          <input type="range" min={0} max={5} step={1} value={lowered} style={{ flex: 1 }}
+            onChange={(e) => updateVehicleSetting('lowered', Number(e.target.value))} />
+          <span className="tsl-field-text" style={{ minWidth: 44, textAlign: 'right' }}>{lowered} cm</span>
+        </label>
+      ) : <small className="tsl-hint">{t('This 3D model cannot be lowered.')}</small>}
+    </div>
+  );
 };
 
 // Scheetkussen: lage zaagtand met trillende toonhoogte plus ruis, door een laagdoorlaatfilter
@@ -288,6 +395,18 @@ const ToyboxApp: React.FC = () => {
   const [toyId, setToyId] = useState<ToyId>('rainbow');
   const [whoopee, setWhoopee] = useState<'short' | 'long' | 'rumble'>('short');
   const [paintOpen, setPaintOpen] = useState(false);
+  const [rimsOpen, setRimsOpen] = useState(false);
+  const [boostSound, setBoostSound] = useState(true);
+  const toyFx = useUIStore((st) => st.toyFx);
+  const startToyFx = useUIStore((st) => st.startToyFx);
+  // Wasstraat: knop uit zolang hij bezig is (eenmalige herteken als hij klaar is)
+  const [, setTick] = useState(0);
+  const washing = toyFx.wash > 0 && Date.now() - toyFx.wash < WASH_MS;
+  useEffect(() => {
+    if (!washing) return;
+    const timer = window.setTimeout(() => setTick((x) => x + 1), toyFx.wash + WASH_MS - Date.now() + 50);
+    return () => window.clearTimeout(timer);
+  }, [washing, toyFx.wash]);
   const setToyCar = useUIStore((st) => st.setToyCar);
   // Voertuig-speeltje alleen zolang het gekozen is en Toybox open staat; daarna volgt het model de auto weer
   useEffect(() => { if (!isToyboxOpen || toyId !== 'vehicle') setToyCar(null); }, [isToyboxOpen, toyId, setToyCar]);
@@ -350,11 +469,48 @@ const ToyboxApp: React.FC = () => {
           {toy.id === 'paint' && (
             <button className="arcade-play" onClick={() => setPaintOpen(true)}><Palette size={18} /> {t('Colouriser')}</button>
           )}
+          {toy.id === 'lightshow' && (
+            <label className="tsl-switch-row" style={{ alignSelf: 'stretch' }}>
+              <span className="tsl-field-text" style={{ flex: 1 }}>{t('Light Show')}</span>
+              <input type="checkbox" className="tsl-toggle" checked={!!vehicleSettings.lightShow?.on}
+                onChange={(e) => updateVehicleSetting('lightShow', { ...DEFAULT_LIGHT_SHOW, ...(vehicleSettings.lightShow ?? {}), on: e.target.checked })} />
+            </label>
+          )}
+          {toy.id === 'wash' && (
+            <button className="arcade-play" disabled={washing} onClick={() => { startToyFx('wash'); playWash(); }}>
+              <Play size={18} fill="currentColor" /> {t('Start')}
+            </button>
+          )}
+          {toy.id === 'boost' && (
+            <>
+              <button className="arcade-play" onClick={() => { startToyFx('boost'); if (boostSound) playBoost(); }}><Rocket size={18} /> {t('Boost')}</button>
+              <label className="tsl-switch-row" style={{ alignSelf: 'stretch' }}>
+                <span className="tsl-field-text" style={{ flex: 1 }}>{t('With sound')}</span>
+                <input type="checkbox" className="tsl-toggle" checked={boostSound} onChange={(e) => setBoostSound(e.target.checked)} />
+              </label>
+              {(vehicleSettings.exhaust ?? 'left1') === 'none' && <small className="tsl-hint">{t('Choose an exhaust in Settings > Vehicle to see the flames.')}</small>}
+            </>
+          )}
+          {toy.id === 'holidays' && (
+            <>
+              <label className="tsl-switch-row" style={{ alignSelf: 'stretch' }}>
+                <span className="tsl-field-text" style={{ flex: 1 }}>{t('Holidays')}</span>
+                <input type="checkbox" className="tsl-toggle" checked={vehicleSettings.holidays !== false}
+                  onChange={(e) => updateVehicleSetting('holidays', e.target.checked)} />
+              </label>
+              <small className="tsl-hint">{t('Christmas: 1 to 31 December. Fireworks: 31 December and 1 January.')}</small>
+              <button className="tsl-btn is-small toy-off" onClick={() => startToyFx('holidayPreview')}><Play size={16} /> {t('Show now')}</button>
+            </>
+          )}
         </div>
         {toy.id === 'vehicle' && <VehiclePlay />}
         {toy.id === 'neon' && <NeonToy />}
         {toy.id === 'sketch' && <Sketchpad />}
         {toy.id === 'fireplace' && <Fireplace />}
+        {toy.id === 'lightshow' && <LightShowToy />}
+        {toy.id === 'weather' && <WeatherToy />}
+        {toy.id === 'sounds' && <SoundboardToy />}
+        {toy.id === 'paint' && <PaintShopExtras onRims={() => setRimsOpen(true)} />}
       </div>
 
       <div className="arcade-row">
@@ -367,6 +523,7 @@ const ToyboxApp: React.FC = () => {
       </div>
 
       {paintOpen && <Colouriser onClose={() => setPaintOpen(false)} />}
+      {rimsOpen && <Colouriser target="rims" onClose={() => setRimsOpen(false)} />}
     </div>
   );
 };

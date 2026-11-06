@@ -5,6 +5,14 @@ export type VersionNotes = { version: string; items: NoteItem[] };
 
 export const RELEASE_NOTES: VersionNotes[] = [
   {
+    version: '1.4.4',
+    items: [
+      { icon: 'phone', title: 'Nieuwe Telefoon-app', text: 'Recent per dag, contacten met initialen, zoeken en een A-Z-index, en altijd een groot toetsenblok met Bellen. Lang drukken op 0 geeft +. Zonder telefoon zie je meteen een knop Verbinden.' },
+      { icon: 'car', title: 'Toybox', text: 'Nieuw: Lichtshow, Weer op de auto (regen, sneeuw, zon), Wasstraat, Geluidenbord, Boost met uitlaatvlammen, velgen en verlagen in de Spuiterij, en Feestdagen: in december lichtjes en een kerstmuts, met Oud en Nieuw vuurwerk.' },
+      { icon: 'view', title: 'CAN-monitor en Diagnose', text: 'De CAN-monitor heeft compacte knoppen, tabs over de hele breedte en kaarten met berichten per seconde, ID\'s en verbinding. Diagnose toont fouten en waarschuwingen in kleur, met een bolletje per regel.' },
+    ],
+  },
+  {
     version: '1.4.3',
     items: [
       { icon: 'car', title: 'OBD2', text: 'Nieuwe app OBD2: koppel een ELM327-adapter via Bluetooth en zie live toerental, snelheid, koelvloeistof, accu, tank, buitentemperatuur, verbruik en meer. Foutcodes lezen met uitleg; wissen kan bewust niet. Automatisch verbinden bij het starten. Je telefoon kan tegelijk verbonden blijven.' },

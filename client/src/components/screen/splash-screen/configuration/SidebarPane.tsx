@@ -9,7 +9,9 @@ import { registerCarCapture } from '../../../../services/carSnapshot';
 import * as THREE from 'three';
 import MusicBar from '../../../music/MusicBar';
 import NavigateCard from '../../../navigation/NavigateCard';
-import { useUIStore, type WindowTint, type CarState, type DoorId, type NeonSettings, DOOR_LABELS } from '../../../../store/uiStore';
+import { useUIStore, type WindowTint, type CarState, type DoorId, type NeonSettings, type LightShowSettings, type RimFinish, DOOR_LABELS } from '../../../../store/uiStore';
+import { ToyOverlays, useActiveFor, useHolidays, useWeatherFx } from './ToyEffects';
+import { lightShowLamps, WASH_MS, BOOST_MS } from './toyFx';
 import { getEffectiveTheme } from '../../../../../src/settings';
 import { getVehicleModel, type VehicleModel, type TrimRegion } from './vehicleModels';
 import './_sidebar-pane.scss';
@@ -18,6 +20,12 @@ import WarningLights from './WarningLights';
 // Welke onderdelen lak, velgen, ramen en losse rommel zijn, staat per model in vehicleModels.ts.
 // Voorruit en voorportierramen blijven altijd licht (wettelijk); alleen de achterste ramen krijgen tint.
 const TINT_OPACITY: Record<WindowTint, number> = { None: 0.25, Light: 0.45, Medium: 0.65, Dark: 0.82, Limo: 0.93 };
+
+// Toybox > Spuiterij: afwerking van de velgen (glans = zoals het altijd was)
+const RIM_FINISH: Record<RimFinish, { metalness: number; roughness: number }> = {
+  gloss: { metalness: 0.8, roughness: 0.3 }, satin: { metalness: 0.6, roughness: 0.5 },
+  matte: { metalness: 0.2, roughness: 0.85 }, chrome: { metalness: 1, roughness: 0.06 },
+};
 
 const makeGlass = (opacity: number) =>
   new THREE.MeshPhysicalMaterial({ color: '#0b0f12', metalness: 0.1, roughness: 0.05, transparent: true, opacity });
@@ -67,8 +75,9 @@ const FitCamera = ({ position, halfLength, topDown = false }: { position: [numbe
 };
 
 // --- CAR MODEL COMPONENT ---
-const CarModel = ({ model, carRot, baseYaw, brakeApplied, gear, carState, vehicle, children }: { model: VehicleModel; carRot: [number, number, number]; baseYaw: number; brakeApplied: boolean; gear: string; carState: CarState; vehicle: any; children?: React.ReactNode }) => {
-  const { url, scale, paintMaterial, rimParts, frontGlass: frontGlassParts, rearGlass: rearGlassParts, strayParts, lightGlass, tailLightGlass, reverseLightGlass, headlightTypes, materialColors, lights, doors, exhaust, trim } = model;
+// lightShow: Toybox > Lichtshow (alleen zolang die echt loopt, anders null)
+const CarModel = ({ model, carRot, baseYaw, brakeApplied, gear, carState, vehicle, lightShow = null, children }: { model: VehicleModel; carRot: [number, number, number]; baseYaw: number; brakeApplied: boolean; gear: string; carState: CarState; vehicle: any; lightShow?: LightShowSettings | null; children?: React.ReactNode }) => {
+  const { url, scale, paintMaterial, rimParts, wheelParts, frontGlass: frontGlassParts, rearGlass: rearGlassParts, strayParts, lightGlass, tailLightGlass, reverseLightGlass, headlightTypes, materialColors, lights, doors, exhaust, trim } = model;
   const { scene } = useGLTF(url) as any;
   const [blink, setBlink] = useState(false);
 
@@ -79,6 +88,9 @@ const CarModel = ({ model, carRot, baseYaw, brakeApplied, gear, carState, vehicl
 
   useEffect(() => {
     rimMaterial.color.set(vehicle.rimColor);
+    const rimFinish = RIM_FINISH[(vehicle.rimFinish as RimFinish) ?? 'gloss'] ?? RIM_FINISH.gloss;
+    rimMaterial.metalness = rimFinish.metalness;
+    rimMaterial.roughness = rimFinish.roughness;
     scene.traverse((child: any) => {
       if (!child.isMesh) return;
       const parentName = (child.parent?.name || '').toLowerCase();
@@ -98,7 +110,7 @@ const CarModel = ({ model, carRot, baseYaw, brakeApplied, gear, carState, vehicl
       else if (rearGlassParts.test(parentName)) child.material = rearGlass;
       else if (rimParts.test(parentName)) child.material = rimMaterial;
     });
-  }, [scene, vehicle.paintColor, vehicle.paintFinish, vehicle.rimColor, frontGlass, rearGlass, rimMaterial, paintMaterial, frontGlassParts, rearGlassParts, rimParts]);
+  }, [scene, vehicle.paintColor, vehicle.paintFinish, vehicle.rimColor, vehicle.rimFinish, frontGlass, rearGlass, rimMaterial, paintMaterial, frontGlassParts, rearGlassParts, rimParts]);
 
   // Modelfouten wegwerken: getint lampglas helder maken, bonte binnendelen een vaste neutrale kleur geven
   const clearLightGlass = useMemo(() => new THREE.MeshPhysicalMaterial({
@@ -167,18 +179,23 @@ const CarModel = ({ model, carRot, baseYaw, brakeApplied, gear, carState, vehicl
   const blinkLeft = (carState.blinker === 'left' || carState.blinker === 'hazard') && blink;
   const blinkRight = (carState.blinker === 'right' || carState.blinker === 'hazard') && blink;
   const lightsOn = carState.lights !== 'off';
+  // Lamp aan: gloeien in de lampkleur; uit: terug naar de oorspronkelijke kleur
+  const setLamp = useCallback((role: string, on: boolean, color: string, intensity: number) => {
+    (lightMaterials[role] ?? []).forEach((mat) => {
+      if (!mat.userData.baseColor) mat.userData.baseColor = mat.color.clone();
+      mat.emissive = new THREE.Color(on ? color : '#000000');
+      mat.emissiveIntensity = on ? intensity : 0;
+      mat.color.copy(on ? new THREE.Color(color) : mat.userData.baseColor);
+      mat.toneMapped = !on; // fel, ook in een lichte omgeving
+      mat.needsUpdate = true;
+    });
+  }, [lightMaterials]);
+  const showOn = !!lightShow;
+  const showKey = useRef('');
   useEffect(() => {
-    // Lamp aan: gloeien in de lampkleur; uit: terug naar de oorspronkelijke kleur
-    const setLamp = (role: string, on: boolean, color: string, intensity: number) => {
-      (lightMaterials[role] ?? []).forEach((mat) => {
-        if (!mat.userData.baseColor) mat.userData.baseColor = mat.color.clone();
-        mat.emissive = new THREE.Color(on ? color : '#000000');
-        mat.emissiveIntensity = on ? intensity : 0;
-        mat.color.copy(on ? new THREE.Color(color) : mat.userData.baseColor);
-        mat.toneMapped = !on; // fel, ook in een lichte omgeving
-        mat.needsUpdate = true;
-      });
-    };
+    // Lichtshow bezig: die zet de lampen zelf (useFrame verderop); bij het stoppen draait dit opnieuw en herstelt alles
+    showKey.current = '';
+    if (showOn) return;
     setLamp('lowBeam', carState.lights === 'low', '#f4f8ff', 3);
     setLamp('highBeam', carState.highBeam, '#f4f8ff', 4);
     // Stadslicht/dagrijlicht; knippert die kant, dan oranje
@@ -190,7 +207,7 @@ const CarModel = ({ model, carRot, baseYaw, brakeApplied, gear, carState, vehicl
     setLamp('tail', brakeApplied || lightsOn, '#ff1010', brakeApplied ? 5 : 1.2);
     setLamp('brake', brakeApplied, '#ff1010', 5);
     setLamp('reverse', gear === 'R', '#ffffff', 4);
-  }, [lightMaterials, carState.lights, carState.highBeam, blinkLeft, blinkRight, lightsOn, brakeApplied, gear]);
+  }, [setLamp, showOn, carState.lights, carState.highBeam, blinkLeft, blinkRight, lightsOn, brakeApplied, gear]);
 
   // --- DEUREN: draaien om hun scharnier aan de voorkant (doors in vehicleModels.ts) ---
   // Het model staat Z-omhoog met de neus naar -Y (binnen de eigen rotatie van het model). Per deur een draaipunt
@@ -318,6 +335,7 @@ const CarModel = ({ model, carRot, baseYaw, brakeApplied, gear, carState, vehicl
     });
   }, [scene, tailLightGlass, reverseLightGlass, tailGlass, reverseGlass, tailLamp]);
   useEffect(() => {
+    if (showOn) return; // lichtshow zet het glas zelf
     const front = carState.highBeam ? 1.4 : carState.lights === 'low' ? 0.9 : carState.lights === 'parking' ? 0.35 : 0;
     clearLightGlass.emissive = new THREE.Color(front > 0 ? '#eaf2ff' : '#000000');
     clearLightGlass.emissiveIntensity = front;
@@ -332,7 +350,33 @@ const CarModel = ({ model, carRot, baseYaw, brakeApplied, gear, carState, vehicl
     reverseGlass.color.set(reversing ? '#ffffff' : '#3a0000');
     reverseGlass.emissive = new THREE.Color(reversing ? '#ffffff' : rear > 0 ? '#ff0a0a' : '#000000');
     reverseGlass.emissiveIntensity = reversing ? 1.6 : rear;
-  }, [clearLightGlass, tailGlass, reverseGlass, tailLamp, carState.lights, carState.highBeam, brakeApplied, lightsOn, gear]);
+  }, [clearLightGlass, tailGlass, reverseGlass, tailLamp, carState.lights, carState.highBeam, brakeApplied, lightsOn, gear, showOn]);
+
+  // --- TOYBOX > LICHTSHOW: lampen op de tel (tempo zelf gekozen; de radio hoort de muziek niet).
+  // Alleen bij een wisseling iets aanpassen, niet elk beeld. ---
+  useFrame(({ clock }) => {
+    if (!lightShow) return;
+    const l = lightShowLamps(lightShow.pattern, (clock.getElapsedTime() * lightShow.bpm) / 60);
+    const key = `${+l.front}${+l.left}${+l.right}${+l.rear}${+l.reverse}`;
+    if (key === showKey.current) return;
+    showKey.current = key;
+    setLamp('lowBeam', l.front, '#f4f8ff', 3);
+    setLamp('highBeam', l.front, '#f4f8ff', 4);
+    setLamp('parkingLeft', l.front || l.left, l.left ? '#ffa000' : '#f4f8ff', 4);
+    setLamp('parkingRight', l.front || l.right, l.right ? '#ffa000' : '#f4f8ff', 4);
+    setLamp('signalLeft', l.left, '#ffa000', 4);
+    setLamp('signalRight', l.right, '#ffa000', 4);
+    setLamp('tail', l.rear, '#ff1010', 5);
+    setLamp('brake', l.rear, '#ff1010', 5);
+    setLamp('reverse', l.reverse, '#ffffff', 4);
+    clearLightGlass.emissive.set(l.front ? '#eaf2ff' : '#000000');
+    clearLightGlass.emissiveIntensity = l.front ? 1.4 : 0;
+    clearLightGlass.opacity = l.front ? 0.55 : 0.15;
+    [tailGlass, tailLamp].forEach((m) => { m.emissive.set(l.rear ? '#ff0000' : '#000000'); m.emissiveIntensity = l.rear ? 2.2 : 0; });
+    reverseGlass.color.set(l.reverse ? '#ffffff' : '#3a0000');
+    reverseGlass.emissive.set(l.reverse ? '#ffffff' : l.rear ? '#ff0a0a' : '#000000');
+    reverseGlass.emissiveIntensity = l.reverse ? 1.6 : l.rear ? 2.2 : 0;
+  });
 
   // --- KOPLAMPUITVOERING: halogeen of xenon (headlightTypes in vehicleModels.ts) ---
   useEffect(() => {
@@ -423,6 +467,22 @@ const CarModel = ({ model, carRot, baseYaw, brakeApplied, gear, carState, vehicl
     apply(trimParts.mirrors, (vehicle.mirrors ?? 'body') === 'body' ? 'standard' : vehicle.mirrors);
     apply(trimParts.grille, vehicle.grille ?? 'standard');
   }, [trimParts, trimMaterials, vehicle.mirrors, vehicle.grille, vehicle.paintColor]);
+
+  // --- TOYBOX > SPUITERIJ > VERLAGEN: alles behalve de wielen (wheelParts in vehicleModels.ts) zakt een paar cm.
+  // Het model staat Z-omhoog binnen de groep waar alle onderdelen (en de deur-scharnieren, uitlaat) direct onder hangen.
+  // De wielen blijven staan, dus <Center top> en de vloer kloppen nog. Oorspronkelijke hoogte één keer bewaren. ---
+  useEffect(() => {
+    if (!wheelParts) return;
+    let group: THREE.Object3D | null = null;
+    scene.traverse((o: THREE.Object3D) => { if (!group && wheelParts.test(o.name.toLowerCase())) group = o.parent; });
+    if (!group) return;
+    const drop = Math.max(0, Math.min(5, Number(vehicle.lowered) || 0)) / 100; // cm -> modeleenheden (meters)
+    (group as THREE.Object3D).children.forEach((child) => {
+      if (wheelParts.test(child.name.toLowerCase())) return;
+      child.userData.lowerBaseZ ??= child.position.z;
+      child.position.z = child.userData.lowerBaseZ - drop;
+    });
+  }, [scene, wheelParts, vehicle.lowered, doorPivots, exhaustRig, trimParts]);
 
   return (
     // <Center top> plaatst de wielen exact op Y=0, ongeacht de interne afmetingen van het .glb bestand!
@@ -658,6 +718,7 @@ const findPlateSpots = (root: THREE.Object3D): PlateSpots | null => {
     if (!o.isMesh || !isVisible(o, car)) return;
     const owner = o.parent?.name || '';
     if (owner === 'license-plates' || owner === 'neon' || owner === 'minigun-root') return;
+    for (let p = o.parent; p && p !== car; p = p.parent) if (p.name === 'toy-overlay') return; // Toybox-effecten
     if (o.geometry && !o.geometry.boundingBox) o.geometry.computeBoundingBox();
     const b = o.geometry?.boundingBox?.clone().applyMatrix4(o.matrixWorld).applyMatrix4(inverse);
     if (!b) return;
@@ -817,6 +878,14 @@ const SidebarPane: React.FC<{ widthFraction?: number }> = ({ widthFraction = 1 }
     carState, safetySettings, speedLimit, toyCar
   } = useUIStore();
   // Toybox > Voertuig: zolang het speeltje aan staat, toont het model de speelstand in plaats van de auto
+  // Toybox-effecten op de 3D-auto (ToyEffects.tsx): lichtshow, weer, wasstraat, boost, feestdagen
+  const isPlaying = useUIStore((st) => st.isPlaying);
+  const toyFx = useUIStore((st) => st.toyFx);
+  const lightShowActive = !!vehicleSettings.lightShow?.on && (!vehicleSettings.lightShow.onlyWhilePlaying || isPlaying);
+  const weatherFx = useWeatherFx(vehicleSettings.weatherFx);
+  const washing = useActiveFor(toyFx.wash, WASH_MS);
+  const boosting = useActiveFor(toyFx.boost, BOOST_MS);
+  const holiday = useHolidays(vehicleSettings.holidays !== false, toyFx.holidayPreview);
   const shownCarState: CarState = toyCar ? { ...carState, lights: toyCar.lights, highBeam: toyCar.highBeam, blinker: toyCar.blinker, doors: toyCar.doors } : carState;
   
   const isBluetoothConnected = btConnectedAddress !== null || btDevices.some(device => device.connected);
@@ -1073,7 +1142,9 @@ const SidebarPane: React.FC<{ widthFraction?: number }> = ({ widthFraction = 1 }
                 continuous={dragRef.current != null
                   || (shownCarState.blinker != null && shownCarState.blinker !== 'off')
                   || (!!vehicleSettings.neon?.on && vehicleSettings.neon.effect !== 'steady')
-                  || !!vehicleSettings.rainbowFloor}
+                  || !!vehicleSettings.rainbowFloor
+                  // Toybox: alleen zolang het effect echt loopt (kerstlampjes twinkelen op het vangnet van 1 beeld/s)
+                  || lightShowActive || !!weatherFx || washing || boosting || holiday.fireworks}
                 deps={[userYaw, carRotation[0], carRotation[1], carRotation[2], isDarkMode, widthFraction, String(cameraPosition)]} />
               <FitCamera position={cameraPosition} halfLength={vehicleModel.halfLength} topDown={reversing} />
               
@@ -1085,10 +1156,14 @@ const SidebarPane: React.FC<{ widthFraction?: number }> = ({ widthFraction = 1 }
                 gear={toyCar ? (toyCar.reverse ? 'R' : 'P') : gear}
                 carState={shownCarState}
                 vehicle={vehicleSettings}
+                lightShow={lightShowActive ? vehicleSettings.lightShow : null}
               >
                 {vehicleSettings.neon?.on && <NeonUnderglow neon={vehicleSettings.neon} />}
                 {vehicleSettings.minigun && <Suspense fallback={null}><Minigun /></Suspense>}
                 {!vehicleSettings.licensePlateHidden && vehicleSettings.licensePlate?.trim() && <LicensePlates text={vehicleSettings.licensePlate.trim()} />}
+                <ToyOverlays weather={weatherFx} washAt={washing ? toyFx.wash : 0} boostAt={boosting ? toyFx.boost : 0}
+                  christmas={holiday.christmas} fireworks={holiday.fireworks} lowered={Number(vehicleSettings.lowered) || 0}
+                  paintMaterial={vehicleModel.paintMaterial} minigun={!!vehicleSettings.minigun} />
               </CarModel>
 
               {vehicleSettings.rainbowFloor && <RainbowFloor />}

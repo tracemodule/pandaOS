@@ -1,11 +1,30 @@
-// Phone-app en oproepschermen. Kleuren komen uit de Tesla UI Kit-variabelen (_tesla-ui.scss).
+// Phone-app en oproepschermen. Kleuren komen uit de Tesla UI Kit-variabelen (_tesla-ui.scss);
+// licht/donker via .tsl-ui / .tsl-ui.dark-mode. Raakvlakken minimaal 48 px, lijstregels 60 px (vinger in de auto).
 
 .tsl-ui {
+  // Eigen kleuren van Telefoon (dicht, niet doorzichtig: achter een regel ligt bij het vegen de rode verwijderlaag)
+  --phone-panel-bg: var(--tsl-white);
+  --phone-key-bg: var(--tsl-gray-100);
+  --phone-divider: rgba(0, 0, 0, 0.08);
+  --phone-press: rgba(0, 0, 0, 0.05);
+  --phone-avatar-bg: #e3e7ee;
+  --phone-avatar-text: #3b4a63;
+
+  &.dark-mode {
+    --phone-panel-bg: #494949; // = 4% wit op het donkere vlak
+    --phone-key-bg: #5a5a5a;
+    --phone-divider: rgba(255, 255, 255, 0.08);
+    --phone-press: rgba(255, 255, 255, 0.06);
+    --phone-avatar-bg: #5d636d;
+    --phone-avatar-text: var(--tsl-white);
+  }
+
   // Extra knopvarianten voor bellen: rood ophangen/weigeren, groen opnemen (Color Guidance #ED4E3B / #25CB55)
   .tsl-btn.is-danger { background-color: var(--tsl-red); color: var(--tsl-white); }
   .tsl-btn.is-success { background-color: var(--tsl-green); color: var(--tsl-white); }
   .tsl-btn.is-round { width: 56px; min-width: 0; height: 56px; padding: 0; border-radius: 50%; }
 
+  // Initialen-avatar
   .call-avatar {
     display: flex;
     align-items: center;
@@ -14,15 +33,104 @@
     width: 44px;
     height: 44px;
     border-radius: 50%;
-    background-color: var(--tsl-btn-secondary);
-    color: var(--tsl-btn-secondary-text);
+    background-color: var(--phone-avatar-bg);
+    color: var(--phone-avatar-text);
     font-size: calc(16px * var(--text-scale, 1));
     font-weight: 600;
+    letter-spacing: 0.02em;
 
-    &.is-large { width: 96px; height: 96px; font-size: calc(34px * var(--text-scale, 1)); }
+    &.is-large { width: 88px; height: 88px; font-size: calc(32px * var(--text-scale, 1)); }
   }
 
   .is-missed { color: var(--tsl-red) !important; }
+
+  // --- Lijstregel (Recent, Contacten, nummers van een contact) ---
+  .phone-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-height: 60px;
+    padding: 6px 8px 6px 12px;
+    box-sizing: border-box;
+    border-bottom: 1px solid var(--phone-divider);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+
+    &:active { background-color: var(--phone-press); }
+  }
+
+  .phone-row-text { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+
+  .phone-row-title, .phone-row-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .phone-row-title { font-size: calc(17px * var(--text-scale, 1)); line-height: 1.2; font-weight: 600; color: var(--tsl-text); }
+  .phone-row-sub { font-size: calc(14px * var(--text-scale, 1)); line-height: 1.2; color: var(--tsl-muted); }
+
+  // Ronde groene belknop in een regel
+  .phone-row-call {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 48px;
+    height: 48px;
+    border: none;
+    border-radius: 50%;
+    background-color: var(--tsl-green);
+    color: var(--tsl-white);
+    cursor: pointer;
+    transition: filter 0.15s ease;
+
+    &:active { filter: brightness(0.9); }
+  }
+
+  .phone-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    align-self: flex-start;
+    height: 48px;
+    padding: 0 12px 0 4px;
+    border: none;
+    background: none;
+    font-size: calc(16px * var(--text-scale, 1));
+    font-weight: 600;
+    color: var(--tsl-blue-link);
+    cursor: pointer;
+  }
+
+  // --- Contactgegevens ---
+  .phone-contact-detail, .phone-contact-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .phone-contact-head {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding-bottom: 6px;
+  }
+
+  .phone-contact-name {
+    font-size: calc(22px * var(--text-scale, 1));
+    font-weight: 600;
+    color: var(--tsl-text);
+    text-align: center;
+  }
+
+  .phone-contact-numbers { border-top: 1px solid var(--phone-divider); }
+
+  .phone-form-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    .tsl-input { height: 48px; }
+    .tsl-input.is-focused { outline: 2px solid var(--tsl-blue); }
+  }
+
+  .phone-form-error { color: var(--tsl-red); }
 }
 
 .phone-app {
@@ -31,64 +139,151 @@
   z-index: 40;
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  padding: 24px 40px;
+  gap: 16px;
+  padding: 20px 40px;
   box-sizing: border-box;
   background-color: var(--tsl-bg);
   overflow: hidden; // de lijst links scrolt zelf; het toetsenblok rechts blijft staan
 
-  // Twee vakken naast elkaar (zoals de Android-telefoonapp): links de lijst, rechts het toetsenblok
+  // --- Kop ---
+  .phone-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 48px;
+  }
+
+  .phone-device {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    color: var(--tsl-text);
+
+    .phone-device-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+    .tsl-field-text, .tsl-hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  }
+
+  // Groen = verbonden, grijs = geen telefoon; onbekend (radio regelt Bluetooth zelf) = geen stip
+  .phone-device-dot {
+    flex-shrink: 0;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background-color: var(--tsl-muted);
+
+    &.is-connected { background-color: var(--tsl-green); }
+    &.is-unknown { display: none; }
+  }
+
+  .phone-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 48px;
+    height: 48px;
+    border: none;
+    border-radius: 50%;
+    background: none;
+    color: var(--tsl-text);
+    cursor: pointer;
+
+    &:active { background-color: var(--phone-press); }
+  }
+
+  // --- Twee vakken naast elkaar: links de lijst, rechts het toetsenblok ---
   .phone-columns {
     flex: 1;
     min-height: 0;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 300px;
-    gap: 20px;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 16px;
   }
 
   .phone-panel {
     min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    border-radius: 8px;
-    background-color: var(--tsl-tile-bg, var(--tsl-btn-secondary));
-    padding: 14px;
+    gap: 10px;
+    border-radius: 12px;
+    background-color: var(--phone-panel-bg);
+    padding: 12px;
     box-sizing: border-box;
   }
 
-  .phone-list-scroll {
+  .phone-call-panel { flex: 1; padding: 20px; }
+
+  // Tabbladen: groot en duidelijk, over de volle breedte van het vak
+  .phone-tabs {
+    display: flex;
+    flex-shrink: 0;
+    gap: 4px;
+    height: 48px;
+    padding: 4px;
+    box-sizing: border-box;
+    border-radius: 10px;
+    background-color: var(--phone-key-bg);
+
+    button {
+      flex: 1;
+      border: none;
+      border-radius: 7px;
+      background: transparent;
+      font-size: calc(16px * var(--text-scale, 1));
+      font-weight: 500;
+      color: var(--tsl-segment-text);
+      cursor: pointer;
+      transition: background-color 0.15s ease, color 0.15s ease;
+
+      &.is-active {
+        background-color: var(--phone-panel-bg);
+        color: var(--tsl-text);
+        font-weight: 600;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+      }
+    }
+  }
+
+  &.dark-mode .phone-tabs button.is-active { background-color: var(--tsl-gray-600); box-shadow: none; }
+
+  // Lijst + alfabet-index ernaast
+  .phone-list-body {
     flex: 1;
     min-height: 0;
+    display: flex;
+    gap: 4px;
+  }
+
+  .phone-list-scroll {
+    position: relative; // voor offsetTop bij het springen naar een letter
+    flex: 1;
+    min-width: 0;
     overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
+    overscroll-behavior: contain;
   }
 
-  .phone-row { cursor: pointer; }
-
-  // Donker: tegels hebben geen eigen kleur (transparant), dus hier een iets lichtere ondergrond
-  &.dark-mode .phone-panel { background-color: rgba(255, 255, 255, 0.04); }
-
-  // --- Recente oproepen: kaartjes in de PandaOS-stijl (licht en donker) ---
-  // Dichte kaartkleur (geen doorzichtige): achter de kaart ligt bij het vegen de rode verwijderlaag
-  & { --phone-row-bg: var(--tsl-bg); }
-  &.dark-mode { --phone-row-bg: #535353; } // = rgba(255,255,255,.07) op het donkere vak, zoals .trip-card
-
-  .phone-recents {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    max-width: 640px;
+  // Kop per dag (Recent) of per letter (Contacten); blijft bovenaan staan tijdens het scrollen
+  .phone-group-head {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding: 12px 12px 6px;
+    background-color: var(--phone-panel-bg);
+    font-size: calc(13px * var(--text-scale, 1));
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--tsl-muted);
   }
+
+  .phone-group:first-child .phone-group-head { padding-top: 4px; }
 
   // Veeg-om-te-verwijderen (PhoneParts.tsx SwipeToDelete)
   .phone-swipe {
     position: relative;
     flex-shrink: 0;
     overflow: hidden;
-    border-radius: 8px;
   }
 
   .phone-swipe-delete {
@@ -97,32 +292,18 @@
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    padding-right: 20px;
+    padding-right: 24px;
     background-color: var(--tsl-red);
     color: var(--tsl-white);
   }
 
   .phone-swipe-front {
     position: relative;
-    background-color: var(--phone-row-bg);
+    background-color: var(--phone-panel-bg);
     touch-action: pan-y;
   }
 
-  .phone-recent {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    min-height: 64px;
-    padding: 10px 14px;
-    box-sizing: border-box;
-    cursor: pointer;
-
-    .phone-recent-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
-    .tsl-field-text, .tsl-hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .tsl-btn { flex-shrink: 0; }
-  }
-
-  // Pictogram per soort gesprek, elk in een eigen kleur; rood alleen bij gemist (pictogram en naam)
+  // Recent: pictogram per soort gesprek, elk in een eigen kleur; rood alleen bij gemist (pictogram en naam)
   .phone-recent-icon {
     display: flex;
     align-items: center;
@@ -140,57 +321,39 @@
     .phone-recent-name { color: var(--tsl-red); }
   }
 
-  .phone-dial-panel {
-    align-items: center;
-    justify-content: center;
+  .phone-row-time {
+    flex-shrink: 0;
+    font-size: calc(14px * var(--text-scale, 1));
+    font-variant-numeric: tabular-nums;
+    color: var(--tsl-muted);
   }
 
-  .phone-header {
+  // Zoekveld + "contact toevoegen"
+  .phone-search-row {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
+    flex-shrink: 0;
+    gap: 8px;
   }
 
-  .phone-device {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    color: var(--tsl-text);
-
-    .phone-device-text { display: flex; flex-direction: column; gap: 2px; }
-  }
-
-  .phone-close {
-    display: flex;
-    background: none;
-    border: none;
-    color: var(--tsl-text);
-    cursor: pointer;
-  }
-
-  .phone-content {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .phone-empty { margin: 24px 0; }
-
-  // Zoekbalk (Figma "Search Bar")
   .phone-search {
+    flex: 1;
+    min-width: 0;
     display: flex;
     align-items: center;
     gap: 10px;
-    max-width: 640px;
-    height: 44px;
-    padding: 0 14px;
+    height: 48px;
+    padding: 0 6px 0 14px;
     box-sizing: border-box;
-    border-radius: 4px;
-    background-color: var(--tsl-btn-secondary);
+    border-radius: 10px;
+    background-color: var(--phone-key-bg);
     color: var(--tsl-muted);
+
+    &.is-active { box-shadow: inset 0 0 0 2px var(--tsl-blue); }
 
     input {
       flex: 1;
+      min-width: 0;
+      height: 100%;
       border: none;
       outline: none;
       background: transparent;
@@ -199,136 +362,374 @@
       &::placeholder { color: var(--tsl-muted); }
     }
   }
+
+  .phone-search-clear, .phone-icon-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border: none;
+    cursor: pointer;
+  }
+
+  .phone-search-clear {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: none;
+    color: var(--tsl-muted);
+  }
+
+  .phone-icon-btn {
+    width: 48px;
+    height: 48px;
+    border-radius: 10px;
+    background-color: var(--phone-key-bg);
+    color: var(--tsl-text);
+    &:active { filter: brightness(0.92); }
+  }
+
+  // Alfabet-index (tik of schuif met de vinger)
+  .phone-alpha {
+    flex-shrink: 0;
+    width: 32px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+    align-items: center;
+    padding: 4px 0;
+    border-radius: 16px;
+    background-color: var(--phone-key-bg);
+    touch-action: none;
+    user-select: none;
+    cursor: pointer;
+
+    span {
+      font-size: calc(12px * var(--text-scale, 1));
+      font-weight: 600;
+      line-height: 1;
+      color: var(--tsl-blue-link);
+    }
+    span.is-active { color: var(--tsl-text); transform: scale(1.3); }
+  }
+
+  // Leeg (geen gesprekken / contacten / zoekresultaten)
+  .phone-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 48px 24px;
+    text-align: center;
+    color: var(--tsl-muted);
+    font-size: calc(15px * var(--text-scale, 1));
+  }
+
+  // --- Geen telefoon verbonden ---
+  .phone-nolink {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 16px 24px;
+    text-align: center;
+
+    .tsl-hint { max-width: 420px; margin: 0; }
+  }
+
+  .phone-nolink-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    background-color: rgba(46, 120, 255, 0.12);
+    color: var(--tsl-blue-link);
+  }
+
+  .phone-nolink-title { font-size: calc(20px * var(--text-scale, 1)); font-weight: 600; color: var(--tsl-text); }
+
+  .phone-nolink-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 6px;
+    .tsl-btn { min-width: 0; }
+  }
+
+  .phone-nolink-bar {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 12px;
+    min-height: 52px;
+    padding: 6px 6px 6px 14px;
+    box-sizing: border-box;
+    border-radius: 10px;
+    background-color: var(--phone-key-bg);
+    color: var(--tsl-muted);
+
+    .tsl-field-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  }
 }
 
-// --- Toetsenblok ---
+// --- Toetsenblok (rechts en tijdens een gesprek) ---
 .phone-keypad {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
   display: grid;
-  grid-template-columns: repeat(3, 72px);
-  gap: 14px 28px;
-  justify-content: center;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-auto-rows: minmax(48px, 1fr);
+  gap: 8px;
 
   .keypad-key {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    width: 72px;
-    height: 72px;
+    gap: 2px;
+    min-height: 48px;
+    max-height: 72px;
     border: none;
-    border-radius: 50%;
-    background-color: var(--tsl-btn-secondary);
-    color: var(--tsl-btn-secondary-text);
+    border-radius: 12px;
+    background-color: var(--phone-key-bg, var(--tsl-btn-secondary));
+    color: var(--tsl-text);
     cursor: pointer;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: filter 0.1s ease;
 
-    &:active { filter: brightness(0.9); }
+    &:active { filter: brightness(0.88); }
   }
-  .keypad-digit { font-size: calc(28px * var(--text-scale, 1)); font-weight: 500; line-height: 1; }
-  .keypad-letters { font-size: calc(10px * var(--text-scale, 1)); font-weight: 600; letter-spacing: 0.1em; color: var(--tsl-muted); min-height: 12px; }
+  .keypad-digit { font-size: calc(26px * var(--text-scale, 1)); font-weight: 500; line-height: 1; }
+  .keypad-letters { font-size: calc(10px * var(--text-scale, 1)); font-weight: 600; letter-spacing: 0.12em; color: var(--tsl-muted); min-height: 12px; }
 }
 
+.phone-dial-panel { padding: 12px 14px; }
+
 .phone-dialer {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 20px;
-  padding-top: 8px;
+  align-items: stretch;
+  gap: 10px;
 
-  // Vaste breedte en hoogte: links een lege ruimte zo breed als de wisknop, zodat het nummer in het midden blijft
-  // en de toetsen eronder niet verschuiven tijdens het typen
+  // Vaste hoogte (nummer + naam eronder): de toetsen verschuiven niet tijdens het typen
+  .dialer-display { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
+
   .dialer-number {
     display: grid;
-    grid-template-columns: 32px minmax(0, 1fr) 32px;
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
     align-items: center;
     width: 100%;
-    max-width: 260px;
     height: 44px;
+    font-size: calc(30px * var(--text-scale, 1));
+    font-weight: 500;
+    letter-spacing: 0.03em;
+    font-variant-numeric: tabular-nums;
+    color: var(--tsl-text);
 
     &::before { content: ''; }
-    .dialer-digits { text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    font-size: calc(34px * var(--text-scale, 1));
-    font-weight: 500;
-    letter-spacing: 0.02em;
-    color: var(--tsl-text);
+    .dialer-digits { text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; direction: ltr; }
+  }
+
+  .dialer-match {
+    height: 18px;
+    font-size: calc(14px * var(--text-scale, 1));
+    font-weight: 600;
+    color: var(--tsl-blue-link);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
   }
 
   .dialer-backspace {
     display: flex;
-    background: none;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
     border: none;
+    border-radius: 50%;
+    background: none;
     color: var(--tsl-muted);
     cursor: pointer;
+    &:active { background-color: var(--phone-press); }
   }
 
   .dialer-call {
     display: flex;
+    flex-shrink: 0;
     align-items: center;
     justify-content: center;
-    width: 72px;
-    height: 72px;
+    gap: 10px;
+    height: 56px;
     border: none;
-    border-radius: 50%;
+    border-radius: 28px;
     background-color: var(--tsl-green);
     color: #fff;
+    font-size: calc(18px * var(--text-scale, 1));
+    font-weight: 600;
     cursor: pointer;
+    transition: filter 0.15s ease, opacity 0.15s ease;
 
+    &:active { filter: brightness(0.9); }
     &:disabled { opacity: 0.4; cursor: default; }
   }
 }
 
-// --- Lopend gesprek ---
-.phone-active-call {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  padding-top: 32px;
+// --- Lopend gesprek: links wie, rechts de bediening ---
+.phone-call-view {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 24px;
 
-  .call-name { font-size: calc(28px * var(--text-scale, 1)); font-weight: 600; color: var(--tsl-text); margin-top: 8px; }
-
-  .phone-keypad { margin-top: 16px; }
-
-  .call-actions {
+  .phone-call-who {
     display: flex;
-    gap: 12px;
-    margin-top: 24px;
-
-    .tsl-btn { min-width: 130px; }
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-width: 0;
+    text-align: center;
   }
+
+  .call-name {
+    max-width: 100%;
+    margin-top: 8px;
+    font-size: calc(28px * var(--text-scale, 1));
+    font-weight: 600;
+    color: var(--tsl-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .call-number { font-size: calc(16px * var(--text-scale, 1)); color: var(--tsl-muted); }
+
+  .call-status {
+    font-size: calc(18px * var(--text-scale, 1));
+    font-variant-numeric: tabular-nums;
+    color: var(--tsl-muted);
+    &.is-active { color: var(--tsl-green); font-weight: 600; }
+  }
+
+  .phone-call-controls {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 12px;
+    min-height: 0;
+  }
+
+  .call-dtmf {
+    height: 32px;
+    text-align: center;
+    font-size: calc(24px * var(--text-scale, 1));
+    letter-spacing: 0.05em;
+    color: var(--tsl-text);
+    overflow: hidden;
+  }
+
+  .call-buttons {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 40px;
+  }
+
+  .call-round {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    border: none;
+    background: none;
+    font-size: calc(15px * var(--text-scale, 1));
+    font-weight: 500;
+    color: var(--tsl-text);
+    cursor: pointer;
+
+    .call-round-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 76px;
+      height: 76px;
+      border-radius: 50%;
+      background-color: var(--phone-key-bg);
+      transition: background-color 0.15s ease, color 0.15s ease;
+    }
+    &:active .call-round-icon { filter: brightness(0.9); }
+    &.is-on .call-round-icon { background-color: var(--tsl-text); color: var(--phone-panel-bg); }
+  }
+
+  .call-end-row {
+    display: flex;
+    flex-shrink: 0;
+    gap: 10px;
+    .tsl-btn { min-width: 0; height: 56px; flex: 1; border-radius: 28px; background-color: var(--phone-key-bg); }
+  }
+
+  .call-end {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    height: 56px;
+    border: none;
+    border-radius: 28px;
+    background-color: var(--tsl-red);
+    color: #fff;
+    font-size: calc(18px * var(--text-scale, 1));
+    font-weight: 600;
+    cursor: pointer;
+    &:active { filter: brightness(0.9); }
+  }
+
+  .phone-keypad { flex: 1; }
 }
 
-// --- Compact scherm (radio 1024×600): kleiner toetsenblok zodat alles zonder scrollen past ---
+// --- Compact scherm (radio 1024×600): minder witruimte zodat alles zonder scrollen past ---
 @media (max-width: 1280px) {
-  .phone-app { gap: 12px; padding: 12px 20px; }
+  .phone-app {
+    gap: 10px;
+    padding: 10px 16px 12px;
 
-  .phone-keypad {
-    grid-template-columns: repeat(3, 54px);
-    gap: 8px 22px;
-
-    .keypad-key { width: 54px; height: 54px; }
-    .keypad-digit { font-size: calc(22px * var(--text-scale, 1)); }
-    .keypad-letters { font-size: calc(8px * var(--text-scale, 1)); min-height: 10px; }
+    .phone-columns { grid-template-columns: minmax(0, 1fr) 300px; gap: 12px; }
+    .phone-panel { padding: 10px; }
+    .phone-call-panel { padding: 12px 16px; }
+    .phone-group-head { padding: 10px 12px 4px; }
   }
+
+  .phone-keypad { gap: 6px; .keypad-digit { font-size: calc(24px * var(--text-scale, 1)); } }
 
   .phone-dialer {
-    gap: 10px;
-    padding-top: 0;
-
-    .dialer-number { height: 36px; font-size: calc(26px * var(--text-scale, 1)); }
-    .dialer-call { width: 54px; height: 54px; }
+    gap: 8px;
+    .dialer-number { height: 40px; font-size: calc(28px * var(--text-scale, 1)); }
+    .dialer-call { height: 52px; }
   }
 
-  .phone-active-call {
-    padding-top: 8px;
+  .phone-call-view {
     .call-avatar.is-large { width: 72px; height: 72px; font-size: calc(26px * var(--text-scale, 1)); }
-    .call-name { font-size: calc(22px * var(--text-scale, 1)); }
-    // Rechtervak is smal: knoppen naast elkaar, alleen pictogram + korte tekst
-    .call-actions { margin-top: 12px; gap: 8px; .tsl-btn { min-width: 0; padding: 0 12px; } }
+    .call-name { font-size: calc(24px * var(--text-scale, 1)); }
+    .call-round .call-round-icon { width: 68px; height: 68px; }
+    .call-end, .call-end-row .tsl-btn { height: 52px; }
   }
-  .phone-app .phone-columns { grid-template-columns: minmax(0, 1fr) 290px; gap: 14px; }
-  .phone-app .phone-panel { padding: 10px; }
 
-  .call-overlay { width: 440px; padding: 12px 16px; }
+  .call-overlay { width: 460px; padding: 12px 16px; }
 }
 
 // --- Inkomende oproep: kaart bovenaan het scherm, boven alle apps ---
@@ -340,16 +741,33 @@
   z-index: 3000;
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
   width: 520px;
   padding: 16px 20px;
   box-sizing: border-box;
-  border-radius: 4px;
+  border-radius: 14px;
   background-color: var(--tsl-bg);
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
   animation: call-overlay-in 0.25s ease-out;
 
   .call-overlay-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+  .call-overlay-text .tsl-field-text, .call-overlay-text .tsl-hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .call-overlay-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 60px;
+    height: 60px;
+    border: none;
+    border-radius: 50%;
+    color: #fff;
+    cursor: pointer;
+    &:active { filter: brightness(0.9); }
+    &.is-decline { background-color: var(--tsl-red); }
+    &.is-answer { background-color: var(--tsl-green); }
+  }
 }
 
 @keyframes call-overlay-in {

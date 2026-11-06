@@ -7,7 +7,22 @@ import { useT } from '../../i18n';
 
 type NativeEntry = { time: number; level: string; message: string };
 
-const LEVEL_COLOR: Record<string, string> = { error: 'var(--tsl-red)', warn: '#e0a100', info: 'var(--tsl-muted)' };
+// Gewone CSS (geen effecten/animaties): de software-GPU van de radio kan daar niet goed tegen.
+const CSS = `
+.diag-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.diag-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 999px; font-size: calc(14px * var(--text-scale, 1)); font-weight: 600; background: rgba(128, 128, 128, 0.14); color: var(--tsl-muted); }
+.diag-chip.is-error { color: var(--tsl-red); background: rgba(237, 78, 59, 0.14); }
+.diag-chip.is-warn { color: #c98a00; background: rgba(245, 179, 1, 0.16); }
+.diag-log { border: 1px solid var(--tsl-border); border-radius: 12px; padding: 10px 16px 10px 12px; display: grid; grid-template-columns: auto auto auto minmax(0, 1fr); column-gap: 10px; row-gap: 6px; align-items: baseline; font-family: monospace; font-size: calc(13px * var(--text-scale, 1)); line-height: 1.4; }
+.diag-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--tsl-blue); align-self: start; margin-top: 0.45em; }
+.diag-dot.is-error { background: var(--tsl-red); }
+.diag-dot.is-warn { background: #f5b301; }
+.diag-time, .diag-src { color: var(--tsl-muted); white-space: nowrap; }
+.diag-msg { min-width: 0; overflow-wrap: anywhere; word-break: break-word; white-space: pre-wrap; }
+.diag-log .diag-empty { grid-column: 1 / -1; }
+`;
+
+const levelClass = (level: string) => (level === 'error' ? 'is-error' : level === 'warn' ? 'is-warn' : '');
 
 const DiagnosticsPanel: React.FC<{ hideTitle?: boolean }> = ({ hideTitle }) => {
   const t = useT();
@@ -35,26 +50,23 @@ const DiagnosticsPanel: React.FC<{ hideTitle?: boolean }> = ({ hideTitle }) => {
       <small className="tsl-hint">
         {t('PandaOS keeps a log of errors and events. Send it when something goes wrong.')}
       </small>
-      <div className="tsl-list">
-        <div className={`tsl-list-row ${errors === 0 ? 'is-active' : ''}`}>
-          <Bug size={22} />
-          <div className="tsl-list-text">
-            <span className="tsl-field-text">
-              {errors} {t('errors')} · {warnings} {t('warnings')} · {all.length} {t('entries')}
-            </span>
-          </div>
-        </div>
+      <style>{CSS}</style>
+      <div className="diag-chips">
+        <span className={`diag-chip ${errors > 0 ? 'is-error' : ''}`}><Bug size={16} /> {errors} {t('errors')}</span>
+        <span className={`diag-chip ${warnings > 0 ? 'is-warn' : ''}`}>{warnings} {t('warnings')}</span>
+        <span className="diag-chip">{all.length} {t('entries')}</span>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontFamily: 'monospace', fontSize: 'calc(13px * var(--text-scale, 1))' }}>
+      <div className="diag-log">
         {visible.map((e, i) => (
-          <div key={`${e.time}-${i}`} style={{ display: 'flex', gap: 8 }}>
-            <span style={{ color: 'var(--tsl-muted)', flexShrink: 0 }}>{new Date(e.time).toLocaleTimeString('nl-NL')}</span>
-            <span style={{ color: LEVEL_COLOR[e.level] ?? 'inherit', flexShrink: 0 }}>{e.source}</span>
-            <span style={{ wordBreak: 'break-word' }}>{e.message}</span>
-          </div>
+          <React.Fragment key={`${e.time}-${i}`}>
+            <span className={`diag-dot ${levelClass(e.level)}`} title={e.level} />
+            <span className="diag-time">{new Date(e.time).toLocaleTimeString('nl-NL')}</span>
+            <span className="diag-src">{e.source}</span>
+            <span className="diag-msg">{e.message}</span>
+          </React.Fragment>
         ))}
-        {all.length === 0 && <small className="tsl-hint">{t('No entries yet.')}</small>}
+        {all.length === 0 && <small className="tsl-hint diag-empty">{t('No entries yet.')}</small>}
       </div>
       {all.length > 8 && (
         <button className="tsl-btn is-small" style={{ alignSelf: 'flex-start' }} onClick={() => setShowAll(!showAll)}>

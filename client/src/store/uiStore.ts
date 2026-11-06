@@ -215,6 +215,11 @@ export interface VehicleSettings {
   studioScene?: boolean; // 3D-auto in een studio (vloer met lichtvlek, muur); undefined = aan
   neon?: NeonSettings; // Toybox: neon onder de 3D-auto
   minigun?: boolean; // Toybox: minigun op het dak van de 3D-auto
+  lightShow?: LightShowSettings; // Toybox: lampen van de 3D-auto knipperen op een gekozen tempo
+  weatherFx?: WeatherFx; // Toybox: regen/sneeuw/zon op de 3D-auto; undefined = uit
+  holidays?: boolean; // Toybox: kerst (december) en vuurwerk (Oud & Nieuw) op de 3D-auto; undefined = aan
+  rimFinish?: RimFinish; // Toybox > Spuiterij: afwerking van de velgen; undefined = glans
+  lowered?: number; // Toybox > Spuiterij: carrosserie van de 3D-auto lager, in cm (0-5)
   // Kenteken op de 3D-auto (Instellingen > Voertuig). Alleen lokaal op de radio bewaard: nooit in de repo,
   // documentatie, logboek of probleemrapport zetten.
   licensePlate?: string;
@@ -244,6 +249,18 @@ export interface NeonSettings {
   sides: { left: boolean; right: boolean; front: boolean; rear: boolean };
 }
 export const DEFAULT_NEON: NeonSettings = { on: false, color: '#00e5ff', effect: 'steady', sides: { left: true, right: true, front: true, rear: true } };
+// Toybox > Lichtshow: de lampen van het 3D-model op een tempo (de radio hoort de muziek niet, dus zelf gekozen)
+export interface LightShowSettings {
+  on: boolean;
+  bpm: number;
+  pattern: 'pulse' | 'alternate' | 'chase' | 'strobe';
+  onlyWhilePlaying: boolean; // alleen zolang er muziek speelt (isPlaying)
+}
+export const DEFAULT_LIGHT_SHOW: LightShowSettings = { on: false, bpm: 120, pattern: 'pulse', onlyWhilePlaying: false };
+export type WeatherFx = 'off' | 'auto' | 'rain' | 'snow' | 'sun';
+export type RimFinish = 'gloss' | 'satin' | 'matte' | 'chrome';
+// Toybox: eenmalige effecten op de 3D-auto (tijdstip van starten in ms, 0 = niet); niet bewaard
+export interface ToyFx { wash: number; boost: number; holidayPreview: number }
 
 // Toybox > Voertuig: deuren en lampen van het 3D-model voor de grap. Alleen het plaatje; de echte autostatus
 // (carState, CAN, radio) blijft ongemoeid. null = speeltje uit, het model volgt de auto weer.
@@ -406,6 +423,8 @@ interface UIState {
   brakeApplied: boolean;
   speed: number;
   toyCar: ToyCar | null; // Toybox > Voertuig (niet bewaard)
+  toyFx: ToyFx; // Toybox: wasstraat, boost, feestdagen tonen (niet bewaard)
+  startToyFx: (kind: keyof ToyFx) => void;
   setToyCar: (toy: ToyCar | null) => void;
 
   // --- Nieuwe Instellingen ---
@@ -659,6 +678,8 @@ export const useUIStore = create<UIState>()(persist((set, get) => ({
   speed: 0,
   toyCar: null,
   setToyCar: (toyCar) => set({ toyCar }),
+  toyFx: { wash: 0, boost: 0, holidayPreview: 0 },
+  startToyFx: (kind) => set((state) => ({ toyFx: { ...state.toyFx, [kind]: Date.now() } })),
 
   // --- Initialiseer Settings ---
   displaySettings: {

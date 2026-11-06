@@ -14,6 +14,10 @@ export interface VehicleModel {
   halfLength: number; // halve lengte in scene-eenheden (na schaal) plus marge; camera houdt dit in beeld
   paintMaterial: RegExp; // materiaalnaam van de lak
   rimParts: RegExp; // naam van de oudernode van de velg-meshes
+  // Wielen (banden, velgen, naven): node-namen (kleine letters) die op hun plek blijven als de carrosserie lager gaat
+  // (Toybox > Spuiterij > Verlagen). Moeten directe kinderen van dezelfde node zijn als de rest van de auto.
+  // Niet ingesteld = verlagen kan niet bij dit model.
+  wheelParts?: RegExp;
   frontGlass: RegExp; // voorruit + voorportierramen: altijd licht (wettelijk)
   rearGlass: RegExp; // achterste ramen: krijgen de gekozen tint
   strayParts: string[]; // volledige node-namen van onderdelen die verwijderd moeten worden (exacte match)
@@ -61,6 +65,8 @@ export const VEHICLE_MODELS: VehicleModel[] = [
     // Velgen: KLP/KLZ/KPP/KPZ = Pools voor links-voor/links-achter/rechts-voor/rechts-achter; "_tex" is de velg, "_p1b" de band
     paintMaterial: /^vgolf6_paint$/,
     rimParts: /^k[lp][pz]_tex$/,
+    // Banden (_p1b), velgen (_tex) en naven blijven staan bij verlagen; ruimte tussen band en wielkast is ~6 cm
+    wheelParts: /^k[lp][pz]_(p1b|tex)$|^(vgolf6|vivace)_hub_/,
     frontGlass: /doorglass_f[lr]|windshield/,
     rearGlass: /doorglass_r[lr]|tailgateglass/,
     // Los van de auto: uitlaatpunten 7 m erachter, letter 2,9 m erboven, bodemplaat ernaast,

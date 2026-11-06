@@ -28,6 +28,13 @@ const readCache = (): Weather | null => {
   try { return JSON.parse(localStorage.getItem(CACHE_KEY) ?? 'null'); } catch { return null; }
 };
 
+// Laatste weerstand zonder zelf op te halen (Toybox > Weer op de auto); de bovenbalk (useWeather) houdt hem vers.
+// Ouder dan 3 uur telt niet.
+export const cachedWeather = (): Weather | null => {
+  const cached = readCache();
+  return cached && Date.now() - cached.at < 3 * 3600_000 ? cached : null;
+};
+
 const gpsPlace = () => new Promise<[number, number] | null>((resolve) => {
   if (!navigator.geolocation) return resolve(null);
   navigator.geolocation.getCurrentPosition(
