@@ -787,6 +787,17 @@ const NL: Record<string, string> = {
 
   // Music
   'Nothing playing': 'Niets aan het afspelen',
+  'View and install': 'Bekijken en installeren',
+  'Download': 'Downloaden',
+  'Install now': 'Nu installeren',
+  'PandaOS restarts': 'PandaOS start opnieuw',
+  "What's new": 'Wat is er nieuw',
+  'OK': 'OK',
+  'Updated to': 'Bijgewerkt naar',
+  'PandaOS has been updated and restarted.': 'PandaOS is bijgewerkt en opnieuw gestart.',
+  'Install only while parked: put the car in P.': 'Installeer alleen als je stilstaat: zet de auto in P.',
+  'The download is gone. Download the update again.': 'De download is weg. Download de update opnieuw.',
+  'While installing, PandaOS stops for about 10 seconds and the screen may go black. If Android asks "Install?", tap Install. PandaOS then starts again by itself.': 'Tijdens het installeren stopt PandaOS ongeveer 10 seconden en kan het scherm zwart worden. Vraagt Android "Installeren?", tik dan op Installeren. Daarna start PandaOS vanzelf opnieuw.',
   'Devices': 'Apparaten',
   'Connect device': 'Apparaat verbinden',
   'Get': 'Downloaden',

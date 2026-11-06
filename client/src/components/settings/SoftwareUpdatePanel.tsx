@@ -3,7 +3,8 @@
 import React, { useEffect, useState } from 'react';
 import { RotateCw, Download, CheckCircle2, Timer, X, Check } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
-import { currentVersion, fetchLatestRelease, isNewer, canInstallUpdates, installUpdate, type ReleaseInfo } from '../../services/updates';
+import { currentVersion, fetchLatestRelease, isNewer, canInstallUpdates, type ReleaseInfo } from '../../services/updates';
+import UpdatePage from './UpdatePage';
 import { useT } from '../../i18n';
 
 type Status = { state: 'idle' | 'checking' | 'downloading' | 'installing' | 'error'; progress?: number; message?: string };
@@ -14,6 +15,7 @@ const SoftwareUpdatePanel: React.FC = () => {
   const [release, setRelease] = useState<ReleaseInfo | null | undefined>(undefined); // undefined = nog niet gekeken
   const [status, setStatus] = useState<Status>({ state: 'idle' });
   const [autoOpen, setAutoOpen] = useState(false); // venster: automatisch controleren aan/uit
+  const [pageOpen, setPageOpen] = useState(false); // updatepagina (UpdatePage.tsx)
   const version = currentVersion();
   const hasUpdate = !!release && isNewer(release.version, version);
 
@@ -89,8 +91,8 @@ const SoftwareUpdatePanel: React.FC = () => {
       {hasUpdate && (
         canInstallUpdates() && release!.apkUrl ? (
           <button className="tsl-btn is-primary" style={{ alignSelf: 'flex-start' }} disabled={busy}
-            onClick={() => { setStatus({ state: 'downloading', progress: 0 }); installUpdate(release!.apkUrl!); }}>
-            <Download size={18} /> {t('Download and install')}
+            onClick={() => setPageOpen(true)}>
+            <Download size={18} /> {t('View and install')}
           </button>
         ) : (
           <small className="tsl-hint">{t('Updates can be installed on the radio.')}</small>
@@ -100,6 +102,8 @@ const SoftwareUpdatePanel: React.FC = () => {
       {status.state === 'downloading' && <small className="tsl-hint">{t('Downloading…')} {status.progress ?? 0}%</small>}
       {status.state === 'installing' && <small className="tsl-hint">{t('Installing… PandaOS restarts by itself.')}</small>}
       {status.state === 'error' && <small className="tsl-hint" style={{ color: 'var(--tsl-red)' }}>{status.message}</small>}
+
+      {pageOpen && hasUpdate && <UpdatePage release={release!} onClose={() => setPageOpen(false)} />}
 
       {autoOpen && (
         <div className="tsl-modal-backdrop" onClick={() => setAutoOpen(false)}>

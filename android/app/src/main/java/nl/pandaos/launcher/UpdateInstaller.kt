@@ -17,6 +17,7 @@ import java.net.URL
 // installeren. Als apparaateigenaar installeert Android hem zonder vraag; anders vraagt Android één bevestiging.
 // Na de installatie start PandaOS als startscherm vanzelf opnieuw.
 class UpdateInstaller(private val activity: Activity, private val send: (String) -> Unit) {
+    companion object { const val PREFS = "pandaos_update" }
 
     @Volatile private var busy = false
 
@@ -33,23 +34,63 @@ class UpdateInstaller(private val activity: Activity, private val send: (String)
             send("updateStatus(${JSONObject().put("state", state).put("progress", progress).put("message", message)})")
         }
 
-    fun install(url: String) {
+    private val updateFile get() = File(activity.cacheDir, "pandaos-update.apk")
+    private val prefs get() = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+    // Oude manier (één knop): downloaden en meteen installeren
+    fun install(url: String) = download(url, thenInstall = true)
+
+    // Stap 1 (updatepagina): alleen downloaden en controleren; daarna status "ready" met de nieuwe versie
+    fun download(url: String, thenInstall: Boolean = false) {
         if (busy) return
         busy = true
         DiagLog.add("info", "Update downloaden: $url")
         Thread {
             try {
-                val file = File(activity.cacheDir, "pandaos-update.apk")
-                download(url, file)
-                check(file)
-                status("installing", 100)
-                commit(file)
+                download(url, updateFile)
+                val version = check(updateFile)
+                if (thenInstall) { status("installing", 100, version); commit(updateFile, version) }
+                else { status("ready", 100, version); busy = false }
             } catch (e: Exception) {
                 DiagLog.add("error", "Update mislukt: ${e.message}")
                 status("error", 0, e.message ?: "Onbekende fout")
                 busy = false
             }
         }.apply { isDaemon = true; start() }
+    }
+
+    // Versie van de gedownloade update ("" = niets klaar)
+    fun downloadedVersion(): String = try {
+        if (!updateFile.exists()) "" else check(updateFile)
+    } catch (_: Exception) { "" }
+
+    // Stap 2: de gedownloade update installeren. PandaOS wordt daarbij gestopt en start daarna vanzelf opnieuw.
+    fun installDownloaded(): Boolean {
+        if (busy) return false
+        val version = downloadedVersion().ifEmpty { return false }
+        busy = true
+        status("installing", 100, version)
+        Thread {
+            try { commit(updateFile, version) } catch (e: Exception) {
+                DiagLog.add("error", "Update installeren mislukt: ${e.message}")
+                prefs.edit().remove("updatingTo").apply()
+                status("error", 0, e.message ?: "Onbekende fout")
+                busy = false
+            }
+        }.apply { isDaemon = true; start() }
+        return true
+    }
+
+    // Na het opnieuw opstarten: is de update gelukt? {"updatedTo":"1.4.1"} één keer, daarna leeg.
+    // Ruimt ook de gedownloade APK op.
+    fun takeUpdateResult(): String {
+        val target = prefs.getString("updatingTo", null) ?: return "{}"
+        val current = activity.packageManager.getPackageInfo(activity.packageName, 0).versionName ?: ""
+        if (current != target) return "{}" // installatie loopt nog of is afgebroken (dan meldt takeLastError het)
+        prefs.edit().remove("updatingTo").apply()
+        updateFile.delete()
+        DiagLog.add("info", "Bijgewerkt naar $target")
+        return JSONObject().put("updatedTo", target).toString()
     }
 
     // Downloaden met voortgang; GitHub stuurt eerst door naar de echte bestandslocatie
@@ -82,8 +123,8 @@ class UpdateInstaller(private val activity: Activity, private val send: (String)
         connection.disconnect()
     }
 
-    // Alleen PandaOS zelf, en alleen een nieuwere versie
-    private fun check(file: File) {
+    // Alleen PandaOS zelf, en alleen een nieuwere versie; geeft de versie van de APK
+    private fun check(file: File): String {
         val pm = activity.packageManager
         val archive = pm.getPackageArchiveInfo(file.absolutePath, 0) ?: throw IllegalStateException("Geen geldige APK")
         if (archive.packageName != activity.packageName) throw IllegalStateException("APK is niet van PandaOS")
@@ -93,9 +134,13 @@ class UpdateInstaller(private val activity: Activity, private val send: (String)
         @Suppress("DEPRECATION")
         val oldCode = if (Build.VERSION.SDK_INT >= 28) installed.longVersionCode else installed.versionCode.toLong()
         if (newCode <= oldCode) throw IllegalStateException("Deze versie is al geïnstalleerd")
+        return archive.versionName ?: ""
     }
 
-    private fun commit(file: File) {
+    private fun commit(file: File, version: String) {
+        // Onthouden dat we bijwerken: na de herstart bevestigt PandaOS dat het gelukt is (takeUpdateResult)
+        prefs.edit().putString("updatingTo", version).apply()
+        DiagLog.add("info", "Update installeren: $version")
         val installer = activity.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
             .apply { setAppPackageName(activity.packageName) }
@@ -120,12 +165,15 @@ class UpdateInstaller(private val activity: Activity, private val send: (String)
                     val confirm = intent.getParcelableExtra<Intent>(Intent.EXTRA_INTENT) ?: return
                     context.startActivity(confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 }
-                PackageInstaller.STATUS_SUCCESS -> { /* PandaOS wordt nu vervangen en start opnieuw */ }
+                // Gelukt: PandaOS is vervangen. Vangnet naast PackageReplacedReceiver: zelf weer openen.
+                PackageInstaller.STATUS_SUCCESS -> try {
+                    context.startActivity(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                } catch (_: Exception) {}
                 else -> {
                     // Mislukt (bijv. andere ondertekening): de webapp ziet dat er niets gebeurd is
                     val message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: "Installatie mislukt"
                     DiagLog.add("error", "Update-installatie geweigerd: $message")
-                    context.getSharedPreferences("pandaos_update", Context.MODE_PRIVATE).edit().putString("error", message).apply()
+                    context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("error", message).remove("updatingTo").apply()
                 }
             }
         }
@@ -141,7 +189,6 @@ class UpdateInstaller(private val activity: Activity, private val send: (String)
 
     // Laatste installatiefout (bijv. "handtekening komt niet overeen"), daarna leeg
     fun takeLastError(): String {
-        val prefs = activity.getSharedPreferences("pandaos_update", Context.MODE_PRIVATE)
         val error = prefs.getString("error", "") ?: ""
         if (error.isNotEmpty()) { prefs.edit().remove("error").apply(); busy = false }
         return error

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, Suspense, useMemo } from 'react';
+import React, { useEffect, useState, useRef, Suspense, useMemo, useCallback } from 'react';
 import { Canvas, useThree, useFrame } from '@react-three/fiber';
 import { Fuel, DoorOpen, Cctv } from 'lucide-react';
 import { useT } from '../../../../i18n';
@@ -422,6 +422,59 @@ const CarModel = ({ model, carRot, baseYaw, brakeApplied, gear, carState, vehicl
 };
 
 // Momentopname van de auto voor Settings > Software (services/carSnapshot.ts): één beeld renderen en als PNG lezen
+// Tekenen op aanvraag (Canvas frameloop="demand"): de auto wordt alleen getekend als er iets verandert, niet 60 keer
+// per seconde terwijl hij stilstaat (dat waren ~9000 tekenopdrachten per seconde op de radio, 6-11-2026).
+//  - continuous: zolang er iets beweegt (draaien, knipperlicht, neon-effect, regenboogvloer) gewoon 60 beelden/s
+//  - elke wijziging in de store of in deps: 1,5 s doortekenen, zodat deuren en lampen vloeiend uitlopen
+//  - vangnet: altijd 1 beeld per seconde, zodat er nooit iets blijft hangen dat we vergeten zijn
+const RenderOnDemand: React.FC<{ continuous: boolean; deps: unknown[] }> = ({ continuous, deps }) => {
+  const invalidate = useThree((st) => st.invalidate);
+  const until = useRef(0);
+  const live = useRef(continuous);
+  live.current = continuous;
+  // Teller voor de laptop (tools/pandaos.mjs js "__pandaRender"): waarom er getekend wordt
+  const stats = ((window as any).__pandaRender ??= { store: {} as Record<string, number>, deps: 0, continuous: false, frames: 0, panes: 0 });
+  useFrame(() => { stats.frames++; });
+  stats.continuous = continuous;
+  const raf = useRef(0);
+  // Lus alleen zolang er iets beweegt of net veranderd is; daarna stopt hij (geen requestAnimationFrame in rust,
+  // anders blijft de tekenpijplijn van de browser elke frame wakker)
+  const run = useCallback(() => {
+    if (raf.current) return;
+    const step = (now: number) => {
+      if (live.current || now < until.current) { invalidate(); raf.current = requestAnimationFrame(step); }
+      else raf.current = 0;
+    };
+    raf.current = requestAnimationFrame(step);
+  }, [invalidate]);
+  const kick = useCallback((ms = 1500) => {
+    until.current = Math.max(until.current, performance.now() + ms);
+    run();
+  }, [run]);
+  useEffect(() => { if (continuous) run(); }, [continuous, run]);
+  useEffect(() => {
+    kick(3000); // na het laden: model, licht en schaduw opbouwen
+    // Alleen wat de auto raakt (niet bijv. de muziekpositie, die elke seconde verandert)
+    const pick = (st: ReturnType<typeof useUIStore.getState>) => [st.carState, st.toyCar, st.vehicleSettings,
+      (st as any).brakeApplied, (st as any).gear, st.screenMode, st.vehicleLightsOn, st.displaySettings];
+    let prev = pick(useUIStore.getState());
+    const unsubscribe = useUIStore.subscribe((st) => {
+      const next = pick(st);
+      const changed = next.findIndex((v, i) => v !== prev[i]);
+      if (changed >= 0) {
+        const name = ['carState', 'toyCar', 'vehicleSettings', 'brakeApplied', 'gear', 'screenMode', 'vehicleLightsOn', 'displaySettings'][changed];
+        stats.store[name] = (stats.store[name] ?? 0) + 1;
+        kick();
+      }
+      prev = next;
+    });
+    const beat = window.setInterval(() => invalidate(), 1000); // vangnet: 1 beeld per seconde
+    return () => { unsubscribe(); window.clearInterval(beat); cancelAnimationFrame(raf.current); raf.current = 0; };
+  }, [invalidate, kick]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { stats.deps++; kick(); }, deps); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+};
+
 const SnapshotBridge: React.FC = () => {
   const { gl, scene, camera } = useThree();
   useEffect(() => {
@@ -986,7 +1039,7 @@ const SidebarPane: React.FC<{ widthFraction?: number }> = ({ widthFraction = 1 }
               waardoor het canvas zich soms op de verkleinde maat instelde en de auto versprong. */}
           {/* Grafische kwaliteit (Settings > Vehicle): Laag = geen schaduwen, 1 pixel per pixel, geen anti-aliasing.
               Hoog: maximaal 1,5x pixels (scherp genoeg op een radioscherm, veel lichter dan 2x). */}
-          <Canvas key={lowGraphics ? 'low' : 'high'} shadows={!lowGraphics} dpr={lowGraphics ? 1 : [1, 1.5]}
+          <Canvas key={lowGraphics ? 'low' : 'high'} frameloop="demand" shadows={!lowGraphics} dpr={lowGraphics ? 1 : [1, 1.5]}
             gl={{ antialias: !lowGraphics, powerPreference: 'high-performance' }} resize={{ offsetSize: true }}>
             <Suspense fallback={null}>
               <ambientLight intensity={isDarkMode ? 0.3 : 0.7} />
@@ -995,6 +1048,12 @@ const SidebarPane: React.FC<{ widthFraction?: number }> = ({ widthFraction = 1 }
               <Environment files={isDarkMode ? HDR_NIGHT : HDR_CITY} />
 
               <SnapshotBridge />
+              <RenderOnDemand
+                continuous={dragRef.current != null
+                  || (shownCarState.blinker != null && shownCarState.blinker !== 'off')
+                  || (!!vehicleSettings.neon?.on && vehicleSettings.neon.effect !== 'steady')
+                  || !!vehicleSettings.rainbowFloor}
+                deps={[userYaw, carRotation[0], carRotation[1], carRotation[2], isDarkMode, widthFraction, String(cameraPosition)]} />
               <FitCamera position={cameraPosition} halfLength={vehicleModel.halfLength} />
               
               <CarModel 

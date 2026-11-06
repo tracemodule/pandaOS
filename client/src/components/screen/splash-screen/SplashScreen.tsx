@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import ControlBar from '../../settings/control-bar/controlbar';
 import Keyboard from '../../settings/Keyboard';
 import Map from '../../navigation/Map'; 
@@ -14,14 +14,27 @@ import WebAppContainer from '../../apps/WebAppContainer';
 import SettingsApp from '../../../store/apps/SettingsApp';
 import QuickActionsApp from '../../../store/apps/QuickActionsApp';
 import VolumeOverlayApp from '../../../store/apps/VolumeOverlayApp';
-import CarPlayApp from '../../../store/apps/CarPlayApp';
 import PhoneApp, { CallOverlay } from '../../../store/apps/PhoneApp';
-import CanMonitorApp from '../../../store/apps/CanMonitorApp';
-import TheaterApp from '../../../store/apps/TheaterApp';
 import PhoneDataApps from '../../../store/apps/PhoneDataApps';
-import ArcadeApp from '../../../store/apps/ArcadeApp';
 import ToyboxApp from '../../../store/apps/ToyboxApp';
-import DiagnosticsApp from '../../../store/apps/DiagnosticsApp';
+// Apps die je niet bij elke start nodig hebt: pas laden als je ze opent (kleiner startbestand, sneller opstarten).
+// Na het opstarten worden ze stil voorgeladen (preloadLazyApps), zodat openen toch meteen gaat.
+const loadCarPlay = () => import('../../../store/apps/CarPlayApp');
+const loadCanMonitor = () => import('../../../store/apps/CanMonitorApp');
+const loadTheater = () => import('../../../store/apps/TheaterApp');
+const loadArcade = () => import('../../../store/apps/ArcadeApp');
+const loadDiagnostics = () => import('../../../store/apps/DiagnosticsApp');
+const CarPlayApp = React.lazy(loadCarPlay);
+const CanMonitorApp = React.lazy(loadCanMonitor);
+const TheaterApp = React.lazy(loadTheater);
+const ArcadeApp = React.lazy(loadArcade);
+const DiagnosticsApp = React.lazy(loadDiagnostics);
+let lazyAppsPreloaded = false;
+const preloadLazyApps = () => {
+  if (lazyAppsPreloaded) return;
+  lazyAppsPreloaded = true;
+  [loadCarPlay, loadCanMonitor, loadTheater, loadArcade, loadDiagnostics].forEach((load) => load().catch(() => { lazyAppsPreloaded = false; }));
+};
 
 import { useUIStore, applyTextScale, textScaleFor, applyDockHeight } from '../../../store/uiStore';
 import { CustomCommands } from '../../../scripts/customcmdcommands';
@@ -38,6 +51,7 @@ const WEATHER_ICONS: Record<WeatherKind, React.FC<{ size?: number }>> = {
 };
 import { getLinkedAndroidPackage, launchAndroidPackage, isAndroidLauncher } from '../../../store/appLinks';
 import { checkForUpdatesAtStartup } from '../../../services/updates';
+import { UpdatedNotice } from '../../settings/UpdatePage';
 import { useT } from '../../../i18n';
 import './_splash-screen.scss';
 
@@ -49,6 +63,14 @@ const SplashScreen: React.FC = () => {
     isCanMonitorOpen, closeCanMonitor, vehicleSettings, isTheaterOpen, closeTheater, panelApp, closePanelApp, isArcadeOpen, closeArcade, isToyboxOpen, closeToybox, isDiagnosticsOpen, closeDiagnostics
   } = useUIStore();
   const t = useT();
+  // 10 s na de start (opstartscherm is dan weg) de luie apps stil voorladen
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const idle = (window as any).requestIdleCallback as ((cb: () => void) => void) | undefined;
+      if (idle) idle(preloadLazyApps); else preloadLazyApps();
+    }, 10000);
+    return () => window.clearTimeout(timer);
+  }, []);
   // Een andere app opent: de CAN-monitor gaat dicht (anders liggen ze over elkaar)
   useEffect(() => {
     if (isCanMonitorOpen && (isMenuOpen || isMusicOpen || isPhoneOpen || activeWebApp || isCarPlayOpen || isMapOpen)) closeCanMonitor();
@@ -418,13 +440,13 @@ const SplashScreen: React.FC = () => {
                    <SettingsApp />
                    <MusicApp />
                    <WebAppContainer /> 
-                   <CarPlayApp />
+                   {isCarPlayOpen && <Suspense fallback={null}><CarPlayApp /></Suspense>}
                    <PhoneApp />
-                   <CanMonitorApp />
-                   <TheaterApp />
-                   <ArcadeApp />
+                   {isCanMonitorOpen && <Suspense fallback={null}><CanMonitorApp /></Suspense>}
+                   {isTheaterOpen && <Suspense fallback={null}><TheaterApp /></Suspense>}
+                   {isArcadeOpen && <Suspense fallback={null}><ArcadeApp /></Suspense>}
                    <ToyboxApp />
-                   <DiagnosticsApp />
+                   {isDiagnosticsOpen && <Suspense fallback={null}><DiagnosticsApp /></Suspense>}
                    <PhoneDataApps />
                  </>
               )}
@@ -444,6 +466,7 @@ const SplashScreen: React.FC = () => {
       </div>
 
       <AudioSettings />
+      <UpdatedNotice />
       <VolumePage />
 
       {quickActionsShown && (

@@ -61,6 +61,20 @@ class PandaBridge(
     @JavascriptInterface
     fun getUpdateError(): String = updates.takeLastError()
 
+    // Updatepagina: eerst downloaden (status "ready"), daarna apart installeren
+    @JavascriptInterface
+    fun downloadUpdate(url: String) = updates.download(url)
+
+    @JavascriptInterface
+    fun getDownloadedUpdateVersion(): String = updates.downloadedVersion()
+
+    @JavascriptInterface
+    fun installDownloadedUpdate(): Boolean = updates.installDownloaded()
+
+    // Na een herstart: {"updatedTo":"1.4.1"} als de update net gelukt is (één keer)
+    @JavascriptInterface
+    fun takeUpdateResult(): String = updates.takeUpdateResult()
+
 
     // --- CAN-monitor (Settings > Voertuig > CAN-bus) ---
 

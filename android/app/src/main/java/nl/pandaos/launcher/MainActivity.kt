@@ -44,6 +44,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         DiagLog.init(this) // diagnose: crashes en gebeurtenissen van de launcher
+        logStartReason(savedInstanceState != null)
         if (webViewTooOld()) return // uitleg op het scherm in plaats van een zwart scherm
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         // Android 11+: PandaOS altijd over het hele scherm, ook als de systeembalken verschijnen (bijv. als een app half
@@ -222,6 +223,47 @@ class MainActivity : Activity() {
         signals.stop()
         MediaListenerService.onChange = null
         super.onDestroy()
+    }
+
+    // Waarom start PandaOS (opnieuw)? Zo weten we na een rit of Android PandaOS heeft opgeruimd (geheugen), of het
+    // scherm opnieuw is opgebouwd. Alleen vastleggen, verder verandert er niets (6-11-2026).
+    private fun logStartReason(recreated: Boolean) {
+        val prefs = getSharedPreferences(LIFE_PREFS, MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        val lastStop = prefs.getLong("lastStop", 0L)
+        val away = if (lastStop > 0) " na ${(now - lastStop) / 1000} s in de achtergrond" else ""
+        val lastTrim = prefs.getInt("lastTrim", 0)
+        val reason = when {
+            recreated -> "Android bouwde het PandaOS-scherm opnieuw op$away"
+            activityCreatedBefore -> "PandaOS-scherm opnieuw gestart in hetzelfde proces$away"
+            lastStop > 0 && prefs.getBoolean("inBackground", false) ->
+                "Nieuw proces: Android had PandaOS opgeruimd$away" + (if (lastTrim > 0) " (laatste geheugenwaarschuwing: $lastTrim)" else "")
+            else -> "Nieuw proces (opstarten van de radio of na een update)"
+        }
+        DiagLog.add("info", "Start: $reason")
+        activityCreatedBefore = true
+        prefs.edit().putBoolean("inBackground", false).putInt("lastTrim", 0).apply()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        getSharedPreferences(LIFE_PREFS, MODE_PRIVATE).edit()
+            .putLong("lastStop", System.currentTimeMillis()).putBoolean("inBackground", true).apply()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        getSharedPreferences(LIFE_PREFS, MODE_PRIVATE).edit().putBoolean("inBackground", false).apply()
+    }
+
+    // Geheugenwaarschuwingen van Android (vaak de aanloop naar opruimen); alleen bij een nieuw, hoger niveau
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        val prefs = getSharedPreferences(LIFE_PREFS, MODE_PRIVATE)
+        if (level > prefs.getInt("lastTrim", 0)) {
+            prefs.edit().putInt("lastTrim", level).apply()
+            DiagLog.add("info", "Geheugenwaarschuwing van Android: niveau $level")
+        }
     }
 
     override fun onPause() {
@@ -516,6 +558,8 @@ class MainActivity : Activity() {
 
     companion object {
         const val DEV_PREFS = "pandaos-developer"
+        const val LIFE_PREFS = "pandaos-lifecycle"
+        @Volatile private var activityCreatedBefore = false
         fun developerMode(context: android.content.Context): Boolean =
             context.getSharedPreferences(DEV_PREFS, android.content.Context.MODE_PRIVATE).getBoolean("developer", false)
         private const val REQUEST_LOCATION = 1

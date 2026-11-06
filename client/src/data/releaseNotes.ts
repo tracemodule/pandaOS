@@ -5,6 +5,14 @@ export type VersionNotes = { version: string; items: NoteItem[] };
 
 export const RELEASE_NOTES: VersionNotes[] = [
   {
+    version: '1.4.1',
+    items: [
+      { icon: 'update', title: 'Updatepagina', text: 'Bij Instellingen > Software > Bekijken en installeren zie je wat er nieuw is, download je de update met voortgang en installeer je hem daarna met Nu installeren (alleen in P). PandaOS start vanzelf opnieuw en meldt dat de update gelukt is.' },
+      { icon: 'car', title: 'Zuiniger en vlotter', text: 'De 3D-auto wordt alleen getekend als er iets beweegt. Draaien, knipperlichten en neon blijven vloeiend, maar in rust gebruikt PandaOS veel minder rekenkracht. Arcade, Theater, Diagnose, CAN-monitor en CarPlay laden pas als je ze nodig hebt.' },
+      { icon: 'view', title: 'Studio verbeterd', text: 'De studio-achtergrond is opnieuw opgebouwd, zodat hij op elke radio stabiel draait.' },
+    ],
+  },
+  {
     version: '1.4.0',
     items: [
       { icon: 'car', title: 'Auto in de studio', text: 'Je auto staat nu in een ruimte met een verlichte vloer, zoals in een showroom, licht of donker met het thema mee. Uit te zetten bij Instellingen > Voertuig > Studio.' },
