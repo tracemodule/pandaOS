@@ -157,7 +157,7 @@ class PandaOverlay(
     }
 
     companion object {
-        const val STRIP_DP = 20 // hoogte van de veegstrook bovenaan (dp); tikken daar gaan niet naar de app eronder
+        const val STRIP_DP = 32 // hoogte (was 20: te smal om te raken, 6-11-2026) van de veegstrook bovenaan (dp); tikken daar gaan niet naar de app eronder
         const val OPEN_DP = 40
         const val VOLUME_W_DP = 560
         const val VOLUME_H_DP = 96

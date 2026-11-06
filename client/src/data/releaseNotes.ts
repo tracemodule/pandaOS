@@ -5,6 +5,26 @@ export type VersionNotes = { version: string; items: NoteItem[] };
 
 export const RELEASE_NOTES: VersionNotes[] = [
   {
+    version: '1.4.0',
+    items: [
+      { icon: 'car', title: 'Auto in de studio', text: 'Je auto staat nu in een ruimte met een verlichte vloer, zoals in een showroom, licht of donker met het thema mee. Uit te zetten bij Instellingen > Voertuig > Studio.' },
+      { icon: 'view', title: 'Weer in de bovenbalk', text: 'Naast de tijd staat het weer met de buitentemperatuur, voor de plek waar je bent (of je tijdzone). Weet de auto de buitentemperatuur, dan zie je die. Aan of uit bij Instellingen > Scherm.' },
+      { icon: 'phone', title: 'SOS', text: 'Bovenin staat een SOS-knop. Een tik opent Telefoon met 112 al ingevuld; bellen doe je zelf met de groene knop.' },
+      { icon: 'phone', title: 'Bellen werkt', text: 'Bellen vanuit Contacten en Telefoon gaat nu via de Bluetooth-telefoon van de radio. Lukt het niet, dan zie je een melding. De gesprekslijst toont per gesprek een gekleurd icoon: inkomend groen, uitgaand blauw, gemist rood.' },
+      { icon: 'radio', title: 'Bluetooth-app', text: 'Bluetooth is nu een eigen app: je telefoons en apparaten als kaarten (tik om te verbinden), wat er speelt, en muziekapps om direct vanuit te streamen.' },
+      { icon: 'radio', title: 'Radio', text: 'Nieuwe app Radio voor FM, AM en DAB van de radio zelf, met zenders, favorieten en direct afstemmen. De zenders leert PandaOS van de radio-app van de auto.' },
+      { icon: 'menu', title: 'App-menuknop', text: 'De knop van het app-menu in de dock is groter en verandert bij openen in een kruisje.' },
+      { icon: 'radio', title: 'Muziekbalk altijd zichtbaar', text: 'Op het startscherm staat de muziekbalk nu altijd naast Navigeren, ook als er niets speelt.' },
+      { icon: 'radio', title: 'Bluetooth-muziek speelt door', text: 'Als je in PandaOS op afspelen tikt bij muziek van je telefoon, zet PandaOS de radio eerst op Bluetooth-muziek. Daarna stopt de muziek niet meer na een seconde.' },
+      { icon: 'radio', title: 'Speelt via CarPlay', text: 'Speelt er muziek via CarPlay of Android Auto, dan zie je dat op de muziekbalk. Tik op de naam om CarPlay of Android Auto te openen.' },
+      { icon: 'volume', title: 'Volume niet meer te zacht', text: 'Op de radio regelt PandaOS nu alleen het volume van de radio zelf (0-40). Het tweede volume van Android blijft altijd vol, zodat het geluid niet meer te zacht is.' },
+      { icon: 'menu', title: 'Systeembalk blijft weg', text: 'Heb je de systeembalk van de radio verborgen, dan verbergt PandaOS hem opnieuw als de radio hem terugzet, bijvoorbeeld na een herstart of na CarPlay. Ook het verbergen van de volumebalk werkt nu vanuit PandaOS.' },
+      { icon: 'phone', title: 'CarPlay automatisch verbinden', text: 'Bij Radio-instellingen zet je uit dat CarPlay vanzelf verbindt. Dan neemt je iPhone de wifi en het geluid niet meer ongevraagd over.' },
+      { icon: 'update', title: 'Build: Publicatie of Ontwikkelaar', text: 'Bij Instellingen > Software kies je Ontwikkelaar om de radio met de laptop te testen (tools/pandaos.mjs). Zet hem daarna terug op Publicatie.' },
+      { icon: 'menu', title: 'Kleine verbeteringen', text: 'De veegstrook bovenaan voor het PandaOS-menu is breder. Lukt wifi of Bluetooth aan- of uitzetten niet, dan meldt PandaOS dat en opent de Android-instellingen. Bij de camera-app van de radio staat nu een waarschuwing: laat hem aan, anders werken CarPlay en Android Auto niet.' },
+    ],
+  },
+  {
     version: '1.3.9',
     items: [
       { icon: 'route', title: 'Ritten', text: 'PandaOS neemt elke rit op: de route, afstand, rijtijd, gemiddelde en topsnelheid, en elke keer dat je hard optrekt of hard remt. Bekijk ze per dag bij Instellingen > Ritten en tik op een rit voor de route op de kaart. Aan of uit en alles wissen bij Instellingen > Navigatie.' },

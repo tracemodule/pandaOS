@@ -6,19 +6,25 @@ import { useT } from '../../i18n';
 
 const bridge = () => (window as any).PandaAndroid;
 
-// Regel die je naar links kunt vegen; ver genoeg = verwijderen (rode achtergrond met prullenbak)
+// Regel die je naar links kunt vegen; ver genoeg = verwijderen (rode achtergrond met prullenbak).
+// De rode laag staat er alleen tijdens het vegen, en de regel zelf heeft een eigen dichte achtergrond
+// (.phone-swipe-front, _phone-app.scss). Eerder was die doorzichtig ("inherit" van een ouder zonder achtergrond),
+// waardoor elke regel rood was.
 export const SwipeToDelete: React.FC<{ onDelete: () => void; onClick?: () => void; children: React.ReactNode }> = ({ onDelete, onClick, children }) => {
   const [dx, setDx] = useState(0);
   const start = useRef<{ x: number; y: number } | null>(null);
   const moved = useRef(false);
   const LIMIT = 90;
   return (
-    <div style={{ position: 'relative', overflow: 'hidden' }}>
-      <div style={{ position: 'absolute', inset: 0, background: '#e04e3b', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 20, color: '#fff' }}>
-        <Trash2 size={20} />
-      </div>
+    <div className="phone-swipe">
+      {dx < 0 && (
+        <div className="phone-swipe-delete">
+          <Trash2 size={20} />
+        </div>
+      )}
       <div
-        style={{ position: 'relative', transform: `translateX(${dx}px)`, transition: start.current ? 'none' : 'transform 0.2s ease', background: 'var(--phone-row-bg, inherit)', touchAction: 'pan-y' }}
+        className="phone-swipe-front"
+        style={{ transform: `translateX(${dx}px)`, transition: start.current ? 'none' : 'transform 0.2s ease' }}
         onPointerDown={(e) => { start.current = { x: e.clientX, y: e.clientY }; moved.current = false; }}
         onPointerMove={(e) => {
           if (!start.current) return;

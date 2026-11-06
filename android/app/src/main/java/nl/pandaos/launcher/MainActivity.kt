@@ -59,7 +59,8 @@ class MainActivity : Activity() {
                 it.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
             }
         }
-        WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG) // chrome://inspect op de laptop
+        // chrome://inspect en tools/pandaos.mjs op de laptop: debug-build of Ontwikkelaarsmodus (Instellingen > Software)
+        WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG || developerMode(this))
 
         val assetLoader = WebViewAssetLoader.Builder()
             .addPathHandler("/", WebAppPathHandler())
@@ -76,6 +77,8 @@ class MainActivity : Activity() {
         applyCanLinks()
         updates = UpdateInstaller(this) { call -> callWeb(call) }
         signals = CarSignals(this) { call -> callWeb(call) }.also { it.start() }
+        // Radio FM/AM/DAB van de radio (Jancar): zender en RDS naar de Radio-app als DOM-event 'pandaos-radio'
+        JancarRadio.start(this) { js -> runOnUiThread { if (::webView.isInitialized) webView.evaluateJavascript(js, null) } }
         voice = VoiceInput(this,
             onPartial = { callWeb("voiceInput(${org.json.JSONObject().put("state", "partial").put("text", it)})") },
             onFinal = { callWeb("voiceInput(${org.json.JSONObject().put("state", "final").put("text", it)})") },
@@ -206,6 +209,8 @@ class MainActivity : Activity() {
         if (!::media.isInitialized) { if (!webViewTooOld()) recreate(); return } // WebView inmiddels bijgewerkt
         media.start()
         overlay.stop() // PandaOS vooraan: eigen menu en volume
+        RadioSystem(this).reapply() // systeembalk van de radio weer verbergen als de radio hem heeft teruggezet
+        signals.keepMediaVolumeFull()
     }
 
     override fun onDestroy() {
@@ -510,6 +515,9 @@ class MainActivity : Activity() {
     }
 
     companion object {
+        const val DEV_PREFS = "pandaos-developer"
+        fun developerMode(context: android.content.Context): Boolean =
+            context.getSharedPreferences(DEV_PREFS, android.content.Context.MODE_PRIVATE).getBoolean("developer", false)
         private const val REQUEST_LOCATION = 1
         private const val REQUEST_CAMERA = 2
         private const val REQUEST_MIC = 3

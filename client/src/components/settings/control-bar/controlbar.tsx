@@ -1,8 +1,9 @@
 import React, { useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronLeft, ChevronRight, LayoutGrid, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import "../../control-bar/_control-bar.scss";
 import { useUIStore, openAudioApp } from '../../../store/uiStore';
+import AppMenuIcon from './AppMenuIcon';
 import { VOLUME_MAX } from '../../../store/uiStore';
 import { getEffectiveTheme } from '../../../../src/settings';
 import VolkswagenIcon from './VolkswagenIcon';
@@ -20,7 +21,7 @@ const VOLUME_STEP = 1;
 
 const ControlBar: React.FC = () => {
   const {
-    toggleMenu, toggleQuickActions, isAppEditMode,
+    toggleMenu, toggleQuickActions, isAppEditMode, isQuickActionsOpen,
     pinnedApps, recentApps, unpinApp, screenMode, addRecentApp,
     openWebApp, toggleMusic, isTheaterOpen, openTheater, closeTheater, isArcadeOpen, openArcade, closeArcade, isToyboxOpen, openToybox, closeToybox, isDiagnosticsOpen, openDiagnostics, closeDiagnostics, openSettingsTab, toggleCarPlay, // <--- Hier toegevoegd!
     isPhoneOpen, openPhone, closePhone, openCanMonitor, isMapOpen, openMap, closeAll,
@@ -73,10 +74,9 @@ const ControlBar: React.FC = () => {
     else if (id === 'toybox') isToyboxOpen ? closeToybox() : openToybox();
     else if (id === 'audio') openAudioApp();
     else if (id === 'diagnostics') isDiagnosticsOpen ? closeDiagnostics() : openDiagnostics();
-    else if (id === 'contacts' || id === 'calendar' || id === 'messages') useUIStore.getState().panelApp === id ? useUIStore.getState().closePanelApp() : useUIStore.getState().openPanelApp(id);
+    else if (id === 'contacts' || id === 'calendar' || id === 'messages' || id === 'bluetooth' || id === 'radio') useUIStore.getState().panelApp === id ? useUIStore.getState().closePanelApp() : useUIStore.getState().openPanelApp(id);
     else if (id === 'music') toggleMusic();
     else if (id === 'settings') openSettingsTab('Display');
-    else if (id === 'bluetooth') openSettingsTab('Bluetooth');
     else if (id === 'carplay') toggleCarPlay();
     else if (id === 'canmonitor') openCanMonitor();
     else if (id === 'maps') isMapOpen ? closeAll() : openMap(); // Nav: PandaOS-kaart (Google Maps/Waze via Volledig scherm)
@@ -89,7 +89,7 @@ const ControlBar: React.FC = () => {
   // Knop die het app-menu opent (raster)
   const menuButton = (
     <div className="dock-app" onClick={toggleQuickActions} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <LayoutGrid color="#A2A3A5" />
+      <AppMenuIcon open={isQuickActionsOpen} />
     </div>
   );
 

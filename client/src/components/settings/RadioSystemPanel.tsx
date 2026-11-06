@@ -13,6 +13,7 @@ type State = {
   panelLockTable: string | null;
   panelLocked: boolean | null;
   radioCamera: 'on' | 'off' | 'missing';
+  carplayAutoConnect?: boolean | null;
 };
 type Result = { ok: boolean; error: string | null };
 
@@ -79,6 +80,12 @@ const RadioSystemPanel: React.FC<{ open: boolean; onClose: () => void }> = ({ op
                   hint={t('The bar at the top of the radio stays hidden, also in other apps (Waze, CarPlay). Swipe down for the PandaOS menu.')}
                   checked={state.systemBarHidden} disabled={!state.canWrite}
                   onChange={(v) => run(() => bridge().setRadioSystemBarHidden(v))} />
+                {state.carplayAutoConnect !== undefined && state.carplayAutoConnect !== null && (
+                  <Switch title={t('Connect CarPlay automatically')}
+                    hint={t('Off: the iPhone no longer takes over the Wi-Fi and the sound by itself. Start CarPlay yourself from the CarPlay app.')}
+                    checked={state.carplayAutoConnect} disabled={!state.canWrite}
+                    onChange={(v) => run(() => bridge().setCarplayAutoConnect?.(v))} />
+                )}
                 <Switch title={t('Hide volume bar of the radio')}
                   hint={t('Moves the screen 110 px up so the volume bar of the radio falls outside the screen. In other apps the top strip disappears.')}
                   checked={state.volumeBarHidden} disabled={!state.canWrite}
@@ -94,14 +101,13 @@ const RadioSystemPanel: React.FC<{ open: boolean; onClose: () => void }> = ({ op
                   <div className="tsl-switch-row">
                     <div className="tsl-switch-text">
                       <span className="tsl-field-text">{t('Camera app of the radio')} · {t(state.radioCamera === 'on' ? 'On' : 'Off')}</span>
-                      <small className="tsl-hint">{t('When on, the radio shows its own camera screen in R and PandaOS cannot use the camera. Switch it off under App info.')}</small>
+                      <small className="tsl-hint" style={{ color: 'var(--tsl-red)' }}>{t('Leave this app on. Without it CarPlay and Android Auto show no picture. In R the radio shows its own camera screen.')}</small>
                     </div>
-                    {state.deviceOwner ? (
-                      <input type="checkbox" className="tsl-toggle" checked={state.radioCamera === 'on'}
-                        onChange={(e) => run(() => bridge().setRadioCameraEnabled(e.target.checked))} />
+                    {state.radioCamera === 'off' && (state.deviceOwner ? (
+                      <button className="tsl-btn is-small" onClick={() => run(() => bridge().setRadioCameraEnabled(true))}>{t('Switch on')}</button>
                     ) : (
                       <button className="tsl-btn is-small" onClick={() => bridge().openAppDetails?.('com.jancar.hd2cam')}>{t('App info')}</button>
-                    )}
+                    ))}
                   </div>
                 )}
 

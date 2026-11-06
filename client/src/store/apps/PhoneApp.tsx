@@ -6,7 +6,7 @@ import React, { useEffect, useState } from 'react';
 import {
   Phone, PhoneIncoming, PhoneOutgoing, PhoneMissed, PhoneOff, Mic, MicOff, Grid3x3, Delete, X, Search
 } from 'lucide-react';
-import { useUIStore, type PhoneTab, type PhoneContact } from '../uiStore';
+import { useUIStore, type PhoneTab, type PhoneContact, type PhoneRecent } from '../uiStore';
 import { getEffectiveTheme } from '../../settings';
 import { SwipeToDelete, ContactDetail, AddContactForm } from './PhoneParts';
 import { useT } from '../../i18n';
@@ -18,6 +18,9 @@ const KEYPAD_KEYS = [
   ['7', 'PQRS'], ['8', 'TUV'], ['9', 'WXYZ'],
   ['*', ''], ['0', '+'], ['#', ''],
 ];
+
+// Soort gesprek (Android-gesprekslijst via PhoneData.recentsJson: inkomend, uitgaand, gemist/geweigerd)
+const RECENT_TYPE_LABEL: Record<PhoneRecent['type'], string> = { incoming: 'Incoming', outgoing: 'Outgoing', missed: 'Missed' };
 
 const initials = (name: string) =>
   name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || '#';
@@ -102,7 +105,7 @@ const PhoneApp: React.FC = () => {
   const {
     isPhoneOpen, closePhone, phoneTab, setPhoneTab, call, dial,
     phoneContacts, phoneRecents, phoneStatus, btDevices, btKnownDevices, btConnectedAddress,
-    keyboardValue, openKeyboard
+    keyboardValue, openKeyboard, phoneDialPrefill
   } = useUIStore();
   const isDarkMode = useDarkMode();
   const [typedNumber, setTypedNumber] = useState('');
@@ -134,6 +137,13 @@ const PhoneApp: React.FC = () => {
     window.addEventListener('pandaos-permissions', load);
     return () => { window.clearInterval(timer); window.removeEventListener('pandaos-permissions', load); };
   }, [isPhoneOpen]);
+
+  // Nummer van buitenaf (services/dialer.ts, bijv. SOS): in het toetsenblok zetten, niet bellen
+  useEffect(() => {
+    if (!isPhoneOpen || phoneDialPrefill === null) return;
+    setTypedNumber(phoneDialPrefill.slice(0, 20));
+    useUIStore.setState({ phoneDialPrefill: null });
+  }, [isPhoneOpen, phoneDialPrefill]);
 
   if (!isPhoneOpen) return null;
 
@@ -174,28 +184,35 @@ const PhoneApp: React.FC = () => {
               phoneRecents.length === 0 ? (
                 <p className="tsl-hint phone-empty">{t('No recent calls yet.')}</p>
               ) : (
-                <div className="tsl-list">
-                  {phoneRecents.map((recent, i) => (
-                    // Tik op de regel = nummer in het toetsenblok; groene knop = meteen bellen; naar links vegen = verwijderen
-                    <SwipeToDelete key={`${recent.number}-${recent.time}`} onClick={() => setTypedNumber(recent.number)}
-                      onDelete={() => {
-                        (window as any).PandaAndroid?.deleteCall?.(recent.number, recent.time);
-                        useUIStore.setState((st) => ({ phoneRecents: st.phoneRecents.filter((r) => !(r.number === recent.number && r.time === recent.time)) }));
-                      }}>
-                    <div className="tsl-list-row phone-row">
-                      {recent.type === 'missed'
-                        ? <PhoneMissed size={20} className="is-missed" />
-                        : recent.type === 'outgoing' ? <PhoneOutgoing size={20} /> : <PhoneIncoming size={20} />}
-                      <div className="tsl-list-text">
-                        <span className={`tsl-field-text ${recent.type === 'missed' ? 'is-missed' : ''}`}>{recent.name || recent.number}</span>
-                        <small className="tsl-hint">{recent.number} · {formatRecentTime(recent.time)}</small>
-                      </div>
-                      <button className="tsl-btn is-small is-success" onClick={(e) => { e.stopPropagation(); dial(recent.number, recent.name); }} aria-label={t('Call')}>
-                        <Phone size={18} color="#ffffff" />
-                      </button>
-                    </div>
-                    </SwipeToDelete>
-                  ))}
+                <div className="phone-recents">
+                  {phoneRecents.map((recent) => {
+                    const hasName = !!recent.name && recent.name !== recent.number;
+                    return (
+                      // Tik op de regel = nummer in het toetsenblok; groene knop = meteen bellen; naar links vegen = verwijderen
+                      <SwipeToDelete key={`${recent.number}-${recent.time}`} onClick={() => setTypedNumber(recent.number)}
+                        onDelete={() => {
+                          (window as any).PandaAndroid?.deleteCall?.(recent.number, recent.time);
+                          useUIStore.setState((st) => ({ phoneRecents: st.phoneRecents.filter((r) => !(r.number === recent.number && r.time === recent.time)) }));
+                        }}>
+                        {/* Kaartje; alleen het pictogram heeft de kleur van het soort gesprek, rood alleen bij gemist */}
+                        <div className={`phone-recent is-call-${recent.type}`}>
+                          <span className="phone-recent-icon" aria-label={t(RECENT_TYPE_LABEL[recent.type])}>
+                            {recent.type === 'missed' ? <PhoneMissed size={20} />
+                              : recent.type === 'outgoing' ? <PhoneOutgoing size={20} /> : <PhoneIncoming size={20} />}
+                          </span>
+                          <div className="phone-recent-text">
+                            <span className="tsl-field-text phone-recent-name">{hasName ? recent.name : recent.number}</span>
+                            <small className="tsl-hint">
+                              {[t(RECENT_TYPE_LABEL[recent.type]), hasName ? recent.number : null, formatRecentTime(recent.time)].filter(Boolean).join(' · ')}
+                            </small>
+                          </div>
+                          <button className="tsl-btn is-small is-success" onClick={(e) => { e.stopPropagation(); dial(recent.number, recent.name); }} aria-label={t('Call')}>
+                            <Phone size={18} color="#ffffff" />
+                          </button>
+                        </div>
+                      </SwipeToDelete>
+                    );
+                  })}
                 </div>
               )
             )}

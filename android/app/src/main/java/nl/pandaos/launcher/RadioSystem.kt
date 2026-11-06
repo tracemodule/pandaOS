@@ -53,6 +53,30 @@ class RadioSystem(private val activity: Activity) {
         const val PANEL_LOCK_KEY = "jancar_sysui_panel_disable_touch"
         const val RADIO_CAMERA = "com.jancar.hd2cam"
         const val VOLUME_BAR_OVERSCAN = -110 // px: haalt de systeembalk én de volumebalk van de radio uit beeld
+        const val CARPLAY_AUTO_KEY = "CarplayAutoConnectSwitch" // Jancar: CarPlay verbindt vanzelf (1) of niet (0)
+
+        // Android 9 blokkeert verborgen API's zoals IWindowManager.setOverscan en DisplayInfo.overscanTop voor apps
+        // ("dark greylist", NoSuchMethodException op de radio, 6-11-2026). Via reflectie op de reflectie zelf
+        // (meta-reflectie) mag PandaOS ze toch gebruiken via VMRuntime.setHiddenApiExemptions.
+        // LET OP: alleen deze klassen vrijgeven, nooit alles ("L"). Met "L" koos de WebView (zelfde proces) een
+        // andere tekenroute en crashte de emulator direct na het opstartlogo (6-11-2026). Daarom ook pas bij het
+        // gebruik van de schakelaar "Volumebalk verbergen", niet bij het opstarten.
+        @Volatile private var unsealed = false
+        fun unsealHiddenApi() {
+            if (unsealed || android.os.Build.VERSION.SDK_INT < 28) return
+            try {
+                val forName = Class::class.java.getDeclaredMethod("forName", String::class.java)
+                val getMethod = Class::class.java.getDeclaredMethod("getDeclaredMethod", String::class.java, arrayOf<Class<*>>()::class.java)
+                val runtimeClass = forName.invoke(null, "dalvik.system.VMRuntime") as Class<*>
+                val getRuntime = getMethod.invoke(runtimeClass, "getRuntime", null) as java.lang.reflect.Method
+                val exempt = getMethod.invoke(runtimeClass, "setHiddenApiExemptions", arrayOf<Class<*>>(Array<String>::class.java)) as java.lang.reflect.Method
+                exempt.invoke(getRuntime.invoke(null), arrayOf(
+                    "Landroid/view/IWindowManager", "Landroid/view/WindowManagerGlobal", "Landroid/view/DisplayInfo"))
+                unsealed = true
+            } catch (e: Throwable) {
+                DiagLog.add("error", "Verborgen API's niet vrij te geven: ${e.javaClass.simpleName}")
+            }
+        }
     }
 
     fun canWrite(): Boolean =
@@ -75,6 +99,7 @@ class RadioSystem(private val activity: Activity) {
 
     // Bovenrand (overscan) van het scherm uitlezen via de verborgen DisplayInfo; null = niet uit te lezen
     fun overscanTop(): Int? = try {
+        // Geen unsealHiddenApi() hier: dit draait ook bij het opstarten. Lukt het niet, dan de laatst gezette waarde.
         val infoClass = Class.forName("android.view.DisplayInfo")
         val info = infoClass.getDeclaredConstructor().newInstance()
         val display = activity.windowManager.defaultDisplay
@@ -113,6 +138,7 @@ class RadioSystem(private val activity: Activity) {
             .put("panelLockTable", panelLockTable() ?: JSONObject.NULL)
             .put("panelLocked", panelLockValue()?.let { it == "1" || it == "true" } ?: JSONObject.NULL)
             .put("radioCamera", cameraAppState())
+            .put("carplayAutoConnect", Settings.Global.getString(resolver, CARPLAY_AUTO_KEY)?.let { it == "1" } ?: JSONObject.NULL)
             .toString()
     }
 
@@ -124,6 +150,7 @@ class RadioSystem(private val activity: Activity) {
         if (!canWrite()) return result(false, "no-permission")
         return try {
             Settings.Global.putString(resolver, POLICY_KEY, if (hidden) HIDE_BARS else null)
+            prefs.edit().putBoolean("systemBarHidden", hidden).apply() // onthouden: de radio zet hem soms terug
             DiagLog.add("info", "Systeembalk radio ${if (hidden) "verborgen" else "terug"}")
             result(true)
         } catch (e: Exception) { result(false, e.message) }
@@ -135,6 +162,7 @@ class RadioSystem(private val activity: Activity) {
         if (!canWrite()) return result(false, "no-permission")
         val top = if (hidden) VOLUME_BAR_OVERSCAN else 0
         return try {
+            unsealHiddenApi()
             val wmGlobal = Class.forName("android.view.WindowManagerGlobal")
             val wms = wmGlobal.getMethod("getWindowManagerService").invoke(null)!!
             val method = wms.javaClass.getMethod("setOverscan",
@@ -149,6 +177,28 @@ class RadioSystem(private val activity: Activity) {
             DiagLog.add("error", "Overscan zetten mislukt: ${cause.javaClass.simpleName} ${cause.message}")
             result(false, "${cause.javaClass.simpleName}: ${cause.message}")
         }
+    }
+
+    // De radio zet policy_control soms terug op null (na een herstart, of bij het starten van CarPlay/Android Auto;
+    // gezien 6-11-2026). Staat de schakelaar in PandaOS aan, dan zet PandaOS hem opnieuw (bij start en terugkomst).
+    fun reapply() {
+        if (!prefs.getBoolean("systemBarHidden", false) || !canWrite()) return
+        val current = Settings.Global.getString(resolver, POLICY_KEY)
+        if (current == HIDE_BARS) return
+        try {
+            Settings.Global.putString(resolver, POLICY_KEY, HIDE_BARS)
+            DiagLog.add("info", "Systeembalk radio opnieuw verborgen (stond op ${current ?: "null"})")
+        } catch (_: Exception) {}
+    }
+
+    // CarPlay automatisch verbinden (Jancar). Uit: de iPhone neemt niet meer vanzelf de wifi en het geluid over.
+    fun setCarplayAutoConnect(on: Boolean): String {
+        if (!canWrite()) return result(false, "no-permission")
+        return try {
+            Settings.Global.putString(resolver, CARPLAY_AUTO_KEY, if (on) "1" else "0")
+            DiagLog.add("info", "CarPlay automatisch verbinden ${if (on) "aan" else "uit"}")
+            result(true)
+        } catch (e: Exception) { result(false, e.message) }
     }
 
     // Paneel van de radio op slot (Jancar-instelling, alleen als die bestaat)

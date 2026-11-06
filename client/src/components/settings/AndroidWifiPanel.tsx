@@ -5,6 +5,7 @@ import React, { useEffect, useState } from 'react';
 import { Wifi, WifiOff, Lock, RotateCw, Check, ChevronRight } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useT } from '../../i18n';
+import { toggleRadio } from '../../services/radioToggle';
 
 interface WifiNetwork { ssid: string; level: number; secure: boolean; saved: boolean; connected: boolean }
 interface WifiState { enabled: boolean; connected?: boolean; ssid?: string | null; level?: number; networks?: WifiNetwork[] }
@@ -90,7 +91,7 @@ const AndroidWifiPanel: React.FC = () => {
           </small>
         </div>
         <input type="checkbox" className="tsl-toggle" checked={state.enabled}
-          onChange={(e) => { bridge()?.setWifiEnabled(e.target.checked); setTimeout(read, 800); }} />
+          onChange={(e) => { toggleRadio('wifi', e.target.checked, read); setTimeout(read, 800); }} />
       </label>
 
       {/* Verborgen netwerk: via het wifi-scherm van Android (daar kun je de naam zelf invullen) */}

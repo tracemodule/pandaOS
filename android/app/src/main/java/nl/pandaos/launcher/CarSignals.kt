@@ -28,6 +28,23 @@ class CarSignals(private val activity: Activity, private val send: (String) -> U
     private val radioVolumes = java.util.concurrent.ConcurrentHashMap<String, Int>()
     fun radioVolumesJson(): String = org.json.JSONObject(radioVolumes as Map<*, *>).toString()
     @Volatile private var masterProcess: Process? = null
+    // Jancar-radio: het geluid gaat door twee volumes achter elkaar (Android-mediavolume en het meestervolume van de
+    // radio). Stond het mediavolume op 53, dan was alles te zacht (6-11-2026). Daarom: mediavolume altijd 100,
+    // PandaOS regelt alleen het meestervolume.
+    val usesRadioMaster: Boolean by lazy {
+        try { activity.packageManager.getApplicationInfo("com.jancar.services", 0); true } catch (_: Exception) { false }
+    }
+
+    fun keepMediaVolumeFull() {
+        if (!usesRadioMaster) return
+        val am = audio ?: return
+        val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        if (am.getStreamVolume(AudioManager.STREAM_MUSIC) >= max) return
+        try {
+            am.setStreamVolume(AudioManager.STREAM_MUSIC, max, 0)
+            DiagLog.add("info", "Mediavolume van Android op 100% gezet (meestervolume regelt het geluid)")
+        } catch (_: Exception) {}
+    }
     @Volatile var reverseActive = false
         private set
     // Ooit een backcar-broadcast gezien op dit apparaat? Dan is het focusverlies zonder aanraking waarschijnlijk de
@@ -69,6 +86,7 @@ class CarSignals(private val activity: Activity, private val send: (String) -> U
             try { resolver.registerContentObserver(uri, true, settingsObserver) } catch (_: Exception) {}
         }
         startMasterVolumeReader()
+        keepMediaVolumeFull()
     }
 
     private fun startMasterVolumeReader() {
@@ -183,11 +201,12 @@ class CarSignals(private val activity: Activity, private val send: (String) -> U
     }
 
     fun setMaster(target: Int) {
-        if (masterVolume < 0) return
+        if (masterVolume < 0) return // onbekend: de webapp stapt dan relatief (stepMaster)
         stepMaster(target.coerceIn(0, MASTER_MAX) - masterVolume)
     }
 
     fun setVolumePercent(percent: Int) {
+        if (usesRadioMaster) return // mediavolume blijft 100 (zie keepMediaVolumeFull)
         val am = audio ?: return
         val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
         val index = Math.round(percent.coerceIn(0, 100) * max / 100f)

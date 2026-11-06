@@ -71,6 +71,75 @@
   // Donker: tegels hebben geen eigen kleur (transparant), dus hier een iets lichtere ondergrond
   &.dark-mode .phone-panel { background-color: rgba(255, 255, 255, 0.04); }
 
+  // --- Recente oproepen: kaartjes in de PandaOS-stijl (licht en donker) ---
+  // Dichte kaartkleur (geen doorzichtige): achter de kaart ligt bij het vegen de rode verwijderlaag
+  & { --phone-row-bg: var(--tsl-bg); }
+  &.dark-mode { --phone-row-bg: #535353; } // = rgba(255,255,255,.07) op het donkere vak, zoals .trip-card
+
+  .phone-recents {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-width: 640px;
+  }
+
+  // Veeg-om-te-verwijderen (PhoneParts.tsx SwipeToDelete)
+  .phone-swipe {
+    position: relative;
+    flex-shrink: 0;
+    overflow: hidden;
+    border-radius: 8px;
+  }
+
+  .phone-swipe-delete {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 20px;
+    background-color: var(--tsl-red);
+    color: var(--tsl-white);
+  }
+
+  .phone-swipe-front {
+    position: relative;
+    background-color: var(--phone-row-bg);
+    touch-action: pan-y;
+  }
+
+  .phone-recent {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-height: 64px;
+    padding: 10px 14px;
+    box-sizing: border-box;
+    cursor: pointer;
+
+    .phone-recent-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+    .tsl-field-text, .tsl-hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tsl-btn { flex-shrink: 0; }
+  }
+
+  // Pictogram per soort gesprek, elk in een eigen kleur; rood alleen bij gemist (pictogram en naam)
+  .phone-recent-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+  }
+
+  .phone-recent.is-call-incoming .phone-recent-icon { color: var(--tsl-green); background-color: rgba(37, 203, 85, 0.15); }
+  .phone-recent.is-call-outgoing .phone-recent-icon { color: var(--tsl-blue-link); background-color: rgba(46, 120, 255, 0.15); }
+  .phone-recent.is-call-missed {
+    .phone-recent-icon { color: var(--tsl-red); background-color: rgba(237, 78, 59, 0.15); }
+    .phone-recent-name { color: var(--tsl-red); }
+  }
+
   .phone-dial-panel {
     align-items: center;
     justify-content: center;

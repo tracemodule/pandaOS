@@ -5,6 +5,7 @@
 import { useUIStore, VOLUME_MAX, fromPercent } from '../store/uiStore';
 import { getLinkedAndroidPackage, launchAndroidPackage } from '../store/appLinks';
 import { diag } from './diagnostics';
+import { translate } from '../i18n';
 import { applyCanSignal } from './canSignals';
 
 // Wat er speelt in een Android-app (MediaWatcher.kt); positie en duur in seconden
@@ -15,6 +16,7 @@ export interface AndroidNowPlaying {
   isPlaying: boolean;
   position: number;
   duration: number;
+  projection?: 'carplay' | 'androidauto'; // speelt via CarPlay/Android Auto (geen titel bekend)
 }
 
 export interface PandaOSWebBridge {
@@ -111,8 +113,18 @@ export const initAndroidBridge = () => {
         if (state.nowPlayingSource === 'android') useUIStore.setState({ nowPlayingSource: null, ...EMPTY_MEDIA });
         return;
       }
+      if (media.projection) {
+        const label = media.projection === 'carplay' ? 'CarPlay' : 'Android Auto';
+        useUIStore.setState({
+          nowPlayingSource: 'android', nowPlayingProjection: media.projection,
+          currentTrack: label,
+          currentArtist: translate(media.projection === 'carplay' ? 'Plays via CarPlay' : 'Plays via Android Auto', state.displaySettings.language),
+          albumArt: null, isPlaying: true, mediaPosition: 0, mediaDuration: 0,
+        });
+        return;
+      }
       useUIStore.setState({
-        nowPlayingSource: 'android',
+        nowPlayingSource: 'android', nowPlayingProjection: null,
         currentTrack: media.title,
         currentArtist: media.artist,
         isPlaying: media.isPlaying,

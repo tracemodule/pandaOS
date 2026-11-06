@@ -220,6 +220,10 @@ const SettingsApp: React.FC = () => {
   const [editColor, setEditColor] = useState<{ hex: string; list: 'customPaints' | 'customRims' } | null>(null); // eigen kleur: naam/verwijderen
   const [confirmApplyCar, setConfirmApplyCar] = useState(false); // Geavanceerd > Instellingen van mijn auto: Ja/Nee
   const [radioSettingsOpen, setRadioSettingsOpen] = useState(false); // Geavanceerd > Radio-instellingen
+  // Software > Build: {debugBuild, developer} van de launcher; null = geen radio of oude launcher
+  const [buildInfo, setBuildInfo] = useState<{ debugBuild: boolean; developer: boolean } | null>(() => {
+    try { return JSON.parse((window as any).PandaAndroid?.getBuildInfo?.() ?? 'null'); } catch { return null; }
+  });
   useEffect(() => { setSearching(false); }, [activeTab, isMenuOpen]);
   const query = searching ? keyboardValue.trim().toLowerCase() : '';
   const searchResults = query.length >= 2
@@ -346,6 +350,17 @@ const SettingsApp: React.FC = () => {
                    <span className="tsl-title">{t('Paint')}</span>
                    <IconTiles tiles={paintTiles} value={paint.toLowerCase()} columns={4}
                      onChange={(hex) => updateVehicleSetting('paintColor', hex)} />
+                 </div>
+                 {/* Studio: de 3D-auto in een ruimte (vloer met lichtvlek en muur) in plaats van een effen achtergrond */}
+                 <div className="tsl-section">
+                   <label className="tsl-switch-row">
+                     <div className="tsl-switch-text" style={{ flex: 1 }}>
+                       <span className="tsl-title">{t('Studio')}</span>
+                       <small className="tsl-hint">{t('The car stands in a room with a lit floor, like in a showroom.')}</small>
+                     </div>
+                     <input type="checkbox" className="tsl-toggle" checked={vehicleSettings.studioScene !== false}
+                       onChange={(e) => updateVehicleSetting('studioScene', e.target.checked)} />
+                   </label>
                  </div>
                  {/* Kenteken op de 3D-auto: alleen op deze radio bewaard */}
                  <div className="tsl-section">
@@ -678,6 +693,15 @@ const SettingsApp: React.FC = () => {
                    {renderToggleGroup('temperature', ['°C', '°F'], updateDisplaySetting, `°${displaySettings?.temperature}`,
                      (opt: string) => updateDisplaySetting('temperature', opt.replace('°', '')))}
                  </div>
+                 {/* Weer in de bovenbalk (Open-Meteo, plek ±10 km of de tijdzone) */}
+                 <label className="tsl-switch-row">
+                   <div className="tsl-switch-text" style={{ flex: 1 }}>
+                     <span className="tsl-title">{t('Weather in top bar')}</span>
+                     <small className="tsl-hint">{t('Shows the weather and the outside temperature next to the time. Uses the car thermometer when it is known.')}</small>
+                   </div>
+                   <input type="checkbox" className="tsl-toggle" checked={displaySettings?.showWeather !== false}
+                     onChange={(e) => updateDisplaySetting('showWeather', e.target.checked)} />
+                 </label>
               </div>
             )}
 
@@ -1063,6 +1087,28 @@ const SettingsApp: React.FC = () => {
 
                  {/* Software-update via GitHub Releases (toont ook de huidige versie) */}
                  <SoftwareUpdatePanel />
+
+                {/* Build: Publicatie of Ontwikkelaar. Ontwikkelaar zet WebView-DevTools aan, zodat tools/pandaos.mjs op de
+                    laptop werkt (doctor, test, sim, can, audio). Alleen op de radio (launcher 1.4.0+). */}
+                {buildInfo && (
+                  <div className="tsl-section">
+                    <span className="tsl-title">{t('Build')}</span>
+                    <div className="tsl-segmented">
+                      {([false, true] as const).map((dev) => (
+                        <button key={String(dev)} className={(buildInfo.developer || buildInfo.debugBuild) === dev ? 'is-active' : ''}
+                          disabled={buildInfo.debugBuild}
+                          onClick={() => { (window as any).PandaAndroid?.setDeveloperMode?.(dev); setBuildInfo({ ...buildInfo, developer: dev }); }}>
+                          {t(dev ? 'Developer' : 'Release')}
+                        </button>
+                      ))}
+                    </div>
+                    <small className="tsl-hint">
+                      {buildInfo.debugBuild ? t('This is a debug build: the laptop tools always work.')
+                        : buildInfo.developer ? t('The laptop can connect to PandaOS (tools/pandaos.mjs). Switch back to Release when you are done testing.')
+                        : t('Developer turns on the connection for the laptop tools (tools/pandaos.mjs).')}
+                    </small>
+                  </div>
+                )}
 
                 {/* Weergave: Standaard of Geavanceerd. Standaard verbergt CAN-instellingen, de CAN-monitor, het voertuigprotocol
                     en de grafische kwaliteit; alles blijft werken zoals ingesteld */}

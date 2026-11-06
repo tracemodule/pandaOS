@@ -84,6 +84,7 @@ export interface DisplaySettings {
   energyDisplay: 'Percentage' | 'Distance';
   distance: 'Kilometers' | 'Miles';
   temperature: 'C' | 'F';
+  showWeather?: boolean; // weer + buitentemperatuur in de bovenbalk (Open-Meteo); undefined = aan
   brightness: number; // 10-100 %, als Auto uit staat
   // Auto: dag- of nachthelderheid, mee met Weergave (licht/donker): verlichting van de auto (stadslicht/dimlicht via
   // het ILL-signaal), anders de klok. Opgeslagen instellingen van vroeger missen deze velden: gebruik ?? 100 / ?? 60.
@@ -211,6 +212,7 @@ export interface VehicleSettings {
   customRims?: string[]; // eigen velgkleuren uit de Kleurenkiezer
   colorNames?: Record<string, string>; // namen van eigen kleuren (hex in kleine letters -> naam)
   rainbowFloor?: boolean; // Toybox: regenboog onder de 3D-auto
+  studioScene?: boolean; // 3D-auto in een studio (vloer met lichtvlek, muur); undefined = aan
   neon?: NeonSettings; // Toybox: neon onder de 3D-auto
   minigun?: boolean; // Toybox: minigun op het dak van de 3D-auto
   // Kenteken op de 3D-auto (Instellingen > Voertuig). Alleen lokaal op de radio bewaard: nooit in de repo,
@@ -345,6 +347,7 @@ interface UIState {
   // Waar "nu aan het afspelen" vandaan komt: Spotify-account (ook muziek op je telefoon), Windows-mediabediening,
   // of een Android-app op de radio (mediasessie via de launcher, services/androidBridge.ts)
   nowPlayingSource: 'spotify' | 'system' | 'android' | null;
+  nowPlayingProjection?: 'carplay' | 'androidauto' | null; // muziek via CarPlay/Android Auto (kaart: Openen)
   isPlaying: boolean;
   mediaSource: 'local' | 'spotify';
 
@@ -371,6 +374,7 @@ interface UIState {
   phoneContacts: PhoneContact[];
   phoneRecents: PhoneRecent[];
   phoneStatus: string | null; // melding van de server, bijv. "Bellen werkt alleen op de Raspberry Pi"
+  phoneDialPrefill: string | null; // nummer dat Telefoon bij openen in het toetsenblok zet (services/dialer.ts), daarna weer null
   openPhone: () => void;
   closePhone: () => void;
   setPhoneTab: (tab: PhoneTab) => void;
@@ -467,8 +471,8 @@ interface UIState {
   closeCanMonitor: () => void;
   // Theater (half scherm): videoapps zoals Netflix, YouTube en Twitch
   isTheaterOpen: boolean;
-  panelApp: 'contacts' | 'calendar' | 'messages' | null; // PhoneDataApps.tsx: half naast de auto
-  openPanelApp: (app: 'contacts' | 'calendar' | 'messages') => void;
+  panelApp: 'contacts' | 'calendar' | 'messages' | 'bluetooth' | 'radio' | null; // PhoneDataApps.tsx: half naast de auto
+  openPanelApp: (app: 'contacts' | 'calendar' | 'messages' | 'bluetooth' | 'radio') => void;
   closePanelApp: () => void;
   openTheater: () => void;
   closeTheater: () => void;
@@ -606,6 +610,7 @@ export const useUIStore = create<UIState>()(persist((set, get) => ({
   phoneContacts: [],
   phoneRecents: [],
   phoneStatus: null,
+  phoneDialPrefill: null,
   isPlaying: false,
   mediaSource: 'local',
 
@@ -807,10 +812,13 @@ export const useUIStore = create<UIState>()(persist((set, get) => ({
   // Op de radio ook het Android-mediavolume zetten (CarSignals.kt); terugkoppeling via window.PandaOS.systemVolume
   setVolume: (val) => {
     const volume = Math.round(Math.max(0, Math.min(VOLUME_MAX, val)));
-    set({ volume });
     const android = (window as any).PandaAndroid;
+    const before = get().volume;
+    set({ volume });
     // Meestervolume van de radio bekend: dat zetten; anders het Android-mediavolume (in procenten)
     if (android?.getMasterVolume?.() >= 0) android.setMasterVolume(volume);
+    // Jancar-radio, meestervolume nog onbekend: relatief stappen (het echte volume komt daarna uit het logboek)
+    else if (android?.usesRadioMasterVolume?.()) android.stepMasterVolume(volume - before);
     else android?.setSystemVolume?.(toPercent(volume));
   },
   toggleVolume: () => set((state) => ({ isVolumeOpen: !state.isVolumeOpen })),
@@ -820,7 +828,7 @@ export const useUIStore = create<UIState>()(persist((set, get) => ({
     // Op de radio: één echte volumestap van Android (de radio heeft minder dan 100 stappen) en het echte percentage tonen
     const android = (window as any).PandaAndroid;
     // Meestervolume bekend: stap via de radio; het echte nieuwe volume komt terug via window.PandaOS.radioVolume
-    if (android?.getMasterVolume?.() >= 0) {
+    if (android?.getMasterVolume?.() >= 0 || android?.usesRadioMasterVolume?.()) {
       android.stepMasterVolume(delta);
       set({ volume: Math.max(0, Math.min(VOLUME_MAX, get().volume + delta)), isVolumeOpen: true });
       return;
@@ -935,10 +943,26 @@ export const useUIStore = create<UIState>()(persist((set, get) => ({
 
   dial: (number, name) => {
     if (!number) return;
-    // Op de radio: de telefoon-app van de radio belt via Bluetooth en toont zelf het gesprek
+    // Op de radio: de Bluetooth-app van de radio belt en toont zelf het gesprek (PhoneData.dial in de launcher).
+    // Android's eigen bellen doet op de radio niets (geen simkaart); de launcher kiest de app en zegt wat er gebeurde.
     const android = (window as any).PandaAndroid;
-    if (android?.dialNumber) {
-      if (android.dialNumber(number)) set((state) => ({ phoneRecents: [{ name: name || number, number, type: 'outgoing' as const, time: Date.now() }, ...state.phoneRecents].slice(0, 50) }));
+    if (android?.dialNumberResult || android?.dialNumber) {
+      let result: { ok: boolean; via?: string; error?: string };
+      try {
+        result = android.dialNumberResult
+          ? JSON.parse(android.dialNumberResult(number, getLinkedAndroidPackage(get().appLinks, 'phone') ?? ''))
+          : { ok: !!android.dialNumber(number), via: 'call' };
+      } catch { result = { ok: false, error: 'bridge' }; }
+      if (!result.ok) {
+        get().showNotification('Calling failed. No app on the radio can make calls.', 'alert', 'PHONE');
+      } else if (result.via === 'bt-app') {
+        get().showNotification('The phone app of the radio is open. Dial the number there.', 'info', 'PHONE');
+      } else if (result.via === 'bt-dialer') {
+        get().showNotification('The phone app of the radio is open. Check the number and press call.', 'info', 'PHONE');
+      } else if (result.via === 'call' || result.via === 'bt-call') {
+        // Meteen in Recent; de Gesprekslijst van de telefoon komt bij de volgende keer inlezen
+        set((state) => ({ phoneRecents: [{ name: name || number, number, type: 'outgoing' as const, time: Date.now() }, ...state.phoneRecents].slice(0, 50) }));
+      }
       return;
     }
     set({ call: { ...IDLE_CALL, state: 'dialing', number, name: name || number, outgoing: true } });

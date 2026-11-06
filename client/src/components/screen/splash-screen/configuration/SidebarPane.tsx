@@ -662,6 +662,54 @@ const LicensePlates: React.FC<{ text: string }> = ({ text }) => {
 // --- HOOFD COMPONENT ---
 // widthFraction = breedte van dit paneel als deel van het scherm (1 = vol, 0.3 = Settings open), zie SplashScreen.
 // Toybox > Regenboogvloer: draaiende regenboogschijf onder de auto (vervaagt naar de rand)
+// Studio (zoals de auto in een showroom staat): muur, vloer en een lichtvlek onder de auto, als CSS-verloop achter
+// het (doorzichtige) canvas. Licht: lichtgrijze studio; donker: donkere studio met een zachte lamp boven de auto.
+// De studio wordt één keer als plaatje getekend (canvas 2D) en als achtergrond gebruikt. Geen CSS-verlopen en geen
+// 3D-vloer: op allebei crashte de software-GPU van de emulator (SwiftShader) zodra het 3D-canvas erboven tekende
+// (6-11-2026). Een plaatje is voor elke GPU het lichtst. Per thema (licht/donker) onthouden.
+const studioCache: Record<string, string> = {};
+const studioBackground = (dark: boolean): string => {
+  const key = dark ? 'dark' : 'light';
+  if (studioCache[key]) return studioCache[key];
+  try {
+    const w = 640, h = 400;
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const c = canvas.getContext('2d')!;
+    // Muur boven, vloer onder (zachte overgang)
+    const wall = c.createLinearGradient(0, 0, 0, h);
+    const stops = dark
+      ? [[0, '#141518'], [0.42, '#1b1d21'], [0.6, '#111214'], [1, '#08090a']]
+      : [[0, '#e2e2e7'], [0.42, '#eeeef2'], [0.6, '#dddde3'], [1, '#cfcfd6']];
+    stops.forEach(([o, col]) => wall.addColorStop(o as number, col as string));
+    c.fillStyle = wall;
+    c.fillRect(0, 0, w, h);
+    // Ellips: radiaal verloop in een geschaalde cirkel
+    const ellipse = (cx: number, cy: number, rx: number, ry: number, colors: [number, string][]) => {
+      c.save();
+      c.translate(cx, cy);
+      c.scale(1, ry / rx);
+      const g = c.createRadialGradient(0, 0, 0, 0, 0, rx);
+      colors.forEach(([o, col]) => g.addColorStop(o, col));
+      c.fillStyle = g;
+      c.fillRect(-rx, -rx, rx * 2, rx * 2);
+      c.restore();
+    };
+    // Lichtere plek op de muur achter de auto
+    ellipse(w * 0.5, h * 0.42, w * 0.7, h * 0.45, dark
+      ? [[0, 'rgba(43,47,54,1)'], [0.45, 'rgba(27,29,34,0.8)'], [1, 'rgba(27,29,34,0)']]
+      : [[0, 'rgba(255,255,255,1)'], [0.45, 'rgba(240,240,243,0.8)'], [1, 'rgba(240,240,243,0)']]);
+    // Lichtvlek op de vloer onder de auto
+    ellipse(w * 0.5, h * 0.63, w * 0.34, h * 0.13, dark
+      ? [[0, 'rgba(120,128,142,0.45)'], [0.45, 'rgba(70,76,88,0.25)'], [1, 'rgba(70,76,88,0)']]
+      : [[0, 'rgba(255,255,255,0.95)'], [0.45, 'rgba(250,250,252,0.6)'], [1, 'rgba(250,250,252,0)']]);
+    studioCache[key] = `url(${canvas.toDataURL('image/png')})`;
+  } catch {
+    studioCache[key] = 'none';
+  }
+  return studioCache[key];
+};
+
 const RainbowFloor: React.FC = () => {
   const ref = useRef<THREE.Mesh>(null);
   const texture = useMemo(() => {
@@ -815,6 +863,8 @@ const SidebarPane: React.FC<{ widthFraction?: number }> = ({ widthFraction = 1 }
   const carHalfPx = (canvasHeight * vehicleModel.halfLength) / (2 * cameraDistance * Math.tan(THREE.MathUtils.degToRad(CAMERA_FOV / 2)));
   const paneHalfPx = (widthFraction * window.innerWidth) / 2;
   const carScale = carHalfPx > 0 ? Math.max(0.2, Math.min(1, paneHalfPx / carHalfPx)) : 1;
+  // Studio alleen op het startscherm (auto over het hele scherm); met Instellingen of een app open: alleen de auto
+  const showStudio = vehicleSettings.studioScene !== false && widthFraction >= 0.99;
   const canvasTransform = `translateX(${-(1 - widthFraction) * 50}vw) scale(${carScale})`;
 
   const speedUnit = displaySettings?.distance === 'Kilometers' ? 'KM/H' : 'MPH';
@@ -844,7 +894,10 @@ const SidebarPane: React.FC<{ widthFraction?: number }> = ({ widthFraction = 1 }
       style={{ 
         display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
         // React forceert nu 100% de achtergrond kleur:
-        backgroundColor: isDarkMode ? '#111111' : '#e5e5ea', 
+        backgroundColor: isDarkMode ? '#111111' : '#e5e5ea',
+        // Studio-achtergrond (Instellingen > Voertuig > Studio); uit = effen kleur zoals voorheen
+        backgroundImage: showStudio ? studioBackground(isDarkMode) : 'none',
+        backgroundSize: '100% 100%',
         transition: 'background-color 0.3s ease',
         height: '100%', width: '100%', overflow: 'hidden', position: 'relative'
       }}
@@ -983,9 +1036,8 @@ const SidebarPane: React.FC<{ widthFraction?: number }> = ({ widthFraction = 1 }
       {widthFraction >= 0.99 ? (
         <div className="sidebar-home-cards" style={{ position: 'absolute', left: 0, right: 0, bottom: '15px', zIndex: 10,
           display: 'flex', justifyContent: 'center', alignItems: 'stretch', gap: '12px', pointerEvents: 'none' }}>
-          {(isBluetoothConnected || !!currentTrackForBar) && (
-            <div style={{ width: 400, pointerEvents: 'auto' }}><MusicBar /></div>
-          )}
+          {/* Muziekbalk altijd naast Navigeren, ook als er niets speelt (dan "Niets aan het afspelen") */}
+          <div style={{ width: 400, pointerEvents: 'auto' }}><MusicBar /></div>
           <div style={{ width: 260, pointerEvents: 'auto' }}><NavigateCard /></div>
         </div>
       ) : (isBluetoothConnected || !!currentTrackForBar) && (

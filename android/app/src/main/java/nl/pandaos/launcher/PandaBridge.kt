@@ -270,6 +270,33 @@ class PandaBridge(
     @JavascriptInterface
     fun resetRadioSystem(): String = radioSystem.reset()
 
+    @JavascriptInterface
+    fun setCarplayAutoConnect(on: Boolean): String = radioSystem.setCarplayAutoConnect(on)
+
+    // Ontwikkelaarsmodus (Instellingen > Software > Build): WebView-DevTools aan, zodat tools/pandaos.mjs vanaf de
+    // laptop werkt (doctor, test, sim, can, audio). {"debugBuild":false,"developer":true}
+    @JavascriptInterface
+    fun getBuildInfo(): String = org.json.JSONObject()
+        .put("debugBuild", BuildConfig.DEBUG)
+        .put("developer", MainActivity.developerMode(activity))
+        .toString()
+
+    @JavascriptInterface
+    fun setDeveloperMode(on: Boolean) {
+        activity.getSharedPreferences(MainActivity.DEV_PREFS, android.content.Context.MODE_PRIVATE).edit().putBoolean("developer", on).apply()
+        activity.runOnUiThread { android.webkit.WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG || on) }
+        DiagLog.add("info", "Ontwikkelaarsmodus ${if (on) "aan" else "uit"}")
+    }
+
+    // CarPlay / Android Auto openen vanaf de muziekkaart ("Speelt via CarPlay")
+    @JavascriptInterface
+    fun openProjection(): Boolean = media.openProjection()
+
+    // Is dit een Jancar-radio met eigen meestervolume? Dan blijft het Android-mediavolume op 100 en regelt PandaOS
+    // het meestervolume (0-40)
+    @JavascriptInterface
+    fun usesRadioMasterVolume(): Boolean = (activity as? MainActivity)?.signals?.usesRadioMaster == true
+
     // Datum en tijd (Settings > Display > Tijd)
     @JavascriptInterface
     fun getTimeState(): String = radioSystem.timeJson()
@@ -790,14 +817,16 @@ class PandaBridge(
     @JavascriptInterface
     fun getPhoneDataSources(): String = phoneData.sourcesJson()
 
+    // Bellen (PhoneData.dial): {"ok":true,"via":"bt-call|bt-dial|call|dial|bt-dialer|bt-app"} of {"ok":false,"error":"..."}.
+    // preferredPackage = de app bij Instellingen > Apps > Telefoon, of leeg. Draait op de bridge-thread; alleen het
+    // starten gaat via de UI-thread.
     @JavascriptInterface
-    fun dialNumber(number: String): Boolean {
-        var ok = false
-        val done = java.util.concurrent.CountDownLatch(1)
-        activity.runOnUiThread { ok = phoneData.dial(number); done.countDown() }
-        done.await(2, java.util.concurrent.TimeUnit.SECONDS)
-        return ok
-    }
+    fun dialNumberResult(number: String, preferredPackage: String?): String =
+        phoneData.dial(number, preferredPackage?.takeIf { it.isNotBlank() }).toString()
+
+    // Oude vorm (oudere webversies): alleen gelukt/mislukt
+    @JavascriptInterface
+    fun dialNumber(number: String): Boolean = phoneData.dial(number).optBoolean("ok")
 
     // De vier volumes van de radio zoals laatst in het logboek gezien: {"MASTER":12,"BLUETOOTH":19,...}
     @JavascriptInterface
@@ -924,4 +953,22 @@ class PandaBridge(
             true
         } catch (_: Exception) { false }
     }
+
+    // --- Radio FM/AM/DAB van de radio zelf (RadioApp.tsx): zie JancarRadio ---
+
+    // {"installed":..,"launchable":[..],"session":{..}|null,"current":{band,freq,ps,rt}|null,"presets":[..],"stations":[..],..}
+    @JavascriptInterface
+    fun getRadioInfo(): String = JancarRadio.infoJson()
+
+    // next/prev (zoeken), play, pause, toggle; geeft de route terug ("session" of "mediakey")
+    @JavascriptInterface
+    fun radioCommand(cmd: String): String = JancarRadio.command(cmd)
+
+    // Radio-app van de radio openen (zet de bron op radio); background = na 700 ms terug naar PandaOS
+    @JavascriptInterface
+    fun openJancarRadio(band: String, background: Boolean): Boolean = JancarRadio.open(band, background)
+
+    // Afstemmen: GERADEN broadcasts, niet geverifieerd (zie JancarRadio.tune)
+    @JavascriptInterface
+    fun tuneRadio(freq: Double, band: String): String = JancarRadio.tune(freq, band)
 }

@@ -151,6 +151,31 @@ in de overdracht).
 
 ## Testen vanaf de laptop met `tools/pandaos.mjs` (vanaf 1.3.9)
 
+> **Vanaf 1.4.0:** zet eerst in PandaOS **Instellingen → Software → Build** op **Ontwikkelaar**; anders kan de laptop
+> niet in PandaOS kijken (in 1.3.9 werkten daardoor `doctor`, `test`, `sim`, `can` en `audio` niet). Na het testen
+> terug op **Publicatie**. Wat de radio zelf doet (volumes, CarPlay, camera, Bluetooth-muziek) staat in
+> [BEVINDINGEN.md](BEVINDINGEN.md).
+>
+> Extra te testen in 1.4.0:
+> - Bluetooth-muziek van de telefoon: in PandaOS op afspelen → de radio springt kort naar Bluetooth-muziek en terug,
+>   muziek blijft spelen.
+> - CarPlay met muziek: muziekbalk toont "CarPlay · Speelt via CarPlay"; tik op de naam opent CarPlay. Daarna in de
+>   log (`node tools/pandaos.mjs log` of het diagnoselogboek) de regels "Projectie: …" bewaren: daarin staan de
+>   echte namen van de extra's.
+> - Volume: `node tools/pandaos.mjs volumes` → Android-mediavolume moet 100 % zijn; VOL in PandaOS verandert het
+>   meestervolume.
+> - Radio herstarten met "Systeembalk verbergen" aan: na het opstarten moet de balk weer weg zijn.
+> - Radio-instellingen → "Volumebalk verbergen" (moet nu werken) en "CarPlay automatisch verbinden".
+> - Wifi/Bluetooth uitzetten in het PandaOS-paneel: lukt het niet, dan komt er een melding en gaan de
+>   Android-instellingen open.
+> - Bellen: in Contacten iemand bellen. Daarna in het diagnoselogboek de regels "Bellen: …" bewaren (welke weg de
+>   radio neemt; er staan geen nummers in).
+> - SOS (bovenbalk): Telefoon opent met 112 ingevuld, er wordt niet gebeld.
+> - Bluetooth-app: telefoon als kaart, tik = verbinden/verbreken; muziekapps openen.
+> - Radio-app: zie BEVINDINGEN.md, hoofdstuk Radio: radio-app van de auto één keer starten, daarna de regels
+>   "Radio-log: …" uit het diagnoselogboek meenemen.
+> - Weer in de bovenbalk (met internet) en de studio-achtergrond op het startscherm, licht en donker.
+
 Hiermee kun je vanaf de laptop alles in PandaOS nadoen en controleren, zonder dat de auto iets hoeft te doen.
 Nodig: **Node.js 22 of nieuwer** op de laptop (https://nodejs.org, LTS) en de radio verbonden via adb (USB of wifi-adb).
 Alle opdrachten in de map `pandaOS`:

@@ -33,6 +33,34 @@ class MediaWatcher(private val context: Context, private val send: (String) -> U
     private var broadcastInfo: JSONObject? = null
     private var broadcastAt = 0L
     private val seenActions = HashSet<String>()
+
+    // CarPlay en Android Auto (onderzoek APK's, 6-11-2026): de radio meldt verbinden en audio met broadcasts van
+    // Jancar/Autochips. Tijdens CarPlay is er geen mediasessie met titel; dan toont PandaOS "Speelt via CarPlay".
+    // De letterlijke namen van de extra's kennen we nog niet: we kijken naar alle tekstwaarden en loggen ze.
+    private var projection: String? = null // "carplay" of "androidauto" (verbonden)
+    private var projectionAudio = false
+    private val loggedProjection = HashSet<String>()
+    private val projectionReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(ctx: Context, intent: android.content.Intent) {
+            val action = intent.action ?: return
+            val extras = intent.extras
+            val values = extras?.keySet()?.mapNotNull { extras.get(it)?.toString() } ?: emptyList()
+            val described = "$action ${extras?.keySet()?.joinToString { "$it=${extras.get(it)}" } ?: ""}"
+            if (loggedProjection.size < 200 && loggedProjection.add(described)) DiagLog.add("info", "Projectie: $described")
+            val kind = if (action.contains("carplay", true)) "carplay" else "androidauto"
+            val text = (values + action).joinToString(" ").uppercase()
+            when {
+                text.contains("DISCONNECT") || action.endsWith("android_auto_end") -> {
+                    if (projection == kind) { projection = null; projectionAudio = false }
+                }
+                text.contains("AUDIO_STOP") -> { projection = kind; projectionAudio = false }
+                text.contains("AUDIO_START") -> { projection = kind; projectionAudio = true }
+                text.contains("CONNECTED") || action.endsWith("carplay_connected") || action.endsWith("android_auto_start")
+                    || action.endsWith("AA_STARTED") -> projection = kind
+            }
+            push()
+        }
+    }
     private val metaReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(ctx: Context, intent: android.content.Intent) {
             val action = intent.action ?: return
@@ -72,6 +100,56 @@ class MediaWatcher(private val context: Context, private val send: (String) -> U
             if (android.os.Build.VERSION.SDK_INT >= 33) context.registerReceiver(metaReceiver, filter, Context.RECEIVER_EXPORTED)
             else context.registerReceiver(metaReceiver, filter)
         } catch (_: Exception) {}
+        val projectionFilter = android.content.IntentFilter().apply {
+            listOf("com.jancar.carplay_connected", "com.jancar.carplay_disconnect", "com.jancar.carplay_show",
+                "com.jancar.carplay_hidden", "action.android.carplay.send", "action.android.auto.send",
+                "com.google.android.projection.android_auto_start", "com.google.android.projection.android_auto_end",
+                "autochips.intent.action.AA_STARTED",
+            ).forEach { addAction(it) }
+        }
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= 33) context.registerReceiver(projectionReceiver, projectionFilter, Context.RECEIVER_EXPORTED)
+            else context.registerReceiver(projectionReceiver, projectionFilter)
+        } catch (_: Exception) {}
+    }
+
+    // CarPlay of Android Auto openen (knop op de muziekkaart bij "Speelt via ...")
+    fun openProjection(): Boolean {
+        val kind = projection ?: return false
+        val component = if (kind == "carplay") ComponentName("com.autochips.carplayapp", "com.autochips.carplayapp.CarPlayActivity")
+            else ComponentName("com.google.android.projection.sink", "com.google.android.projection.sink.ui.AndroidAutoActivity")
+        val pkg = component.packageName
+        val intent = android.content.Intent().setComponent(component).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        return try { context.startActivity(intent); true } catch (_: Exception) {
+            val launch = context.packageManager.getLaunchIntentForPackage(pkg) ?: return false
+            try { context.startActivity(launch.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)); true } catch (_: Exception) { false }
+        }
+    }
+
+    // Bluetooth-muziek op de Jancar-radio: zonder audiofocus pauzeert de Bluetooth-dienst van Jancar na 1 s zelf
+    // (A2dpSinkStreamHandler). De focus gaat pas naar Bluetooth als de bron van de radio op A2DP staat; dat doet het
+    // openen van de Bluetooth-muziek-app van de radio (getest 6-11-2026). Kort openen en meteen terug naar PandaOS.
+    private var lastSourceSwitch = 0L
+    private fun switchRadioSourceToBluetooth(): Boolean {
+        val component = ComponentName("com.jancar.bluetooth", "com.jancar.bluetooth.activity.BluetoothMusicActivity")
+        val intent = android.content.Intent().setComponent(component)
+            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_NO_ANIMATION)
+        if (context.packageManager.resolveActivity(intent, 0) == null) return false
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastSourceSwitch < 5000) return true
+        lastSourceSwitch = now
+        return try {
+            context.startActivity(intent)
+            DiagLog.add("info", "Bron van de radio op Bluetooth-muziek gezet")
+            handler.postDelayed({
+                try {
+                    context.startActivity(android.content.Intent(context, MainActivity::class.java)
+                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+                            or android.content.Intent.FLAG_ACTIVITY_NO_ANIMATION))
+                } catch (_: Exception) {}
+            }, 700)
+            true
+        } catch (_: Exception) { false }
     }
 
     private val sessionsListener = MediaSessionManager.OnActiveSessionsChangedListener { sessions ->
@@ -125,13 +203,39 @@ class MediaWatcher(private val context: Context, private val send: (String) -> U
 
     // play, pause, next, prev (vanuit de PandaOS-mediakaart en de stuurknoppen)
     fun command(cmd: String) {
-        val controls = controller?.transportControls ?: return
+        val c = controller
+        if (c == null || (projection != null && projectionAudio && c.metadata?.getString(MediaMetadata.METADATA_KEY_TITLE).isNullOrEmpty())) {
+            // CarPlay/Android Auto zonder mediasessie: mediatoets naar Android (de projectie pakt hem als hij de focus heeft)
+            if (projection != null) mediaKey(cmd)
+            return
+        }
+        val controls = c.transportControls
+        if (cmd == "play" && c.packageName == "com.android.bluetooth" && c.playbackState?.state != PlaybackState.STATE_PLAYING
+            && switchRadioSourceToBluetooth()) {
+            handler.postDelayed({ try { controls.play() } catch (_: Exception) {} }, 1200)
+            return
+        }
         when (cmd) {
             "play" -> controls.play()
             "pause" -> controls.pause()
             "next" -> controls.skipToNext()
             "prev" -> controls.skipToPrevious()
         }
+    }
+
+    private fun mediaKey(cmd: String) {
+        val code = when (cmd) {
+            "play" -> android.view.KeyEvent.KEYCODE_MEDIA_PLAY
+            "pause" -> android.view.KeyEvent.KEYCODE_MEDIA_PAUSE
+            "next" -> android.view.KeyEvent.KEYCODE_MEDIA_NEXT
+            "prev" -> android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS
+            else -> return
+        }
+        val audio = context.getSystemService(android.media.AudioManager::class.java) ?: return
+        try {
+            audio.dispatchMediaKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, code))
+            audio.dispatchMediaKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, code))
+        } catch (_: Exception) {}
     }
 
     private fun refreshSessions() {
@@ -159,6 +263,15 @@ class MediaWatcher(private val context: Context, private val send: (String) -> U
         val title = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
             ?: metadata?.getString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE)
         if (c == null || metadata == null || title.isNullOrEmpty()) {
+            // CarPlay of Android Auto speelt: geen titel bekend, wel laten zien waar het geluid vandaan komt
+            val kind = projection
+            if (kind != null && projectionAudio) {
+                sendOnce("setNowPlaying(${JSONObject().put("title", "").put("artist", "")
+                    .put("app", if (kind == "carplay") "com.autochips.carplayapp" else "com.google.android.projection.sink")
+                    .put("projection", kind).put("isPlaying", true).put("position", 0).put("duration", 0)})")
+                lastCoverKey = null
+                return
+            }
             // Geen mediasessie: het laatste nummer uit een muziekmelding (minder dan 30 min oud)
             val info = broadcastInfo
             if (info != null && SystemClock.elapsedRealtime() - broadcastAt < 30 * 60_000) {

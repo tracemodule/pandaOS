@@ -2,14 +2,20 @@ package nl.pandaos.launcher
 
 import android.Manifest
 import android.app.Activity
+import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Looper
 import android.provider.CalendarContract
 import android.provider.CallLog
 import android.provider.ContactsContract
+import android.telephony.TelephonyManager
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 // Gegevens van je telefoon voor Telefoon, Agenda en Berichten in PandaOS.
 // Android bewaart wat de telefoon via Bluetooth deelt in de gewone opslag van Android: contacten (PBAP) in
@@ -58,6 +64,8 @@ class PhoneData(private val activity: Activity) {
     }
 
     // [{"name":"Jan","number":"06...","type":"incoming|outgoing|missed","time":1700000000000}]
+    // Soort uit de Gesprekslijst: 2 = uitgaand; 3 gemist, 5 geweigerd en 6 geblokkeerd = gemist (rood); de rest
+    // (1 inkomend, 4 voicemail, 7 elders beantwoord) = inkomend
     fun recentsJson(): String {
         if (!has(Manifest.permission.READ_CALL_LOG)) return "[]"
         val out = JSONArray()
@@ -68,7 +76,7 @@ class PhoneData(private val activity: Activity) {
                 while (c.moveToNext() && out.length() < 100) {
                     val type = when (c.getInt(2)) {
                         CallLog.Calls.OUTGOING_TYPE -> "outgoing"
-                        CallLog.Calls.MISSED_TYPE, CallLog.Calls.REJECTED_TYPE -> "missed"
+                        CallLog.Calls.MISSED_TYPE, CallLog.Calls.REJECTED_TYPE, CallLog.Calls.BLOCKED_TYPE -> "missed"
                         else -> "incoming"
                     }
                     val number = c.getString(1) ?: ""
@@ -161,12 +169,123 @@ class PhoneData(private val activity: Activity) {
         } catch (e: Exception) { DiagLog.add("error", "Contact toevoegen: ${e.message}"); false }
     }
 
-    // Bellen: met CALL_PHONE meteen (de telefoon-app van de radio belt via Bluetooth), anders het kiesscherm
-    fun dial(number: String): Boolean {
-        val uri = Uri.parse("tel:" + Uri.encode(number))
-        val intent = if (has(Manifest.permission.CALL_PHONE)) Intent(Intent.ACTION_CALL, uri) else Intent(Intent.ACTION_DIAL, uri)
-        return try { activity.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); true }
-        catch (e: Exception) { DiagLog.add("error", "Bellen naar $number mislukt: ${e.message}"); false }
+    // --- Bellen ---
+    // Op de radio (Jancar) deed Android's eigen bellen niets: ACTION_CALL gaat naar Telecom, en Telecom weigert stil op
+    // een apparaat zonder telefoonfunctie (geen simkaart, niet "voice capable"). startActivity lukte wel, dus PandaOS
+    // dacht dat er gebeld werd. De telefoon hangt hier aan de Bluetooth-app van de fabrikant (com.jancar.bluetooth met
+    // com.jancar.btservice), niet aan Android's HFP. Daarom deze volgorde:
+    // 1. de Bluetooth-/telefoon-app van de radio, als die tel:-links opent (ACTION_CALL, anders ACTION_DIAL)
+    // 2. Android zelf, alleen als het apparaat kan bellen (telefoon met simkaart, emulator)
+    // 3. het belscherm van de Bluetooth-app (activiteit met dial/keypad/phone in de naam), nummer als extra's
+    // 4. de Bluetooth-app zelf openen (nummer niet ingevuld)
+    // preferredPackage = de app bij Instellingen > Apps > Telefoon (of null).
+    // Antwoord: {"ok":true,"via":"bt-call|bt-dial|call|dial|bt-dialer|bt-app"} of {"ok":false,"error":"empty|no-dialer|failed"}
+    // Privacy: nooit het nummer of een naam loggen (repo en diagnoselogboek zijn openbaar), alleen het aantal cijfers.
+    // Ook geen e.message: daar kan de intent met het nummer in staan.
+    fun dial(number: String, preferredPackage: String? = null): JSONObject {
+        val clean = number.filter { it.isDigit() || it == '+' || it == '*' || it == '#' }
+        val what = "nummer (${clean.count { it.isDigit() }} cijfers)"
+        if (clean.isEmpty()) return dialFail("empty", "Bellen: geen geldig nummer")
+        val uri = Uri.fromParts("tel", clean, null)
+        val canCall = has(Manifest.permission.CALL_PHONE)
+        val pm = activity.packageManager
+        val btPackages = phonePackages(preferredPackage)
+        logDialSetupOnce(uri, btPackages, canCall)
+
+        // 1. De Bluetooth-app van de radio opent tel:-links zelf
+        for (pkg in btPackages) {
+            val actions = listOfNotNull(if (canCall) Intent.ACTION_CALL to "bt-call" else null, Intent.ACTION_DIAL to "bt-dial")
+            for ((action, via) in actions) {
+                val intent = Intent(action, uri).setPackage(pkg)
+                if (pm.resolveActivity(intent, 0) != null && startCallIntent(intent)) return dialOk(via, "$what via $pkg (${action.substringAfterLast('.')})")
+            }
+        }
+        // 2. Android zelf, alleen als dit apparaat echt kan bellen
+        if (isVoiceCapable()) {
+            val intent = Intent(if (canCall) Intent.ACTION_CALL else Intent.ACTION_DIAL, uri)
+            if (pm.resolveActivity(intent, 0) != null && startCallIntent(intent)) return dialOk(if (canCall) "call" else "dial", "$what via Android")
+        }
+        // 3. Belscherm van de Bluetooth-app; of het nummer wordt ingevuld hangt van die app af
+        for (pkg in btPackages) {
+            val component = dialerActivity(pkg) ?: continue
+            val intent = Intent(Intent.ACTION_DIAL, uri).setComponent(component)
+                .putExtra("number", clean).putExtra("phone_number", clean).putExtra("phoneNumber", clean).putExtra("tel", clean)
+            if (startCallIntent(intent)) return dialOk("bt-dialer", "$what: belscherm ${component.flattenToShortString()} geopend")
+        }
+        // 4. Alleen de Bluetooth-app openen
+        for (pkg in btPackages) {
+            val intent = pm.getLaunchIntentForPackage(pkg) ?: continue
+            if (startCallIntent(intent)) return dialOk("bt-app", "$what: Bluetooth-app $pkg geopend, nummer niet ingevuld")
+        }
+        return dialFail(if (btPackages.isEmpty()) "no-dialer" else "failed",
+            "Bellen naar $what mislukt: geen app op de radio die kan bellen (voice capable: ${isVoiceCapable()})")
+    }
+
+    private fun dialOk(via: String, log: String) = JSONObject().put("ok", true).put("via", via).also { DiagLog.add("info", "Bellen: $log") }
+    private fun dialFail(error: String, log: String) = JSONObject().put("ok", false).put("error", error).also { DiagLog.add("error", log) }
+
+    private fun isVoiceCapable(): Boolean = try {
+        (activity.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager)?.isVoiceCapable == true
+    } catch (_: Exception) { false }
+
+    // Apps op de radio die bellen via Bluetooth: de gekozen Telefoon-app, Jancar's Bluetooth-app, en apps met
+    // bt-phone/bluetooth/handsfree in de naam. Niet de Bluetooth-stack van Android en niet Jancar's btservice (dienst).
+    private var installedPhonePackages: List<String>? = null
+    private fun phonePackages(preferred: String?): List<String> {
+        val pm = activity.packageManager
+        val found = installedPhonePackages ?: try {
+            val names = pm.getInstalledApplications(0).map { it.packageName }
+            val pattern = Regex("bt ?phone|btphone|bluetooth|handsfree|jancar.*\\.bt", RegexOption.IGNORE_CASE)
+            (listOf("com.jancar.bluetooth").filter { it in names } +
+                names.filter { pattern.containsMatchIn(it) && !it.startsWith("com.android.") && !it.startsWith("com.google.") &&
+                    !it.startsWith("android") && !it.contains("service", ignoreCase = true) })
+                .distinct().also { installedPhonePackages = it }
+        } catch (_: Exception) { emptyList() }
+        val systemTelecom = setOf("com.android.server.telecom", "com.android.phone", activity.packageName)
+        return (listOfNotNull(preferred?.takeIf { it.isNotBlank() && it !in systemTelecom }) + found).distinct()
+    }
+
+    // Belscherm in een app: zichtbare activiteit met dial/keypad in de naam, anders "phone" (niet het gesprek-,
+    // muziek- of instellingenscherm)
+    private fun dialerActivity(pkg: String): ComponentName? = try {
+        val skip = Regex("incall|in_call|calling|talk|music|setting|record|calllog|contact|sms|message|pair|search|device", RegexOption.IGNORE_CASE)
+        val usable = (activity.packageManager.getPackageInfo(pkg, PackageManager.GET_ACTIVITIES).activities ?: emptyArray())
+            .filter { it.exported && it.permission == null && !skip.containsMatchIn(it.name) }
+        (usable.firstOrNull { Regex("dial|keypad|keyboard|numpad", RegexOption.IGNORE_CASE).containsMatchIn(it.name.substringAfterLast('.')) }
+            ?: usable.firstOrNull { Regex("phone", RegexOption.IGNORE_CASE).containsMatchIn(it.name.substringAfterLast('.')) })
+            ?.let { ComponentName(pkg, it.name) }
+    } catch (_: Exception) { null }
+
+    // Eenmalig in het diagnoselogboek: wat deze radio kan, om het bellen op de radio te kunnen uitzoeken
+    private var dialSetupLogged = false
+    private fun logDialSetupOnce(uri: Uri, btPackages: List<String>, canCall: Boolean) {
+        if (dialSetupLogged) return
+        dialSetupLogged = true
+        try {
+            val pm = activity.packageManager
+            fun handlers(action: String) = pm.queryIntentActivities(Intent(action, uri), 0)
+                .joinToString { "${it.activityInfo.packageName}/${it.activityInfo.name.substringAfterLast('.')}" }.ifEmpty { "geen" }
+            DiagLog.add("info", "Bellen: voice capable ${isVoiceCapable()}, recht CALL_PHONE $canCall, " +
+                "tel: CALL → ${handlers(Intent.ACTION_CALL)}, DIAL → ${handlers(Intent.ACTION_DIAL)}, " +
+                "Bluetooth-apps: ${btPackages.ifEmpty { listOf("geen") }.joinToString()}" +
+                btPackages.firstOrNull()?.let { ", belscherm: ${dialerActivity(it)?.flattenToShortString() ?: "geen"}" }.orEmpty())
+        } catch (_: Exception) {}
+    }
+
+    // Starten op de UI-thread (de bridge roept aan vanaf zijn eigen thread) en wachten op het resultaat
+    private fun startCallIntent(intent: Intent): Boolean {
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (Looper.myLooper() == Looper.getMainLooper()) return tryStart(intent)
+        var result = false
+        val done = CountDownLatch(1)
+        activity.runOnUiThread { result = tryStart(intent); done.countDown() }
+        done.await(2, TimeUnit.SECONDS)
+        return result
+    }
+
+    private fun tryStart(intent: Intent): Boolean = try { activity.startActivity(intent); true } catch (e: Exception) {
+        DiagLog.add("warn", "Bellen: ${intent.component?.flattenToShortString() ?: intent.`package` ?: "Android"} weigert (${e.javaClass.simpleName})")
+        false
     }
 
     // Diagnose: welke opslag op deze radio is gevuld, en welke apps van de radio bieden zelf gegevens aan

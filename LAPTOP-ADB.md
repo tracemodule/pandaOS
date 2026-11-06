@@ -20,13 +20,17 @@ logs meelezen.
 
 ---
 
-## Snelle route vanaf PandaOS 1.3.9: alles met één hulpprogramma
+## Snelle route vanaf PandaOS 1.4.0: alles met één hulpprogramma
 
-Vanaf 1.3.9 doet `tools/pandaos.mjs` het meeste werk uit dit document in één keer (nodig: **Node.js 22+** op de
-laptop en adb-verbinding uit stap 2). Zeg tegen Claude op de laptop: *"Lees LAPTOP-ADB.md en RADIOTEST.md, we testen
-1.3.9"*. Volgorde:
+`tools/pandaos.mjs` doet het meeste werk uit dit document in één keer (nodig: **Node.js 22+** op de laptop en
+adb-verbinding uit stap 2). Zeg tegen Claude op de laptop: *"Lees LAPTOP-ADB.md, RADIOTEST.md en BEVINDINGEN.md, we
+testen 1.4.0"*. Volgorde:
 
-1. Radio bijwerken naar **1.3.9** (PandaOS → Instellingen → Software).
+1. Radio bijwerken naar **1.4.0** (PandaOS → Instellingen → Software) en daar bij **Build** op **Ontwikkelaar**
+   zetten. Zonder die stand werken `doctor` (deels), `test`, `sim`, `can`, `audio` en `status` niet: de gewone build
+   laat de laptop niet in PandaOS kijken. Na het testen terug op **Publicatie**.
+   adb zoekt het script zelf (`$env:ADB`, PATH, Android SDK, `C:\pandaos-test\platform-tools`, Downloads); `doctor`
+   toont welke het gebruikt.
 2. `node tools/pandaos.mjs setup` – alle rechten (`pm grant` voor WRITE_SECURE_SETTINGS, READ_LOGS,
    CHANGE_CONFIGURATION, contacten, gesprekken, agenda, sms, locatie, camera, microfoon), `appops set …
    SYSTEM_ALERT_WINDOW allow` (PandaOS-menu, volumebalk, knoppen half venster), vrije vensters
@@ -40,6 +44,8 @@ laptop en adb-verbinding uit stap 2). Zeg tegen Claude op de laptop: *"Lees LAPT
    `camera open|close`, `audio`, `audio eq …`, `volume 20`, `set <groep>.<naam> <waarde>`.
 7. Telefoon via Bluetooth verbinden en kijken met `bluetooth`, `media` en `sources` (alleen aantallen).
 8. Schermafbeeldingen met `shot naam` (naar `tools/radio-shots/`, niet in git; kan persoonlijke gegevens tonen).
+9. Radio-instellingen zonder PandaOS: `volumes` (de 4 volumes van de radio + Android-mediavolume), `volumes music100`,
+   `carplay-auto on|off|status`, `immersive on|off|status` (systeembalk), `overscan hide|reset|status` (volumebalk).
 
 De oude stappen hieronder blijven gelden voor logs meelezen (stap 5) en de CAN-app onderzoeken (stap 6).
 

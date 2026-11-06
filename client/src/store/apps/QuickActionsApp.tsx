@@ -36,6 +36,7 @@ const ALL_APPS = [
   { id: 'phone', icon: '/app-icons/phone.svg', name: 'Phone', type: 'image' },
   { id: 'carplay', icon: '/app-icons/carplay.svg', name: 'CarPlay', type: 'image' },
   { id: 'bluetooth', icon: '/app-icons/bluetooth.svg', name: 'Bluetooth', type: 'image' },
+  { id: 'radio', icon: '/app-icons/radio.svg', name: 'Radio', type: 'image' },
   { id: 'settings', icon: '/app-icons/settings.svg', name: 'Settings', type: 'image' },
   { id: 'maps', icon: '/app-icons/maps.svg', name: 'Nav', type: 'image' },
   { id: 'canmonitor', icon: '/app-icons/canmonitor.svg', name: 'CAN monitor', type: 'image' },
@@ -155,7 +156,8 @@ const QuickActionsApp: React.FC = () => {
         openSettingsTab('Display');
         break;
       case 'bluetooth':
-        openSettingsTab('Bluetooth');
+      case 'radio':
+        useUIStore.getState().openPanelApp(id);
         break;
       case 'maps':
         openMap();

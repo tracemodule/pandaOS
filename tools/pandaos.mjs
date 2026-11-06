@@ -15,7 +15,13 @@
 // Radio klaarzetten en testen (zie RADIO-TEST.md):
 //   node tools/pandaos.mjs setup             alle rechten en Android-instellingen die PandaOS nodig heeft (eenmalig)
 //   node tools/pandaos.mjs doctor            controleren of alles klopt (rechten, vensters, WebView, equalizer, verbinding)
-//   node tools/pandaos.mjs apks              APK's van de fabrikant (com.jancar.* e.d.) ophalen naar tools/radio-apks/
+//   node tools/pandaos.mjs apks              APK's van de fabrikant (com.jancar.*, systemui, canbus, Android Auto, CarPlay)
+//                                            ophalen naar tools/radio-apks/ (staat niet in git)
+//   node tools/pandaos.mjs volumes           de 4 Jancar-volumes (meester, Bluetooth, media, navigatie) + Android-muziekvolume
+//   node tools/pandaos.mjs volumes music100  Android-muziekvolume (STREAM_MUSIC) op 100 zetten
+//   node tools/pandaos.mjs carplay-auto on|off|status    CarPlay automatisch verbinden (CarplayAutoConnectSwitch)
+//   node tools/pandaos.mjs immersive on|off|status       systeembalken verbergen (policy_control immersive.full=*)
+//   node tools/pandaos.mjs overscan hide|reset|status    onderste balk wegschuiven (wm overscan 0,-110,0,0)
 //   node tools/pandaos.mjs can list          alle CAN-functies
 //   node tools/pandaos.mjs can <functie> <on|off|waarde>   CAN-signaal nadoen (zelfde weg als het CAN-kastje)
 //   node tools/pandaos.mjs sim <wat> <stand> [--hold]       auto nadoen: gear R|P|D|N, speed 50, lights off|parking|low,
@@ -29,18 +35,63 @@
 //   node tools/pandaos.mjs shot [naam]       schermafbeelding naar tools/radio-shots/ (niet in git)
 //   node tools/pandaos.mjs test              rondje langs alles met geslaagd/mislukt; zet daarna alles terug
 //
+// DevTools (status, js, sim, can, audio, camera, test en een deel van doctor) werkt alleen als WebView-debugging aan staat:
+// in debug-builds altijd, vanaf 1.4.0 ook via PandaOS Instellingen -> Software -> Build -> 'Ontwikkelaar'.
+//
+// adb zoeken: $ADB, dan adb op het PATH, dan %LOCALAPPDATA%\Android\Sdk\platform-tools, C:\pandaos-test\platform-tools,
+// platform-tools naast tools/ of de repo, en platform-tools in Downloads.
+//
 // Privacy: geen enkel commando toont contacten, nummers of berichten; "sources" geeft alleen aantallen.
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
+import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 const TOOLS = dirname(fileURLToPath(import.meta.url));
 const PKG = 'nl.pandaos.launcher';
 
-const ADB = process.env.ADB || (process.env.LOCALAPPDATA ? `${process.env.LOCALAPPDATA}\\Android\\Sdk\\platform-tools\\adb.exe` : 'adb');
+// adb zoeken (zie bovenaan). Geeft { path, searched } terug; path is null als er niets gevonden is.
+function findAdb() {
+  const exe = process.platform === 'win32' ? 'adb.exe' : 'adb';
+  const searched = [];
+  if (process.env.ADB) {
+    searched.push(`$ADB (${process.env.ADB})`);
+    if (existsSync(process.env.ADB)) return { path: process.env.ADB, searched };
+  }
+  searched.push('adb op het PATH');
+  try {
+    const found = execFileSync(process.platform === 'win32' ? 'where' : 'which', ['adb'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
+      .split(/\r?\n/).map((l) => l.trim()).find(Boolean);
+    if (found && existsSync(found)) return { path: found, searched };
+  } catch { /* niet op het PATH */ }
+  const dirs = [
+    process.env.LOCALAPPDATA && join(process.env.LOCALAPPDATA, 'Android', 'Sdk', 'platform-tools'),
+    process.platform === 'win32' && 'C:\\pandaos-test\\platform-tools',
+    join(TOOLS, 'platform-tools'),
+    join(TOOLS, '..', 'platform-tools'),
+    join(homedir(), 'Downloads', 'platform-tools'),
+    join(homedir(), 'Downloads', 'platform-tools-latest-windows', 'platform-tools'),
+  ].filter(Boolean);
+  for (const d of dirs) {
+    const p = join(d, exe);
+    searched.push(p);
+    if (existsSync(p)) return { path: p, searched };
+  }
+  return { path: null, searched };
+}
+const ADB_FOUND = findAdb();
+const ADB = ADB_FOUND.path;
+const adbMissing = () => new Error(`adb niet gevonden. Gezocht in:\n  - ${ADB_FOUND.searched.join('\n  - ')}\n`
+  + 'Download "SDK Platform-Tools" van developer.android.com, pak uit (bijv. naar C:\\pandaos-test\\platform-tools)\n'
+  + 'of wijs adb aan met: $env:ADB = "C:\\pad\\naar\\adb.exe"');
 const PORT = 9333;
-const adb = (...args) => execFileSync(ADB, args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+const adb = (...args) => {
+  if (!ADB) throw adbMissing();
+  return execFileSync(ADB, args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+};
+const DEVTOOLS_HINT = 'Geen WebView-DevTools in PandaOS. Zet in PandaOS Instellingen → Software → Build op \'Ontwikkelaar\' (vanaf 1.4.0) en probeer opnieuw.';
+const devtoolsError = (detail) => Object.assign(new Error(`${DEVTOOLS_HINT}${detail ? `\n  (${detail})` : ''}`), { devtools: true });
 const sh = (cmd) => { try { return adb('shell', cmd).trim(); } catch (e) { return `FOUT: ${(e.stderr || e.message || '').toString().trim()}`; } };
 const ok = (good, text) => console.log(`${good ? '✓' : '✗'} ${text}`);
 
@@ -86,9 +137,15 @@ const holdCode = (key, code) => `(() => { const h = (window.__pandaSim ??= { hel
 async function evaluate(expression) {
   const pid = adb('shell', 'pidof', 'nl.pandaos.launcher').trim();
   if (!pid) throw new Error('PandaOS draait niet (pidof nl.pandaos.launcher is leeg)');
-  adb('forward', `tcp:${PORT}`, `localabstract:webview_devtools_remote_${pid}`);
-  const pages = await (await fetch(`http://127.0.0.1:${PORT}/json`)).json();
+  const socket = `webview_devtools_remote_${pid.split(/\s+/)[0]}`;
+  // Staat WebView-debugging uit, dan bestaat de DevTools-socket niet (release-build zonder 'Ontwikkelaar').
+  const sockets = sh('cat /proc/net/unix');
+  if (!sockets.startsWith('FOUT') && !sockets.includes(socket)) throw devtoolsError(`socket @${socket} niet gevonden`);
+  try { adb('forward', `tcp:${PORT}`, `localabstract:${socket}`); } catch (e) { throw devtoolsError(`adb forward: ${(e.stderr || e.message || '').toString().trim().split('\n')[0]}`); }
+  let pages;
+  try { pages = await (await fetch(`http://127.0.0.1:${PORT}/json`)).json(); } catch (e) { throw devtoolsError(`DevTools antwoordt niet: ${e.cause?.code || e.message}`); }
   const page = pages.find((p) => p.url.endsWith('/index.html')) || pages[0];
+  if (!page?.webSocketDebuggerUrl) throw devtoolsError('geen PandaOS-pagina in DevTools');
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(page.webSocketDebuggerUrl);
     const waitMs = Number(process.env.PANDAOS_TIMEOUT || 60000);
@@ -110,8 +167,14 @@ const APPS = {
 };
 const SECTIONS = { display: 'displaySettings', navigation: 'navigationSettings', app: 'appSettings', vehicle: 'vehicleSettings', audio: 'audioSettings' };
 
+// Een instelling via adb lezen/zetten met een korte stand-melding (carplay-auto, immersive)
+const showSetting = (label, ns, key) => console.log(`${label}: ${sh(`settings get ${ns} ${key}`)}`);
+
+const COMMANDS = ['status', 'volume', 'volumes', 'set', 'open', 'bluetooth', 'media', 'sources', 'log', 'js', 'setup', 'doctor', 'apks',
+  'carplay-auto', 'immersive', 'overscan', 'can', 'sim', 'camera', 'audio', 'shot', 'test'];
 const [cmd, ...args] = process.argv.slice(2);
 try {
+  if (COMMANDS.includes(cmd) && !ADB) throw adbMissing();
   switch (cmd) {
     case 'status': {
       const v = await evaluate(`(() => { const s = pandaStore.getState(); return JSON.stringify({
@@ -174,16 +237,22 @@ try {
       sh('settings put global force_resizable_activities 1');
       ok(true, 'vrije vensters aan (apps half naast de auto)' + (freeformBefore !== '1' ? '  -> HERSTART de radio één keer' : ''));
       const listeners = sh('settings get secure enabled_notification_listeners');
-      if (!listeners.includes(PKG)) {
-        const list = listeners && listeners !== 'null' && !listeners.startsWith('FOUT') ? `${listeners}:` : '';
-        sh(`settings put secure enabled_notification_listeners "${list}${PKG}/${PKG}.MediaWatcher"`);
+      const LISTENER = `${PKG}/${PKG}.MediaListenerService`;
+      if (!listeners.split(':').includes(LISTENER)) {
+        // Oude, verkeerde PandaOS-vermelding (…MediaWatcher uit eerdere versies van dit script) weghalen
+        const others = listeners && listeners !== 'null' && !listeners.startsWith('FOUT') ? listeners.split(':').filter((l) => l && !l.startsWith(`${PKG}/`)) : [];
+        sh(`settings put secure enabled_notification_listeners "${[...others, LISTENER].join(':')}"`);
       }
-      ok(sh('settings get secure enabled_notification_listeners').includes(PKG), 'meldingen-toegang (muziek van andere apps)');
+      ok(sh('settings get secure enabled_notification_listeners').split(':').includes(LISTENER), 'meldingen-toegang (muziek van andere apps)');
       console.log('\nKlaar. Controleren: node tools/pandaos.mjs doctor');
       break;
     }
 
     case 'doctor': {
+      console.log(`adb: ${ADB}`);
+      const state = sh('echo ok');
+      ok(state === 'ok', state === 'ok' ? 'radio verbonden via adb' : `geen radio via adb: ${state}`);
+      if (state !== 'ok') break;
       console.log(`Apparaat: ${sh('getprop ro.product.model')} · Android ${sh('getprop ro.build.version.release')} (SDK ${sh('getprop ro.build.version.sdk')}) · ${sh('getprop ro.board.platform')}`);
       const pkg = sh(`dumpsys package ${PKG}`);
       ok(/versionName=/.test(pkg), `PandaOS geïnstalleerd ${(pkg.match(/versionName=(\S+)/) || [])[1] || ''}`);
@@ -191,8 +260,9 @@ try {
       for (const perm of GRANTS) ok(pkg.includes(`${perm}: granted=true`), perm.split('.').pop());
       ok(/allow/.test(sh(`appops get ${PKG} SYSTEM_ALERT_WINDOW`)), 'boven andere apps tonen');
       ok(sh('settings get global enable_freeform_support') === '1', 'vrije vensters (half openen)');
-      ok(sh('settings get secure enabled_notification_listeners').includes(PKG), 'meldingen-toegang');
+      ok(sh('settings get secure enabled_notification_listeners').includes(`${PKG}/${PKG}.MediaListenerService`), 'meldingen-toegang (MediaListenerService)');
       console.log(`  balken verbergen: ${sh('settings get global policy_control')}`);
+      console.log(`  CarPlay automatisch verbinden: ${sh('settings get global CarplayAutoConnectSwitch')}`);
       console.log(`  WebView: ${(sh('dumpsys webviewupdate').match(/Current WebView package \(name, version\): \(([^)]+)\)/) || [])[1] || '(onbekend)'}`);
       try {
         const d = JSON.parse(await evaluate(`JSON.stringify({ android: !!window.PandaAndroid, can: !!window.pandaCan,
@@ -203,21 +273,76 @@ try {
         ok(d.master >= 0, `meestervolume van de radio bekend (${d.master})`);
         ok(!!d.audio?.eq, `equalizer voor al het geluid${d.audio?.bands ? ` (${d.audio.bands} banden)` : ''}`);
         ok(!!d.audio?.radioSoundApp, 'geluidsapp van de radio (balans/fader)');
-      } catch (e) { ok(false, `verbinding met PandaOS: ${e.message}`); }
+      } catch (e) {
+        if (e.devtools) { ok(false, 'verbinding met PandaOS (DevTools)'); console.log(`  ${e.message.replace(/\n/g, '\n  ')}`); console.log('  (de adb-controles hierboven gelden wel)'); }
+        else ok(false, `verbinding met PandaOS: ${e.message}`);
+      }
       break;
     }
 
     case 'apks': {
       const dir = join(TOOLS, 'radio-apks');
       mkdirSync(dir, { recursive: true });
+      // Naast de naam-filter ook apps van de fabrikant met een algemene naam: Jancar ivi-systemui, ivi-canbus,
+      // de Android Auto-ontvanger en CarPlay (com.autochips.*).
+      const EXTRA = ['com.android.systemui', 'com.can.activity', 'com.google.android.projection.sink'];
       const pkgs = sh('pm list packages -f').split('\n')
-        .map((l) => l.trim().match(/^package:(.+\.apk)=(.+)$/)).filter(Boolean)
-        .filter((m) => /jancar|syu|fyt|microntek|autochips|carsetting|canbus|audiosetting/i.test(m[2]));
+        .map((l) => l.trim().match(/^package:(.+)=([^=\s]+)$/)).filter(Boolean)
+        .filter((m) => EXTRA.includes(m[2]) || m[2].startsWith('com.autochips.')
+          || /jancar|syu|fyt|microntek|autochips|carplay|carsetting|canbus|audiosetting/i.test(m[2]));
+      for (const name of EXTRA) if (!pkgs.some((m) => m[2] === name)) console.log(`- ${name}: niet op deze radio`);
       if (!pkgs.length) { console.log('Geen apps van de fabrikant gevonden.'); break; }
       for (const [, path, name] of pkgs) {
         try { adb('pull', path, join(dir, `${name}.apk`)); ok(true, name); } catch (e) { ok(false, `${name}: ${e.message.split('\n')[0]}`); }
       }
       console.log(`\nOpgeslagen in ${dir} (staat niet in git). Zet ze niet op GitHub.`);
+      break;
+    }
+
+    case 'volumes': {
+      if (args[0] === 'music100') {
+        const out = sh('media volume --stream 3 --set 100');
+        ok(!out.startsWith('FOUT') && !/Exception|Error/i.test(out), 'Android-muziekvolume (STREAM_MUSIC) op 100');
+      } else if (args[0]) throw new Error('Gebruik: volumes [music100]');
+      // De Jancar-volumes staan alleen in het logboek; de laatste regel telt. Ontbreekt hij, dan is het volume sinds opstarten niet gewijzigd.
+      const log = adb('logcat', '-d').split('\n');
+      const MARKERS = [['meester', 'onVolumeChanged: VOLUME_MASTER :'], ['Bluetooth', 'onVolumeChanged: VOLUME_BLUETOOTH :'],
+        ['media', 'setParam: VOLUME_MEDIA_CCD to'], ['navigatie', 'setParam: VOLUME_NAVIGATION to']];
+      for (const [label, marker] of MARKERS) {
+        let value = null;
+        for (let i = log.length - 1; i >= 0 && value === null; i--) {
+          const at = log[i].lastIndexOf(marker);
+          if (at >= 0) value = (log[i].slice(at + marker.length).match(/-?\d+/) || [])[0] ?? null;
+        }
+        console.log(`  ${label.padEnd(10)} ${value ?? 'onbekend (nog niet gewijzigd sinds opstarten)'}`);
+      }
+      const music = sh('media volume --stream 3 --get');
+      const m = music.match(/volume is (\d+) in range \[(\d+)\.\.(\d+)\]/);
+      console.log(`  Android STREAM_MUSIC: ${m ? `${m[1]} (bereik ${m[2]}-${m[3]})` : music.split('\n').pop()}`);
+      break;
+    }
+
+    case 'carplay-auto': {
+      if (['on', 'off'].includes(args[0])) sh(`settings put global CarplayAutoConnectSwitch ${args[0] === 'on' ? 1 : 0}`);
+      else if (args[0] && args[0] !== 'status') throw new Error('Gebruik: carplay-auto on|off|status');
+      showSetting('CarPlay automatisch verbinden (CarplayAutoConnectSwitch)', 'global', 'CarplayAutoConnectSwitch');
+      break;
+    }
+
+    case 'immersive': {
+      if (args[0] === 'on') sh('settings put global policy_control immersive.full=*');
+      else if (args[0] === 'off') sh('settings put global policy_control null');
+      else if (args[0] && args[0] !== 'status') throw new Error('Gebruik: immersive on|off|status');
+      showSetting('systeembalken verbergen (policy_control)', 'global', 'policy_control');
+      break;
+    }
+
+    case 'overscan': {
+      if (args[0] === 'hide') sh('wm overscan 0,-110,0,0');
+      else if (args[0] === 'reset') sh('wm overscan reset');
+      else if (args[0] && args[0] !== 'status') throw new Error('Gebruik: overscan hide|reset|status');
+      const dump = sh('dumpsys window displays');
+      console.log(`overscan: ${(dump.match(/overscan=\[[^\]]*\]|mOverscan[^\n]*/i) || [])[0] || '(niet in dumpsys; hide = 0,-110,0,0, reset = 0,0,0,0)'}`);
       break;
     }
 
@@ -309,7 +434,14 @@ try {
       break;
     }
     default:
-      console.log('Gebruik: node tools/pandaos.mjs <status|volume|set|open|bluetooth|media|sources|log|js|setup|doctor|apks|can|sim|camera|audio|shot|test> ...  (zie bovenaan dit bestand)');
+      console.log(`Gebruik: node tools/pandaos.mjs <${COMMANDS.join('|')}> ...  (zie bovenaan dit bestand)
+  volumes [music100]              Jancar-volumes uit het logboek + Android-muziekvolume (music100 = op 100)
+  carplay-auto on|off|status      CarPlay automatisch verbinden
+  immersive on|off|status         systeembalken verbergen
+  overscan hide|reset|status      onderste balk wegschuiven / terugzetten
+Commando's met DevTools (status, js, sim, can, audio, camera, test) vragen WebView-debugging:
+  PandaOS Instellingen → Software → Build op 'Ontwikkelaar' (vanaf 1.4.0).
+adb: ${ADB || 'niet gevonden (zet $env:ADB of zie bovenaan dit bestand)'}`);
   }
 } catch (e) {
   console.error('Fout:', e.message);

@@ -114,6 +114,39 @@
         display: block;
       }
       
+      /* App-menuknop (AppMenuIcon.tsx): bijna zo groot als de app-iconen; vierkantjes ↔ kruisje */
+      svg.dock-menu-icon {
+        width: calc(28px * var(--dock-scale, 1));
+        height: calc(28px * var(--dock-scale, 1));
+        overflow: visible;
+        .sq {
+          fill: #a2a3a5;
+          transform-box: fill-box;
+          transform-origin: center;
+          transition: transform 0.32s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.22s ease;
+        }
+        .bar {
+          fill: none;
+          stroke: #a2a3a5;
+          stroke-width: 3;
+          stroke-linecap: round;
+          stroke-dasharray: 23;
+          stroke-dashoffset: 23;
+          transform-box: view-box;
+          transform-origin: 15px 15px;
+          transform: rotate(-45deg);
+          transition: stroke-dashoffset 0.3s ease 0.08s, transform 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        &.is-open {
+          .sq { opacity: 0; }
+          .sq-tl { transform: translate(5px, 5px) scale(0.3) rotate(45deg); }
+          .sq-tr { transform: translate(-5px, 5px) scale(0.3) rotate(45deg); }
+          .sq-bl { transform: translate(5px, -5px) scale(0.3) rotate(45deg); }
+          .sq-br { transform: translate(-5px, -5px) scale(0.3) rotate(45deg); }
+          .bar { stroke-dashoffset: 0; transform: rotate(0deg); }
+        }
+      }
+
       &:hover { transform: scale(1.1); }
       &.active { border-bottom: 2px solid $color-blue-active; padding-bottom: 4px; }
     }

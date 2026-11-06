@@ -29,7 +29,13 @@ import { startTripComputer } from '../../../services/tripComputer';
 import BootScreen from '../boot-screen/BootScreen';
 import PandaPanel from '../../panel/PandaPanel';
 import { PANDA_CONFIG, getEffectiveTheme } from '../../../../src/settings';
-import { Lock, User, Maximize2, Wifi, WifiOff, Bluetooth, BluetoothOff, CheckCircle2 } from 'lucide-react';
+import { Lock, User, Maximize2, Wifi, WifiOff, Bluetooth, BluetoothOff, CheckCircle2, Sun, Moon, CloudSun, Cloud, CloudFog, CloudDrizzle, CloudRain, CloudSnow, CloudLightning, BellRing } from 'lucide-react';
+import { openPhoneWithNumber } from '../../../services/dialer';
+import { useWeather, weatherKind, type WeatherKind } from '../../../services/weather';
+
+const WEATHER_ICONS: Record<WeatherKind, React.FC<{ size?: number }>> = {
+  clear: Sun, partly: CloudSun, cloudy: Cloud, fog: CloudFog, drizzle: CloudDrizzle, rain: CloudRain, snow: CloudSnow, storm: CloudLightning,
+};
 import { getLinkedAndroidPackage, launchAndroidPackage, isAndroidLauncher } from '../../../store/appLinks';
 import { checkForUpdatesAtStartup } from '../../../services/updates';
 import { useT } from '../../../i18n';
@@ -146,8 +152,12 @@ const SplashScreen: React.FC = () => {
 
   // Buitentemperatuur van de auto (CAN-kastje/OBD2); onbekend = niet tonen
   const outsideTemp = useUIStore((s) => s.carState.outsideTemp);
-  const currentTemp = outsideTemp == null ? null
-    : displaySettings?.temperature === 'C' ? `${Math.round(outsideTemp)} °C` : `${Math.round(outsideTemp * 9 / 5 + 32)} °F`;
+  // Geen thermometer van de auto: temperatuur van het weer (services/weather.ts)
+  const weather = useWeather();
+  const shownTemp = outsideTemp ?? weather?.temp ?? null;
+  const currentTemp = shownTemp == null ? null
+    : displaySettings?.temperature === 'F' ? `${Math.round(shownTemp * 9 / 5 + 32)} °F` : `${Math.round(shownTemp)} °C`;
+  const WeatherIcon = weather ? WEATHER_ICONS[weatherKind(weather.code)] : null;
 
   // Bij het opstarten de gekozen app openen (App Settings in het app-menu). Eén keer, na het laden van de opgeslagen instellingen.
   useEffect(() => {
@@ -322,13 +332,24 @@ const SplashScreen: React.FC = () => {
                   : <Bluetooth size={16} style={{ opacity: connectivity.bt === 'connected' ? 1 : 0.4 }} />
               )}
               {savedFlash && <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><CheckCircle2 size={16} color="#3ba55d" /> {t('Saved')}</span>}
+              {/* SOS: opent Telefoon met 112 ingevuld; bellen doet de bestuurder zelf (groene knop) */}
+              <button aria-label={t('Emergency number')} onClick={() => openPhoneWithNumber('112')}
+                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 14, border: 'none',
+                  background: '#e82127', color: '#fff', fontWeight: 700, fontSize: 'calc(13px * var(--text-scale, 1))', cursor: 'pointer' }}>
+                <BellRing size={14} /> SOS
+              </button>
               <Lock size={16} />
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                  <User size={16} /> <span>{PANDA_CONFIG.MODE === 'dev' ? 'Developer' : 'Easy Entry'}</span>
               </div>
               <span style={{ color: '#ff4d4d', fontSize: 'calc(18px * var(--text-scale, 1))' }}>⏺</span> 
               <span>{formattedTime}</span>
-              {currentTemp && <span>{currentTemp}</span>}
+              {currentTemp && (
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {WeatherIcon && (weatherKind(weather!.code) === 'clear' && !weather!.isDay ? <Moon size={16} /> : <WeatherIcon size={16} />)}
+                  {currentTemp}
+                </span>
+              )}
           </div>
       </header>
 

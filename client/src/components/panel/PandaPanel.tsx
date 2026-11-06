@@ -10,6 +10,7 @@ import { getAndroidAppIcon, isAndroidLauncher, launchAndroidPackage } from '../.
 import TeslaSlider from '../settings/TeslaSlider';
 import { useT } from '../../i18n';
 import './_panda-panel.scss';
+import { toggleRadio } from '../../services/radioToggle';
 
 interface PanelNotification { key: string; app: string; package: string; title: string; text: string; time: number; clearable: boolean }
 
@@ -137,13 +138,13 @@ const PandaPanel: React.FC<{ overlay?: boolean; onClose?: () => void }> = ({ ove
             {/* Snelknoppen */}
             <div className="panel-tiles">
               <button className={`panel-tile ${wifi?.enabled ? 'is-on' : ''}`}
-                onClick={() => { bridge()?.setWifiEnabled(!wifi?.enabled); setTimeout(read, 800); }}>
+                onClick={() => { toggleRadio('wifi', !wifi?.enabled, read); setTimeout(read, 800); }}>
                 {wifi?.enabled ? <Wifi size={22} /> : <WifiOff size={22} />}
                 <span className="tile-title">{t('Wi-Fi')}</span>
                 <span className="tile-sub">{wifi?.enabled ? (wifi.ssid || t('Not connected')) : t('Off')}</span>
               </button>
               <button className={`panel-tile ${bt?.enabled ? 'is-on' : ''}`}
-                onClick={() => { bridge()?.setBluetoothEnabled(!bt?.enabled); setTimeout(read, 1000); }}>
+                onClick={() => { toggleRadio('bluetooth', !bt?.enabled, read); setTimeout(read, 1000); }}>
                 {bt?.enabled ? <Bluetooth size={22} /> : <BluetoothOff size={22} />}
                 <span className="tile-title">{t('Bluetooth')}</span>
                 <span className="tile-sub">{bt?.enabled ? (connectedPhone?.name || t('Not connected')) : t('Off')}</span>

@@ -172,9 +172,12 @@ export const LINKABLE_APPS: LinkableApp[] = [
   ] },
   { id: 'camera', name: 'Camera', icon: '/app-icons/camera.svg', options: [] }, // achteruitrijcamera
   { id: 'dashcam', name: 'Rear camera', icon: '/app-icons/dashcam.svg', allowOther: true, options: [] },
-  // Bluetooth: de Bluetooth-tab van PandaOS, of de Bluetooth-app van de radio (telefoon verbinden, muziek, bellen)
+  // Bluetooth: de PandaOS Bluetooth-app (apparaten, muziek), of de Bluetooth-app van de radio (telefoon verbinden, muziek, bellen)
   { id: 'bluetooth', name: 'Bluetooth', icon: '/app-icons/bluetooth.svg', allowOther: true,
     detect: /bluetooth|bt ?music|bt ?phone|btmusic|btphone/i, options: [] },
+  // Radio: de PandaOS-radio (FM/AM/DAB van de radio zelf, via de Jancar-radio), of de radio-app van de fabrikant
+  { id: 'radio', name: 'Radio', icon: '/app-icons/radio.svg', allowOther: true,
+    detect: /jancar\.radio|\bradio\b|\bdab\b|\bfm\b|tuner/i, options: [] },
   // Audio: de PandaOS Audio-instellingen (klank, balans, bronnen van de radio), of de audio-/DSP-app van de radio
   { id: 'audio', name: 'Audio', icon: '/app-icons/audio.svg', allowOther: true,
     detect: /\bdsp\b|equali[sz]er|\beq\b|audio ?settings|sound ?settings|geluid|amplifier|car ?audio/i, options: [] },

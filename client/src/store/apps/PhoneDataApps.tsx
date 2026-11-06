@@ -9,6 +9,8 @@ import { useT } from '../../i18n';
 import { getEffectiveTheme } from '../../settings';
 import './_theater.scss';
 import { ContactDetail } from './PhoneParts';
+import BluetoothApp from './BluetoothApp';
+import RadioApp from './RadioApp';
 
 const bridge = () => (window as any).PandaAndroid;
 
@@ -182,6 +184,8 @@ const PhoneDataApps: React.FC = () => {
   if (panelApp === 'contacts') return <ContactsView />;
   if (panelApp === 'calendar') return <CalendarView />;
   if (panelApp === 'messages') return <MessagesView />;
+  if (panelApp === 'bluetooth') return <BluetoothApp />;
+  if (panelApp === 'radio') return <RadioApp />;
   return null;
 };
 

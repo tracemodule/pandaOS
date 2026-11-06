@@ -4,6 +4,7 @@
 import React, { useEffect, useState } from 'react';
 import { Bluetooth, BluetoothOff, Smartphone, RotateCw } from 'lucide-react';
 import { useT } from '../../i18n';
+import { toggleRadio } from '../../services/radioToggle';
 
 interface BtDevice { name: string; address: string; connected?: boolean; pairing?: boolean }
 interface BtState {
@@ -48,7 +49,7 @@ const AndroidBluetoothPanel: React.FC = () => {
           <small className="tsl-hint">{state.enabled ? `${t('Visible as')} ${state.name}` : t('Off')}</small>
         </div>
         <input type="checkbox" className="tsl-toggle" checked={!!state.enabled}
-          onChange={(e) => { bridge()?.setBluetoothEnabled(e.target.checked); setTimeout(read, 1000); }} />
+          onChange={(e) => { toggleRadio('bluetooth', e.target.checked, read); setTimeout(read, 1000); }} />
       </label>
 
       {state.enabled && (
